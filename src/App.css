@@ -466,3 +466,6 @@ input:focus,select:focus,textarea:focus{outline:1px solid rgba(183,243,74,.45);o
 .referral-share-link strong{font-size:12px;font-weight:600;color:#e5ecd9;overflow-wrap:anywhere}
 .referral-share-link button{display:flex;align-items:center;gap:6px;flex:0 0 auto;padding:8px 10px;border:1px solid rgba(183,243,74,.22);border-radius:8px;background:rgba(183,243,74,.08);color:#c7f987;font-size:10px;font-weight:700}
 @media(max-width:640px){.token-context-pill{padding:6px 8px;gap:6px}.token-context-mark{width:25px;height:25px;font-size:8px}.token-context-pill small{font-size:8px}.referral-share-link{align-items:flex-start;flex-direction:column}.referral-share-link>div{width:100%}.referral-share-link button{width:100%;justify-content:center}}
+
+/* The dashboard now gives streak and referrals their own full-width rows. */
+.streak-referral-row{display:block;width:100%}
