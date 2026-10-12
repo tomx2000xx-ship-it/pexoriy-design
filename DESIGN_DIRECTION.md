@@ -40,8 +40,8 @@ Overview, Practice Trading terminal, AI Trading Centre, Community Challenge hub/
 
 ## Additional product clarity
 - Onboarding should briefly and visually explain the platform loop and the distinction between TC (practice allowance), AC (AI operation allowance), and PXY (the project token) before users enter the main experience.
-- Keep the asset logo marks unboxed on the existing dark surface so their real brand colors remain legible without adding low-contrast circular backgrounds. Use the current Gram (GRAM) token mark and label; TON refers to the blockchain, not the native token ticker.
-- The market chart should use a clear candlestick language, restrained grid, trend line, volume, and readable timeframe controls rather than decorative bars.
+- Keep asset logo marks unboxed on the existing dark surface so their authentic brand colors remain legible without low-contrast circular backgrounds. Use Ethereum’s faceted diamond mark, Solana’s official gradient logomark, and the Gram (GRAM) token’s white star on its blue diamond. TON refers to the blockchain, not the native token ticker.
+- The market chart should use a clear candlestick language, restrained grid, trend line, volume, and readable timeframe controls rather than decorative bars. Until a real feed is connected, label chart prices and candles as illustrative rather than live.
 - Referral placement is a primary growth surface: show it on the dashboard and in persistent mobile navigation. Use a clear Invite → Activate → Grow Together journey, milestone cards, and transparent reward eligibility.
 
 ## Implementation constraints
