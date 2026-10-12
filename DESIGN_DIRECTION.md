@@ -18,6 +18,14 @@ Pexoriy is energetic, community-driven, premium, intelligent, and approachable. 
 - **PXY:** working ticker for the Pexoriy token. Community Challenges and eligible AI Credit purchases are the primary PXY earning paths. Missions primarily award TC; rare PXY mission rewards are manually assigned for special campaigns. Token supply, chain, launch details, distribution rules, and monetary value are not defined by this prototype.
 - Never imply TC, AC, or simulated P&L are cash. Do not promise token value, exchange listings, guaranteed returns, or a fixed conversion rate.
 
+## Finished-product UX standard
+- Design every screen as a shipped product interface, never as a designer's presentation or an explanation of the design.
+- Let hierarchy, familiar controls, clear labels, and meaningful defaults teach the experience. Remove step-by-step narration, repetitive helper paragraphs, internal commentary, and redundant disclaimers.
+- Keep only concise operational status where users need it (for example, unavailable data, a pending action, or a reward rule). Do not expose internal build notes such as "sample", "demo", "not connected", or "prototype" as routine page copy.
+- Never fabricate social proof, live market values, account status, reward totals, or launch terms. If product data is unavailable, use a polished empty/connection state rather than invented metrics.
+- Each page should feel complete: deliberate visual hierarchy, aligned content, clear primary actions, consistent component behavior, responsive layouts, and no orphaned or empty labels.
+- Prefer intuitive, action-oriented language. A user should understand what a control does from its placement and label without being told why the control exists.
+
 ## Product experience principles
 - Build activity workspaces, not tutorial/placeholder pages. A primary action must open a real interaction or clearly state what backend is missing.
 - Community Challenges are a core destination and should have prominent placement on the dashboard and mobile navigation.
