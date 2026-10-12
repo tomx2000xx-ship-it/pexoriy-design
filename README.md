@@ -22,19 +22,19 @@ npm run preview
 
 - **Overview:** balances, market pulse, prominent Community Challenges, missions, and open positions
 - **Practice Trading:** asset selector, long/short choice, TC allocation, simulated position opening/closing
-- **AI Trading:** selectable market brief, scenario explorer, and risk check; demo AC usage and result panel
-- **Community Challenges:** challenge cards, join action, joined filter, sample PYX reward pools
-- **Missions & Rewards:** completion states and sample PYX reward previews
-- **PYX & Rewards:** proposed token concept and separation of TC, AC, and PYX
+- **AI Trading:** automated simulated trading workspace with risk preference, AI-selected TC allocation, sample opportunity scan, and pause control; 50 AC session cost
+- **Community Challenges:** challenge cards, join action, joined filter, sample PXY reward pools
+- **Missions & Rewards:** completion states and TC reward previews
+- **PXY & Rewards:** proposed token concept and separation of TC, AC, and PXY
 - **Activity Centre:** demo session actions
 - **Referrals, Profile & Settings, Search**
 - Responsive desktop sidebar and persistent mobile bottom navigation
 
 ## Economy and safety boundaries
 
-- **TC (Trade Credits)** are used for simulated practice trading. The intended direction is for eligible TC to be convertible into PYX later, but the conversion rate, eligibility, caps, timing, and anti-abuse rules remain to be finalized and published.
+- **TC (Trade Credits)** are used for simulated practice trading. The intended direction is for eligible TC to be convertible into PXY later, but the conversion rate, eligibility, caps, timing, and anti-abuse rules remain to be finalized and published.
 - **AC (AI Credits)** are used for AI workspace actions.
-- **PYX** is the working ticker for the proposed Pexoriy token. Missions and Community Challenges are intended reward pathways.
+- **PXY** is the working ticker for the proposed Pexoriy token. Community Challenges are the primary PXY reward path; missions primarily award TC, with rare manually configured PXY campaigns.
 - Sample balances, prices, participants, reward pools, and mission rewards are illustrative. No monetary value, token launch, exchange listing, fixed conversion rate, or guaranteed return is implied.
 - Closing a demo position returns its allocated TC; this prototype does not calculate simulated P&L.
 - Live prices, a real AI service, authentication, durable user data, challenge verification, reward issuance, and on-chain functionality are not connected.
