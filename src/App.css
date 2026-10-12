@@ -478,3 +478,36 @@ input:focus,select:focus,textarea:focus{outline:1px solid rgba(183,243,74,.45);o
 .eth-logo svg{display:block;width:29px;height:29px}
 .sol-logo img{filter:none!important}
 .gram-logo svg{display:block;width:29px;height:29px}
+
+
+/* AI Credit store — visual-only purchase tiers */
+.asset-logo.btc-logo img,.asset-logo.doge-logo img{width:29px;height:29px;object-fit:contain;display:block}
+.asset-logo.btc-logo,.asset-logo.doge-logo{width:34px;height:34px;flex-basis:34px;overflow:hidden}
+.gram-logo svg,.gram-mini-mark svg{display:block;width:100%;height:100%;object-fit:contain}
+.ai-credit-store{padding:22px;border:1px solid rgba(185,163,255,.15);border-radius:16px;background:linear-gradient(135deg,rgba(185,163,255,.055),rgba(23,26,21,.96) 48%,rgba(183,243,74,.025))}
+.ai-store-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:20px}
+.ai-store-heading h2{font-family:Manrope,sans-serif;font-size:21px;letter-spacing:-.7px;margin:0 0 7px}
+.ai-store-heading p{max-width:610px;color:#9ca292;font-size:11px;line-height:1.65;margin:0}
+.ai-store-payment{display:flex;align-items:center;gap:9px;flex-shrink:0;padding:9px 11px;border:1px solid rgba(48,161,245,.2);border-radius:11px;background:rgba(48,161,245,.055)}
+.gram-mini-mark{display:grid;place-items:center;width:31px;height:31px;flex:0 0 31px}
+.ai-store-payment>span:last-child{display:flex;flex-direction:column;gap:4px}
+.ai-store-payment strong{font-size:10px}
+.ai-store-payment small{font-size:8px;color:#939b8b}
+.ai-package-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.ai-package-card{position:relative;display:flex;flex-direction:column;min-width:0;padding:15px 13px 12px;border:1px solid rgba(231,238,219,.09);border-radius:12px;background:rgba(8,10,7,.28)}
+.ai-package-card.ai-package-minimum{border-color:rgba(183,243,74,.27)}
+.ai-package-card.ai-package-max{background:linear-gradient(145deg,rgba(183,243,74,.075),rgba(8,10,7,.3));border-color:rgba(183,243,74,.23)}
+.ai-package-tag{position:absolute;top:-8px;right:10px;padding:4px 6px;border-radius:5px;background:var(--lime);color:#14180f;font-size:7px;font-weight:800;letter-spacing:.7px}
+.ai-package-price{display:flex;flex-direction:column;gap:3px;margin-bottom:14px}
+.ai-package-price strong{font-family:Manrope,sans-serif;font-size:27px;letter-spacing:-.9px}
+.ai-package-price span{font-size:8px;color:#8e9584}
+.ai-package-line{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:9px 0;border-top:1px solid rgba(231,238,219,.07);font-size:9px}
+.ai-package-line>span{color:#929989}
+.ai-package-line strong{font-size:10px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ai-package-bonus strong{color:var(--lime)}
+.ai-package-button{width:100%;margin-top:9px;padding:9px 7px;border:1px solid rgba(231,238,219,.09);border-radius:7px;background:rgba(255,255,255,.025);color:#777f70;font-size:8px;font-weight:700;line-height:1.4;cursor:not-allowed}
+.ai-store-note{display:flex;align-items:flex-start;gap:8px;margin:15px 0 0;color:#858d7a;font-size:9px;line-height:1.65}
+.ai-store-note svg{flex:0 0 auto;margin-top:1px;color:#b9c2a8}
+@media(max-width:1050px){.ai-package-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){.ai-credit-store{padding:16px}.ai-store-heading{flex-direction:column}.ai-store-heading h2{font-size:19px}.ai-package-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.ai-package-card{padding:14px 10px 10px}.ai-package-price strong{font-size:24px}.ai-package-line{font-size:8px}.ai-package-line strong{font-size:9px}.ai-package-button{font-size:7.5px}}
+@media(max-width:380px){.ai-package-grid{grid-template-columns:1fr}.ai-package-card{padding:15px}}
