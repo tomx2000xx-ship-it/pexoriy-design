@@ -1,0 +1,80 @@
+import React, { useState } from 'react';
+import {
+  Activity, ArrowDownRight, ArrowRight, ArrowUpRight, Award, Bell, Bot,
+  ChartNoAxesCombined, ChevronDown, ChevronRight, CircleHelp, Compass,
+  Flame, Gift, Home, Layers3, Menu, MessageCircle, Plus, Search, Settings,
+  ShieldCheck, Sparkles, Target, Trophy, Wallet, X, Zap
+} from 'lucide-react';
+import './App.css';
+
+const navItems = [
+  { label: 'Overview', icon: Home, group: 'WORKSPACE' },
+  { label: 'Practice trading', icon: ChartNoAxesCombined, group: 'WORKSPACE' },
+  { label: 'AI trading', icon: Bot, group: 'WORKSPACE', tag: 'BETA' },
+  { label: 'Competitions', icon: Trophy, group: 'PLAY & EARN' },
+  { label: 'Missions', icon: Target, group: 'PLAY & EARN', dot: true },
+  { label: 'Referrals', icon: Gift, group: 'PLAY & EARN' },
+  { label: 'Activity', icon: Activity, group: 'ACCOUNT' },
+];
+const markets = [
+  { name: 'Bitcoin', ticker: 'BTC / USDT', symbol: '₿', color: '#f4a340', price: '$67,482.20', change: '+2.84%', up: true, points: '0,24 12,19 24,22 36,9 48,15 60,4 72,11 84,2' },
+  { name: 'Ethereum', ticker: 'ETH / USDT', symbol: '◆', color: '#9c9fff', price: '$3,521.84', change: '+1.26%', up: true, points: '0,18 12,22 24,12 36,16 48,6 60,12 72,4 84,8' },
+  { name: 'Solana', ticker: 'SOL / USDT', symbol: '≋', color: '#b7f34a', price: '$182.67', change: '-0.48%', up: false, points: '0,5 12,10 24,4 36,14 48,9 60,18 72,12 84,23' },
+];
+const missions = [
+  { title: 'Read the market', detail: 'Open a market and explore the chart', reward: '+150 TC', progress: 0, icon: ChartNoAxesCombined },
+  { title: 'Make your first move', detail: 'Open a practice position', reward: '+250 TC', progress: 0, icon: Zap },
+  { title: 'Meet your AI co-pilot', detail: 'Explore an AI market insight', reward: '+100 AC', progress: 0, icon: Sparkles },
+];
+function Brand() {
+  return <div className="brand-mark"><span className="brand-glyph">p</span><span>pexoriy<span className="brand-period">.</span></span></div>;
+}
+function Sparkline({ points, down }) {
+  return <svg className={'sparkline ' + (down ? 'sparkline-down' : '')} viewBox="0 0 84 28" preserveAspectRatio="none" aria-hidden="true"><polyline points={points} /></svg>;
+}
+function Sidebar({ active, onNavigate, mobileOpen, onClose }) {
+  const grouped = ['WORKSPACE', 'PLAY & EARN', 'ACCOUNT'];
+  return <><div className={'sidebar-backdrop ' + (mobileOpen ? 'visible' : '')} onClick={onClose} /><aside className={'sidebar ' + (mobileOpen ? 'sidebar-open' : '')}>
+    <div className="sidebar-top"><Brand /><button className="icon-button mobile-close" onClick={onClose}><X size={18}/></button></div>
+    <div className="workspace-switch"><div className="workspace-avatar">V</div><div className="workspace-copy"><strong>Victor's space</strong><span>Personal workspace</span></div><ChevronDown size={15}/></div>
+    <nav className="side-nav">{grouped.map(group => <div className="nav-group" key={group}><div className="nav-heading">{group}</div>{navItems.filter(n=>n.group===group).map(item=>{const Icon=item.icon;return <button key={item.label} className={'nav-item '+(active===item.label?'nav-active':'')} onClick={()=>{onNavigate(item.label);onClose();}}><Icon size={18} strokeWidth={1.8}/><span>{item.label}</span>{item.tag&&<span className="nav-tag">{item.tag}</span>}{item.dot&&<span className="nav-dot"/>}</button>})}</div>)}</nav>
+    <div className="sidebar-bottom"><div className="help-card"><div className="help-icon"><CircleHelp size={17}/></div><div><strong>Need a hand?</strong><span>Visit the help centre</span></div><ChevronRight size={15}/></div><button className="profile-row" onClick={()=>onNavigate('Profile & settings')}><div className="profile-avatar">VG</div><div className="profile-copy"><strong>Victor Godwin</strong><span>Free explorer</span></div><Settings size={16}/></button></div>
+  </aside></>;
+}
+function Header({ onMenu, onNavigate }) {
+  return <header className="topbar"><div className="topbar-left"><button className="icon-button menu-button" onClick={onMenu}><Menu size={20}/></button><div className="breadcrumb">Workspace <ChevronRight size={14}/><strong>Overview</strong></div></div><div className="topbar-right"><button className="search-button" onClick={()=>onNavigate('Search')}><Search size={16}/><span>Search anything</span><kbd>⌘ K</kbd></button><button className="icon-button notification-button" aria-label="Notifications" onClick={()=>onNavigate('Activity')}><Bell size={18}/><i/></button><div className="top-avatar">VG</div></div></header>;
+}
+function CreditCard({ type, amount, note, icon: Icon, tint, action, onClick }) {
+  return <div className="credit-card"><div className="credit-card-top"><div className={'credit-icon '+tint}><Icon size={18}/></div><span className="credit-label">{type}</span><button className="subtle-icon" onClick={onClick} aria-label={action}><Plus size={17}/></button></div><div className="credit-amount">{amount}</div><div className="credit-footer"><span>{note}</span><button onClick={onClick}>{action}<ArrowRight size={13}/></button></div></div>;
+}
+function PageHeading({ eyebrow, title, description, action, onAction }) {
+  return <div className="page-heading"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{description}</p></div>{action&&<button className="btn btn-primary heading-action" onClick={onAction}>{action}<ArrowRight size={16}/></button>}</div>;
+}
+function Dashboard({ onNavigate }) {
+  return <><PageHeading eyebrow="MONDAY, OCTOBER 12" title={<>Your next move starts <em>here.</em></>} description="Build your edge, learn as you go, and make every session count." />
+    <section className="welcome-banner"><div className="welcome-glow"/><div className="welcome-content"><div className="welcome-pill"><span/> YOUR JOURNEY, YOUR PACE</div><h2>Small moves.<br/><span>Sharper instincts.</span></h2><p>Practice with purpose. Find your rhythm. Grow alongside a community that gets it.</p><button className="btn btn-lime" onClick={()=>onNavigate('Practice trading')}>Explore the markets <ArrowRight size={16}/></button></div><div className="banner-art" aria-hidden="true"><div className="orbit orbit-one"/><div className="orbit orbit-two"/><div className="orbit orbit-three"/><div className="art-core"><span>p</span></div><div className="art-chip chip-one"><ChartNoAxesCombined size={18}/></div><div className="art-chip chip-two"><Zap size={17}/></div><div className="art-chip chip-three"><Trophy size={17}/></div><div className="art-line line-one"/><div className="art-line line-two"/></div></section>
+    <section className="section-block"><div className="section-heading"><div><h2>Your resources</h2><p>Everything you need to get started.</p></div><button className="text-link" onClick={()=>onNavigate('Activity')}>View activity <ArrowRight size={15}/></button></div><div className="credit-grid"><CreditCard type="Trade Credits" amount="12,450" note="Ready for practice" icon={Layers3} tint="lime-tint" action="Use credits" onClick={()=>onNavigate('Practice trading')}/><CreditCard type="AI Credits" amount="840" note="For your AI co-pilot" icon={Sparkles} tint="purple-tint" action="Explore AI" onClick={()=>onNavigate('AI trading')}/><div className="streak-card"><div className="streak-top"><div className="credit-icon orange-tint"><Flame size={18}/></div><span className="credit-label">Your momentum</span><span className="streak-live">ACTIVE</span></div><div className="streak-number">03 <small>day streak</small></div><div className="streak-days">{['M','T','W','T','F','S','S'].map((d,i)=><div key={i} className={'streak-day '+(i<3?'day-done':'')}><span>{d}</span><b>{i<3?'✓':''}</b></div>)}</div><div className="streak-note">Keep showing up. It adds up.</div></div></div></section>
+    <section className="section-block market-section"><div className="section-heading"><div><h2>Market pulse</h2><p>A quick look at the market. No real trades, just practice.</p></div><button className="text-link" onClick={()=>onNavigate('Practice trading')}>Open markets <ArrowRight size={15}/></button></div><div className="market-table"><div className="market-table-head"><span>ASSET</span><span>LAST PRICE</span><span>24H CHANGE</span><span>TREND</span><span/></div>{markets.map(m=><div className="market-row" key={m.ticker}><div className="market-asset"><div className="coin-symbol" style={{color:m.color}}>{m.symbol}</div><div><strong>{m.name}</strong><span>{m.ticker}</span></div></div><strong className="market-price">{m.price}</strong><span className={'change '+(m.up?'positive':'negative')}>{m.up?<ArrowUpRight size={14}/>:<ArrowDownRight size={14}/>} {m.change}</span><Sparkline points={m.points} down={!m.up}/><button className="row-action" onClick={()=>onNavigate('Practice trading')}><ArrowUpRight size={17}/></button></div>)}</div><div className="data-note"><ShieldCheck size={15}/> Illustrative market data for design preview. Prices may not be live.</div></section>
+    <section className="lower-grid"><div className="panel mission-panel"><div className="section-heading"><div><h2>Today's missions</h2><p>Three little ways to build momentum.</p></div><button className="text-link" onClick={()=>onNavigate('Missions')}>All missions <ArrowRight size={14}/></button></div><div className="mission-list">{missions.map((m,i)=>{const Icon=m.icon;return <button className="mission-row" key={m.title} onClick={()=>onNavigate('Missions')}><div className="mission-icon"><Icon size={18}/></div><div className="mission-copy"><strong>{m.title}</strong><span>{m.detail}</span></div><span className="mission-reward">{m.reward}</span><ChevronRight size={16} className="mission-chevron"/></button>})}</div><div className="mission-foot"><span><span className="tiny-dot"/> 0 of 3 completed</span><span>Start anywhere</span></div></div><div className="competition-card"><div className="competition-orb"><Trophy size={25}/></div><div className="eyebrow">COMMUNITY CHALLENGE</div><h2>Ready to test<br/>your instincts?</h2><p>Join a friendly practice competition and see how your strategy stacks up.</p><div className="competition-stats"><div><strong>5,000 <small>TC</small></strong><span>Example prize pool</span></div><div><strong>24 <small>players</small></strong><span>Preview participants</span></div></div><button className="btn btn-lime full-width" onClick={()=>onNavigate('Competitions')}>Explore competitions <ArrowRight size={16}/></button><span className="fine-print">Preview values only · No cash prizes implied</span></div></section>
+    <footer className="page-footer"><span>© 2026 Pexoriy</span><span><ShieldCheck size={13}/> Practice-first. Community-powered.</span><button onClick={()=>onNavigate('Profile & settings')}>Settings</button></footer>
+  </>;
+}
+function GenericPage({ page, onNavigate }) {
+ const data={
+ 'Practice trading':{eyebrow:'LEARN BY DOING',title:'Practice trading',desc:'Explore the market and test your strategy in a simulated environment.',icon:ChartNoAxesCombined,cta:'Open a practice session',cards:[['Market explorer','Browse assets and price movements.'],['Your open positions','Review simulated positions and outcomes.'],['Trade journal','Reflect on decisions and improve over time.']]},
+ 'AI trading':{eyebrow:'YOUR AI CO-PILOT',title:'Think through your next move.',desc:'Use AI-powered insights to explore scenarios and sharpen your process.',icon:Bot,cta:'Explore AI insights',cards:[['Market brief','Get a plain-language market overview.'],['Strategy sandbox','Explore a hypothetical trade scenario.'],['Risk check','Review possible risks before a practice decision.']]},
+ 'Competitions':{eyebrow:'PLAY TOGETHER',title:'A little friendly competition.',desc:'Join practice challenges, track your progress, and learn from the community.',icon:Trophy,cta:'Browse challenges',cards:[['Quickfire Sprint','A short-format practice challenge.'],['Consistency Club','Build a habit with the community.'],['Leaderboard','Compare simulated performance transparently.']]},
+ 'Missions':{eyebrow:'YOUR NEXT SMALL WIN',title:'Progress, one mission at a time.',desc:'Simple guided activities help you explore Pexoriy and build good habits.',icon:Target,cta:'Start a mission',cards:missions.map(m=>[m.title,m.detail])},
+ 'Referrals':{eyebrow:'GROW TOGETHER',title:'Good things travel.',desc:'Invite friends to explore Pexoriy with you. Referral rewards and eligibility will be clearly explained.',icon:Gift,cta:'View invite details',cards:[['Your invite link','Your personal invite link will appear here.'],['Referral activity','Track successful sign-ups and status.'],['Reward rules','Understand eligibility before taking part.']]},
+ 'Activity':{eyebrow:'YOUR ACCOUNT, AT A GLANCE',title:'Everything you’ve been up to.',desc:'A clear timeline of your practice sessions, missions, and account updates.',icon:Activity,cta:'Explore activity',cards:[['Practice activity','Your simulated trades and position updates.'],['Credit history','Trade Credit and AI Credit movements.'],['Mission history','Completed activities and earned rewards.']]},
+ 'Profile & settings':{eyebrow:'MAKE IT YOURS',title:'Your space, your settings.',desc:'Manage your profile, preferences, and account experience.',icon:Settings,cta:'Edit profile',cards:[['Personal details','Profile name and account information.'],['Preferences','Notifications, appearance, and accessibility.'],['Help & support','Find answers or contact the team.']]},
+ 'Search':{eyebrow:'FIND YOUR WAY',title:'What are you looking for?',desc:'Search across markets, missions, competitions, and account tools.',icon:Search,cta:'Browse overview',cards:[['Markets','Find assets to explore.'],['Missions','Find your next guided activity.'],['Competitions','Discover community challenges.']]},
+ };
+ const d=data[page]||data['Practice trading'];const Icon=d.icon;
+ return <><PageHeading eyebrow={d.eyebrow} title={d.title} description={d.desc} action={d.cta} onAction={()=>onNavigate(page==='Search'?'Overview':page)}/><div className="generic-hero"><div className="generic-icon"><Icon size={25}/></div><div><span className="generic-label">YOUR PEXORIY WORKSPACE</span><h2>A space to learn, explore, and grow.</h2><p>This screen is part of the design foundation. We’ll shape its exact behavior together before connecting product functionality.</p></div><div className="generic-decoration"><div/><div/><div/></div></div><div className="section-heading generic-heading"><div><h2>Explore {page.toLowerCase()}</h2><p>A clear starting point for what comes next.</p></div><span className="preview-label">DESIGN PREVIEW</span></div><div className="feature-grid">{d.cards.map((c,i)=><button className="feature-card" key={c[0]} onClick={()=>{}}><div className="feature-top"><span className="feature-index">0{i+1}</span><span className="feature-arrow"><ArrowUpRight size={17}/></span></div><h3>{c[0]}</h3><p>{c[1]}</p><div className="feature-bottom"><span>Coming into focus</span><ChevronRight size={15}/></div></button>)}</div><div className="design-note"><Sparkles size={17}/><div><strong>Design first, functionality next</strong><p>These are visual foundations, not claims that every feature is already connected. We can now review each screen and agree on how it should work.</p></div></div><footer className="page-footer"><span>© 2026 Pexoriy</span><span><ShieldCheck size={13}/> Practice-first. Community-powered.</span><button onClick={()=>onNavigate('Overview')}>Back to overview</button></footer></>;
+}
+export default function App() {
+ const [active,setActive]=useState('Overview');const [mobileOpen,setMobileOpen]=useState(false);
+ const navigate=(page)=>setActive(page);
+ return <div className="app-shell"><Sidebar active={active} onNavigate={navigate} mobileOpen={mobileOpen} onClose={()=>setMobileOpen(false)}/><main className="main-area"><Header onMenu={()=>setMobileOpen(true)} onNavigate={navigate}/><div className="page-content">{active==='Overview'?<Dashboard onNavigate={navigate}/>:<GenericPage page={active} onNavigate={navigate}/>}</div></main></div>;
+}
