@@ -318,7 +318,7 @@ input:focus,select:focus,textarea:focus{outline:1px solid rgba(183,243,74,.45);o
 /* Finished-product refinement: brand marks, charting, onboarding, streaks and referrals */
 .asset-logo{display:inline-flex;align-items:center;justify-content:center;flex:0 0 34px;width:34px;height:34px;background:transparent;border:0;border-radius:0;overflow:visible}
 .asset-logo img,.asset-logo svg{display:block;width:29px;height:29px;object-fit:contain}
-.eth-logo img{filter:brightness(0) invert(1);width:25px;height:31px}
+.eth-logo svg{width:29px;height:29px}
 .sol-logo img{width:29px;height:29px}
 .gram-logo svg{width:31px;height:31px}
 .market-asset .asset-logo{margin-right:10px}
@@ -472,3 +472,9 @@ input:focus,select:focus,textarea:focus{outline:1px solid rgba(183,243,74,.45);o
 
 @media(max-width:850px){.terminal-balance-row{flex-wrap:wrap}.terminal-balance-row>.token-context-pill{margin-left:auto}}
 @media(max-width:600px){.terminal-balance-row{gap:10px;padding:13px}.terminal-balance-row strong{font-size:21px}.terminal-balance-row>.token-context-pill{margin-left:0}.terminal-balance-row>.sim-badge{max-width:100%;font-size:7px}}
+
+/* Brand-mark clarity: transparent containers preserve the existing surface and each asset's native mark. */
+.asset-logo{background:transparent!important;border:0!important;box-shadow:none!important}
+.eth-logo svg{display:block;width:29px;height:29px}
+.sol-logo img{filter:none!important}
+.gram-logo svg{display:block;width:29px;height:29px}
