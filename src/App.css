@@ -469,3 +469,6 @@ input:focus,select:focus,textarea:focus{outline:1px solid rgba(183,243,74,.45);o
 
 /* The dashboard now gives streak and referrals their own full-width rows. */
 .streak-referral-row{display:block;width:100%}
+
+@media(max-width:850px){.terminal-balance-row{flex-wrap:wrap}.terminal-balance-row>.token-context-pill{margin-left:auto}}
+@media(max-width:600px){.terminal-balance-row{gap:10px;padding:13px}.terminal-balance-row strong{font-size:21px}.terminal-balance-row>.token-context-pill{margin-left:0}.terminal-balance-row>.sim-badge{max-width:100%;font-size:7px}}
