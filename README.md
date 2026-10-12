@@ -1,6 +1,6 @@
 # Pexoriy Design Prototype
 
-A mobile-first React + Vite design prototype for Pexoriy. This is a visual and navigation foundation; it does not connect to a backend, execute trades, or provide live market prices.
+A mobile-first React + Vite prototype for Pexoriy. It now focuses on activity workspaces instead of explanatory placeholder pages. It uses local demo state only: no account backend, live market data, connected AI service, blockchain token issuance, or real exchange execution.
 
 ## Run locally
 
@@ -11,38 +11,32 @@ npm install
 npm run dev
 ```
 
-Create a production bundle with:
+Build and preview:
 
 ```bash
 npm run build
 npm run preview
 ```
 
-## Current design coverage
+## Screens and interactions
 
-- Overview dashboard with resource cards, market pulse, missions, and a community challenge
-- Practice Trading
-- AI Trading
-- Competitions
-- Missions
-- Referrals
-- Activity
-- Profile & Settings
-- Search placeholder
-- Responsive sidebar and mobile navigation
+- **Overview:** balances, market pulse, prominent Community Challenges, missions, and open positions
+- **Practice Trading:** asset selector, long/short choice, TC allocation, simulated position opening/closing
+- **AI Trading:** selectable market brief, scenario explorer, and risk check; demo AC usage and result panel
+- **Community Challenges:** challenge cards, join action, joined filter, sample PYX reward pools
+- **Missions & Rewards:** completion states and sample PYX reward previews
+- **PYX & Rewards:** proposed token concept and separation of TC, AC, and PYX
+- **Activity Centre:** demo session actions
+- **Referrals, Profile & Settings, Search**
+- Responsive desktop sidebar and persistent mobile bottom navigation
 
-## Design system
+## Economy and safety boundaries
 
-- Acid lime: `#B7F34A`
-- Background: `#10120F`
-- Surface: `#171A15`
-- Elevated surface: `#20231D`
-- Muted text: `#92978A`
-- AI accent: `#B9A3FF`
-- Negative state: `#FF8585`
+- **TC (Trade Credits)** are used for simulated practice trading. The intended direction is for eligible TC to be convertible into PYX later, but the conversion rate, eligibility, caps, timing, and anti-abuse rules remain to be finalized and published.
+- **AC (AI Credits)** are used for AI workspace actions.
+- **PYX** is the working ticker for the proposed Pexoriy token. Missions and Community Challenges are intended reward pathways.
+- Sample balances, prices, participants, reward pools, and mission rewards are illustrative. No monetary value, token launch, exchange listing, fixed conversion rate, or guaranteed return is implied.
+- Closing a demo position returns its allocated TC; this prototype does not calculate simulated P&L.
+- Live prices, a real AI service, authentication, durable user data, challenge verification, reward issuance, and on-chain functionality are not connected.
 
-## Important product boundary
-
-This prototype uses illustrative sample values. Simulated trades and credits are not cash, and simulated P&L must not be presented as withdrawable money. Market prices are not guaranteed to be live.
-
-The next step is to review the screens and agree on functionality before integrating real data or services.
+See [DESIGN_DIRECTION.md](./DESIGN_DIRECTION.md) for product rules and design constraints.
