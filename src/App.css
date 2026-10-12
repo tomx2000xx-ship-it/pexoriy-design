@@ -511,3 +511,66 @@ input:focus,select:focus,textarea:focus{outline:1px solid rgba(183,243,74,.45);o
 @media(max-width:1050px){.ai-package-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:700px){.ai-credit-store{padding:16px}.ai-store-heading{flex-direction:column}.ai-store-heading h2{font-size:19px}.ai-package-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.ai-package-card{padding:14px 10px 10px}.ai-package-price strong{font-size:24px}.ai-package-line{font-size:8px}.ai-package-line strong{font-size:9px}.ai-package-button{font-size:7.5px}}
 @media(max-width:380px){.ai-package-grid{grid-template-columns:1fr}.ai-package-card{padding:15px}}
+
+
+/* Pexoriy motion pass: lively but restrained, with reduced-motion support. */
+@keyframes pxy-dot-pulse{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(183,243,74,.22)}50%{transform:scale(1.16);box-shadow:0 0 0 6px rgba(183,243,74,0)}}
+@keyframes arena-trophy-float{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-8px) rotate(2deg)}}
+@keyframes arena-dot-orbit{from{transform:rotate(0deg) translateX(66px) rotate(0deg)}to{transform:rotate(360deg) translateX(66px) rotate(-360deg)}}
+@keyframes arena-dot-orbit-small{from{transform:rotate(0deg) translateX(49px) rotate(0deg)}to{transform:rotate(-360deg) translateX(49px) rotate(360deg)}}
+@keyframes referral-core-breathe{0%,100%{transform:translateY(0) scale(1);box-shadow:0 0 36px rgba(183,243,74,.14)}50%{transform:translateY(-4px) scale(1.035);box-shadow:0 0 52px rgba(183,243,74,.25)}}
+@keyframes referral-ring-turn{to{transform:rotate(342deg)}}
+@keyframes referral-ring-turn-reverse{to{transform:rotate(-342deg)}}
+@keyframes referral-avatar-hover{0%,100%{translate:0 0}50%{translate:0 -6px}}
+@keyframes referral-flame-flicker{0%,100%{transform:rotate(-4deg) scale(1)}50%{transform:rotate(5deg) scale(1.09)}}
+@keyframes referral-bubble-enter{from{opacity:0;translate:0 8px}to{opacity:1;translate:0 0}}
+@keyframes page-enter{from{opacity:0;translate:0 7px}to{opacity:1;translate:0 0}}
+@keyframes challenge-prize-glow{0%,100%{text-shadow:0 0 0 rgba(183,243,74,0)}50%{text-shadow:0 0 18px rgba(183,243,74,.18)}}
+.page-content{animation:page-enter .32s cubic-bezier(.2,.75,.25,1) both}
+.nav-dot{animation:pxy-dot-pulse 2s ease-in-out infinite}
+.challenge-hub-art .trophy-orbit{animation:arena-trophy-float 3.4s ease-in-out infinite;transform-origin:center}
+.challenge-hub-art .orbit-dot{transform-origin:center;will-change:transform}
+.challenge-hub-art .dot-a{animation:arena-dot-orbit 8s linear infinite}
+.challenge-hub-art .dot-b{animation:arena-dot-orbit-small 6.5s linear infinite}
+.challenge-hub-art .dot-c{animation:pxy-dot-pulse 2.4s ease-in-out infinite}
+.challenge-card{transition:transform .28s cubic-bezier(.2,.8,.2,1),border-color .25s ease,box-shadow .25s ease}
+.challenge-card:hover{transform:translateY(-4px);box-shadow:0 18px 44px rgba(0,0,0,.2)}
+.challenge-reward-line strong{font-size:clamp(19px,2vw,25px)!important;line-height:1.15;letter-spacing:-.045em;color:var(--lime)!important;animation:challenge-prize-glow 3.5s ease-in-out infinite}
+.challenge-reward-line>div>span{font-size:9px!important;letter-spacing:.12em;font-weight:800;color:#b9c4a9!important}
+.challenge-mini-reward{display:flex;flex-direction:column;align-items:flex-end;gap:3px;min-width:95px}
+.challenge-mini-reward strong{font-size:12px;color:var(--lime);white-space:nowrap}
+.challenge-mini-reward small{font-size:8px;color:#929989;text-align:right}
+.ai-balance-purchase{display:flex;flex-direction:column;align-items:flex-start;gap:5px}
+.ai-store-trigger{display:inline-flex;align-items:center;justify-content:center;gap:6px;margin-top:3px;padding:7px 10px;border:1px solid rgba(183,243,74,.28);border-radius:8px;background:rgba(183,243,74,.09);color:#c7f987;font-size:10px;font-weight:800;transition:background .2s ease,transform .2s ease,border-color .2s ease}
+.ai-store-trigger:hover{background:rgba(183,243,74,.16);border-color:rgba(183,243,74,.55);transform:translateY(-1px)}
+.ai-store-backdrop{position:fixed;inset:0;z-index:1100;display:grid;place-items:center;padding:18px;background:rgba(4,6,3,.78);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);animation:page-enter .22s ease both}
+.ai-store-modal{width:min(100%,980px);max-height:min(92dvh,900px);overflow:auto;padding:23px;border:1px solid rgba(183,243,74,.2);border-radius:20px;background:radial-gradient(ellipse at 80% 0,rgba(183,243,74,.075),transparent 40%),#151811;box-shadow:0 32px 100px rgba(0,0,0,.55);animation:onboarding-enter .3s cubic-bezier(.2,.8,.2,1) both}
+.ai-store-modal-top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
+.ai-store-modal-top h2{margin:5px 0 7px;font:800 23px Manrope,sans-serif;letter-spacing:-.04em}
+.ai-store-modal-top p{margin:0;color:#9ca292;font-size:11px;line-height:1.6}
+.ai-store-close{display:grid;place-items:center;flex:0 0 38px;width:38px;height:38px;border:1px solid rgba(231,238,219,.12);border-radius:11px;background:rgba(255,255,255,.035);color:#e9eee1;transition:transform .2s ease,background .2s ease}
+.ai-store-close:hover{transform:rotate(90deg);background:rgba(255,255,255,.08)}
+.ai-store-modal>.ai-store-heading{align-items:center;margin:0 0 14px;padding:12px 0;border-top:1px solid rgba(231,238,219,.07);border-bottom:1px solid rgba(231,238,219,.07)}
+.ai-store-modal>.ai-store-heading p{margin-top:5px}
+.ai-store-modal .ai-package-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+.ai-store-modal .ai-package-card{padding-top:17px}
+.ai-store-modal .ai-package-button{cursor:not-allowed}
+.ai-store-modal .gram-mini-mark{overflow:visible}
+.ai-store-modal .gram-mini-mark .asset-logo{width:31px;height:31px;flex-basis:31px}
+.ai-store-modal .gram-mini-mark .asset-logo svg{width:31px;height:31px}
+.ai-store-modal .ai-store-note{margin-bottom:0}
+.ai-store-payment .gram-mini-mark .asset-logo{width:31px;height:31px;flex-basis:31px}
+.referral-avatar.avatar-main{animation:referral-core-breathe 4s ease-in-out infinite}
+.referral-orbit.orbit-a{animation:referral-ring-turn 32s linear infinite}
+.referral-orbit.orbit-b{animation:referral-ring-turn-reverse 25s linear infinite}
+.referral-avatar.avatar-one{animation:referral-avatar-hover 3.8s ease-in-out infinite}
+.referral-avatar.avatar-two{animation:referral-avatar-hover 3.2s ease-in-out infinite;animation-delay:-1.2s}
+.referral-avatar.avatar-two svg{animation:referral-flame-flicker .8s ease-in-out infinite}
+.referral-avatar.avatar-three{animation:referral-avatar-hover 4.1s ease-in-out infinite;animation-delay:-2s}
+.referral-bubble{animation:referral-bubble-enter .55s .18s cubic-bezier(.2,.8,.2,1) both}
+.referral-feature-icon{animation:referral-avatar-hover 4s ease-in-out infinite}
+.btn,.icon-button,.nav-item,.resource-link,.challenge-mini,.stat-card,.mission-detail-card{transition:transform .22s ease,background-color .22s ease,border-color .22s ease,box-shadow .22s ease}
+.btn:active,.icon-button:active,.ai-store-trigger:active{transform:scale(.975)}
+@media(max-width:700px){.ai-store-modal{padding:16px;border-radius:17px}.ai-store-modal .ai-package-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ai-store-modal .ai-store-heading{align-items:flex-start;flex-direction:column}.ai-store-modal-top h2{font-size:20px}.challenge-mini-reward{min-width:72px}.challenge-mini-reward strong{font-size:10px}}
+@media(max-width:380px){.ai-store-modal .ai-package-grid{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.page-content,.nav-dot,.challenge-hub-art .trophy-orbit,.challenge-hub-art .orbit-dot,.challenge-reward-line strong,.referral-avatar,.referral-orbit,.referral-bubble,.referral-feature-icon,.btn,.icon-button,.nav-item,.resource-link,.challenge-mini,.stat-card,.mission-detail-card,.ai-store-backdrop,.ai-store-modal,.ai-store-trigger,.ai-store-close{animation:none!important;transition:none!important;translate:none!important;transform:none!important;box-shadow:none!important}}
