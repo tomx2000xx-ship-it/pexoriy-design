@@ -574,3 +574,14 @@ input:focus,select:focus,textarea:focus{outline:1px solid rgba(183,243,74,.45);o
 @media(max-width:700px){.ai-store-modal{padding:16px;border-radius:17px}.ai-store-modal .ai-package-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ai-store-modal .ai-store-heading{align-items:flex-start;flex-direction:column}.ai-store-modal-top h2{font-size:20px}.challenge-mini-reward{min-width:72px}.challenge-mini-reward strong{font-size:10px}}
 @media(max-width:380px){.ai-store-modal .ai-package-grid{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.page-content,.nav-dot,.challenge-hub-art .trophy-orbit,.challenge-hub-art .orbit-dot,.challenge-reward-line strong,.referral-avatar,.referral-orbit,.referral-bubble,.referral-feature-icon,.btn,.icon-button,.nav-item,.resource-link,.challenge-mini,.stat-card,.mission-detail-card,.ai-store-backdrop,.ai-store-modal,.ai-store-trigger,.ai-store-close{animation:none!important;transition:none!important;translate:none!important;transform:none!important;box-shadow:none!important}}
+
+/* Signature experience refinements: true orbital movement and explicit participation feedback. */
+.challenge-hub-art .orbit-dot{top:50%;left:50%;right:auto;bottom:auto;margin:-7.5px 0 0 -7.5px}
+.challenge-hub-art .dot-c{margin:-5px 0 0 -5px}
+@keyframes challenge-joined-settle{0%{transform:scale(.985);border-color:rgba(183,243,74,.6);box-shadow:0 0 0 rgba(183,243,74,0)}55%{transform:scale(1.008);box-shadow:0 0 26px rgba(183,243,74,.09)}100%{transform:scale(1);border-color:rgba(183,243,74,.22);box-shadow:0 0 0 rgba(183,243,74,0)}}
+.challenge-card-joined{animation:challenge-joined-settle .55s cubic-bezier(.2,.8,.2,1) both;border-color:rgba(183,243,74,.22)}
+.challenge-join-feedback{display:flex;align-items:flex-start;gap:7px;margin-top:10px;padding:9px 10px;border:1px solid rgba(183,243,74,.16);border-radius:8px;background:rgba(183,243,74,.055);color:#c7f987;font-size:10px;line-height:1.5;animation:page-enter .28s ease both}
+.challenge-join-feedback svg{flex:0 0 14px;margin-top:1px}
+button:focus-visible,a:focus-visible,[role="button"]:focus-visible{outline:2px solid var(--lime);outline-offset:3px}
+@media(hover:none){.challenge-card:hover{transform:none;box-shadow:none}.challenge-card:active,.referral-milestone-card:active,.ai-package-card:active{transform:scale(.99)}}
+@media(prefers-reduced-motion:reduce){.challenge-card-joined{animation:none!important}.challenge-join-feedback{animation:none!important}}
