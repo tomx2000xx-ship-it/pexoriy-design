@@ -34,7 +34,7 @@ npm run preview
 
 - **TC (Trade Credits)** are used for simulated practice trading. TC is used for simulated practice trading and is not presented as an automatic PXY conversion path.
 - **AC (AI Credits)** are used for AI-managed practice trading once the connected AI service is enabled.
-- **PXY** is the working ticker for the proposed Pexoriy token. Community Challenges are the primary PXY reward path; missions primarily award TC, with rare manually configured PXY campaigns.
+- **PXY** is the working ticker for the proposed Pexoriy token. Community Challenges and eligible AI Credit purchases are the primary PXY earning paths; missions primarily award TC, with rare manually configured PXY campaigns.
 - Sample balances, prices, participants, reward pools, and mission rewards are illustrative. No monetary value, token launch, exchange listing, fixed conversion rate, or guaranteed return is implied.
 - Closing a demo position returns its allocated TC; this prototype does not calculate simulated P&L.
 - Live prices, a real AI service, authentication, durable user data, challenge verification, reward issuance, and on-chain functionality are not connected.
