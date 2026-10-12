@@ -14,7 +14,7 @@ Pexoriy is energetic, community-driven, premium, intelligent, and approachable. 
 
 ## Product economy
 - **TC (Trade Credits):** used to open simulated practice positions. The intended product direction is for eligible TC to be convertible into PXY later; the rate, eligibility, caps, timing, and anti-abuse rules must be finalized and published before conversion launches.
-- **AC (AI Credits):** used to run AI workspace actions, such as market briefs, scenario exploration, and risk checks.
+- **AC (AI Credits):** used to run AI workspace actions, including automated simulated trading once the connected AI service is enabled.
 - **PXY:** working ticker for the Pexoriy token. Community Challenges are the primary PXY reward pathway. Missions primarily award TC; rare PXY mission rewards are reserved for manually configured special campaigns. PXY may also be awarded through eligible AI Credit purchase campaigns. Token supply, chain, launch details, distribution rules, and monetary value are not defined by this prototype.
 - Never imply TC, AC, or simulated P&L are cash. Do not promise token value, exchange listings, guaranteed returns, or a fixed conversion rate.
 
