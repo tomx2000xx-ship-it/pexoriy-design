@@ -286,3 +286,31 @@ input:focus,select:focus,textarea:focus{outline:1px solid rgba(183,243,74,.45);o
 @media(prefers-reduced-motion:reduce){
   .stat-card,.credit-card,.home-referral-card,.challenge-mini,.challenge-card,.mission-detail-card,.btn{transition:none}
 }
+
+
+/* Dashboard AI entry point */
+.home-ai-card{display:flex;align-items:center;gap:17px;margin:-7px 0 32px;padding:18px 20px;border:1px solid rgba(185,163,255,.15);border-radius:14px;background:linear-gradient(110deg,rgba(185,163,255,.075),rgba(23,26,21,.92) 58%,rgba(183,243,74,.025));}
+.home-ai-mark{display:grid;place-items:center;flex:0 0 43px;width:43px;height:43px;border:1px solid rgba(185,163,255,.2);border-radius:12px;background:rgba(185,163,255,.09);color:#c7b5ff;}
+.home-ai-copy{flex:1;min-width:0}
+.home-ai-copy .eyebrow{color:#bcaaff;margin-bottom:6px}
+.home-ai-copy h3{margin:0 0 5px;font-family:Manrope,sans-serif;font-size:15px;letter-spacing:-.35px}
+.home-ai-copy p{margin:0;color:#9ca292;font-size:10.5px;line-height:1.6;max-width:470px}
+.home-ai-balance{display:flex;flex-direction:column;gap:5px;min-width:130px;padding:0 18px;border-left:1px solid rgba(231,238,219,.08)}
+.home-ai-balance>span{font-size:9px;color:#969c8b}
+.home-ai-balance strong{font-size:20px;letter-spacing:-.6px;font-variant-numeric:tabular-nums}
+.home-ai-balance small{font-size:10px;color:#bcaaff}
+.home-ai-card>.btn{flex:0 0 auto}
+@media(max-width:850px){
+ .home-ai-card{gap:13px;padding:15px;margin-bottom:27px}
+ .home-ai-balance{min-width:110px;padding:0 12px}
+}
+@media(max-width:600px){
+ .home-ai-card{display:grid;grid-template-columns:38px minmax(0,1fr);gap:11px;padding:14px;margin:-4px 0 26px}
+ .home-ai-mark{width:38px;height:38px;flex-basis:38px}
+ .home-ai-copy h3{font-size:13px}
+ .home-ai-copy p{font-size:9.5px}
+ .home-ai-balance{grid-column:1/2;grid-row:2;border:0;padding:0;min-width:0;gap:3px}
+ .home-ai-balance>span{font-size:8px}
+ .home-ai-balance strong{font-size:17px}
+ .home-ai-card>.btn{grid-column:2;grid-row:2;justify-self:stretch;font-size:9px;padding:9px 8px;min-height:36px}
+}
