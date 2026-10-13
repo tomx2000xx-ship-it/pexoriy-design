@@ -601,3 +601,66 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible{outline:2px s
 @media(max-width:700px){.ai-store-backdrop{padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}.ai-store-modal{width:100%;max-height:calc(100dvh - max(24px,env(safe-area-inset-top)) - max(24px,env(safe-area-inset-bottom)));padding:18px 16px;border-radius:20px}.challenge-card-top{min-height:88px!important;gap:8px}.challenge-prize-corner{min-width:106px;padding:8px 8px 9px}.challenge-prize-corner strong{font-size:24px}}
 @media(max-width:380px){.challenge-prize-corner{min-width:96px;padding:7px}.challenge-prize-corner strong{font-size:21px}.challenge-prize-label{font-size:7px}}
 @media(prefers-reduced-motion:reduce){.ai-store-modal{animation:none!important}}
+
+
+/* AI store mobile fit: keep the dialog fully visible without nested scrolling. */
+.ai-store-backdrop{position:fixed!important;inset:0!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))!important;overflow:hidden!important}
+.ai-store-modal{width:min(100%,900px)!important;max-height:calc(100dvh - max(20px,env(safe-area-inset-top)) - max(20px,env(safe-area-inset-bottom)))!important;overflow:hidden!important;overscroll-behavior:none!important;display:flex!important;flex-direction:column!important;padding:clamp(14px,2vw,24px)!important}
+.ai-store-modal-top{flex:0 0 auto;gap:10px;margin-bottom:10px}
+.ai-store-modal-top h2{font-size:clamp(18px,2vw,23px);margin:4px 0}
+.ai-store-modal-top p{font-size:10px;line-height:1.4}
+.ai-store-modal>.ai-store-heading{flex:0 0 auto;margin-bottom:9px;padding:8px 0}
+.ai-store-modal>.ai-store-heading p{font-size:9px;line-height:1.35}
+.ai-store-modal .ai-package-grid{flex:0 0 auto;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.ai-store-modal .ai-package-card{padding:12px 10px 9px}
+.ai-store-modal .ai-package-price{margin-bottom:7px;gap:1px}
+.ai-store-modal .ai-package-price strong{font-size:23px;line-height:1.05}
+.ai-store-modal .ai-package-price span{font-size:7px}
+.ai-store-modal .ai-package-line{padding:6px 0;font-size:8px}
+.ai-store-modal .ai-package-line strong{font-size:9px}
+.ai-store-modal .ai-package-button{margin-top:6px;padding:7px 5px;font-size:7px}
+.ai-store-modal .ai-store-note{flex:0 0 auto;margin-top:9px;font-size:8px;line-height:1.4}
+@media(max-width:700px){
+ .ai-store-backdrop{padding:max(8px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left))!important}
+ .ai-store-modal{width:100%!important;max-height:calc(100dvh - max(16px,env(safe-area-inset-top)) - max(16px,env(safe-area-inset-bottom)))!important;padding:12px!important;border-radius:16px!important}
+ .ai-store-modal-top{gap:8px;margin-bottom:7px}
+ .ai-store-modal-top .eyebrow{font-size:8px}
+ .ai-store-modal-top h2{font-size:18px;line-height:1.15}
+ .ai-store-modal-top p{max-width:95%;font-size:9px;line-height:1.35}
+ .ai-store-close{flex-basis:32px;width:32px;height:32px}
+ .ai-store-modal>.ai-store-heading{flex-direction:row!important;align-items:center!important;gap:8px;margin-bottom:7px;padding:7px 0}
+ .ai-store-modal>.ai-store-heading .eyebrow{font-size:8px}
+ .ai-store-modal>.ai-store-heading p{max-width:190px;margin-top:3px;font-size:8px}
+ .ai-store-modal .ai-store-payment{gap:6px}
+ .ai-store-modal .ai-store-payment strong{font-size:9px}
+ .ai-store-modal .ai-store-payment small{font-size:7px}
+ .ai-store-modal .gram-mini-mark .asset-logo,.ai-store-modal .gram-mini-mark .asset-logo svg{width:25px;height:25px;flex-basis:25px}
+ .ai-store-modal .ai-package-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:6px}
+ .ai-store-modal .ai-package-card{padding:8px 9px 7px;border-radius:9px}
+ .ai-store-modal .ai-package-tag{top:-6px;right:7px;padding:2px 4px;font-size:6px}
+ .ai-store-modal .ai-package-price{flex-direction:row;align-items:baseline;justify-content:space-between;gap:4px;margin:0 0 4px;padding-right:2px}
+ .ai-store-modal .ai-package-price strong{font-size:19px;letter-spacing:-.6px}
+ .ai-store-modal .ai-package-price span{font-size:6px;text-align:right}
+ .ai-store-modal .ai-package-line{gap:4px;padding:3px 0;font-size:8px}
+ .ai-store-modal .ai-package-line strong{font-size:8px}
+ .ai-store-modal .ai-package-button{display:none!important}
+ .ai-store-modal .ai-store-note{margin-top:7px;font-size:7px;line-height:1.3}
+}
+@media(max-width:380px){
+ .ai-store-modal{padding:10px!important}
+ .ai-store-modal-top h2{font-size:16px}
+ .ai-store-modal .ai-package-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ .ai-store-modal .ai-package-card{padding:7px 7px 6px}
+ .ai-store-modal .ai-package-price strong{font-size:17px}
+ .ai-store-modal .ai-package-line{font-size:7px}
+ .ai-store-modal .ai-package-line strong{font-size:7px}
+}
+@media(max-height:680px) and (max-width:700px){
+ .ai-store-modal{padding:8px!important}
+ .ai-store-modal-top{margin-bottom:5px}
+ .ai-store-modal-top p{display:none}
+ .ai-store-modal>.ai-store-heading{padding:5px 0;margin-bottom:5px}
+ .ai-store-modal .ai-package-card{padding:6px 7px 5px}
+ .ai-store-modal .ai-package-line{padding:2px 0}
+ .ai-store-modal .ai-store-note{font-size:6.5px;margin-top:5px}
+}
