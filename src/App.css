@@ -854,3 +854,47 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible{outline:2px s
  .ai-store-page .ai-store-page-card .ai-package-line{font-size:7px}
  .ai-store-page .ai-store-page-card .ai-package-line strong{font-size:8px}
 }
+
+
+/* Pexoriy signature experience — contained labels, visible PXY value, tactile selection */
+.ai-store-page .ai-store-page-card{overflow:visible;transition:transform .22s cubic-bezier(.2,.8,.2,1),border-color .22s,background .22s,box-shadow .22s;transform-origin:center}
+.ai-store-page .ai-store-page-card:has(.ai-package-tag){padding-top:43px}
+.ai-store-page .ai-store-page-card .ai-package-tag{top:11px;right:11px;left:auto;z-index:2;display:inline-flex;align-items:center;justify-content:center;min-height:22px;padding:4px 8px;border:1px solid rgba(183,243,74,.26);border-radius:6px;background:rgba(183,243,74,.13);color:#d7fb9c;font-size:8px;line-height:1;letter-spacing:.09em;box-shadow:0 3px 10px rgba(0,0,0,.14)}
+.ai-store-page .ai-package-tag-popular{background:#b7f34a!important;border-color:#b7f34a!important;color:#13180c!important;box-shadow:0 3px 14px rgba(183,243,74,.15)!important}
+.ai-store-page .ai-store-page-card:hover{transform:translateY(-3px);border-color:rgba(183,243,74,.45);box-shadow:0 12px 28px rgba(0,0,0,.17)}
+.ai-store-page .ai-store-page-card:active{transform:translateY(0) scale(.985)}
+.ai-store-page .ai-store-page-card.ai-package-selected{border-color:rgba(183,243,74,.8);box-shadow:inset 0 0 0 1px rgba(183,243,74,.16),0 0 0 1px rgba(183,243,74,.06),0 12px 30px rgba(183,243,74,.075);background:linear-gradient(155deg,rgba(183,243,74,.085),transparent 64%),#191d15}
+.ai-store-page .ai-package-reward{display:flex;align-items:center;gap:9px;min-width:0;margin:0 0 7px;padding:10px 9px;border:1px solid rgba(183,243,74,.27);border-radius:10px;background:linear-gradient(110deg,rgba(183,243,74,.13),rgba(183,243,74,.045));box-shadow:inset 0 1px rgba(255,255,255,.025)}
+.ai-store-page .ai-package-reward-icon{display:grid;place-items:center;flex:0 0 30px;width:30px;height:30px;border:1px solid rgba(183,243,74,.24);border-radius:9px;background:rgba(183,243,74,.12);color:#c7f77c}
+.ai-store-page .ai-package-reward-copy{display:flex;flex:1;min-width:0;flex-direction:column;gap:3px}
+.ai-store-page .ai-package-reward-copy small{color:#b8d98b;font-size:7px;font-weight:800;letter-spacing:.075em;line-height:1.2}
+.ai-store-page .ai-package-reward-copy strong{color:#c9fb7a;font:800 clamp(14px,1.4vw,18px)/1.1 Manrope,sans-serif;letter-spacing:-.035em;white-space:nowrap}
+.ai-store-page .ai-package-reward-label{align-self:flex-start;padding:4px 5px;border-radius:5px;background:rgba(183,243,74,.12);color:#d4fa9d;font-size:6px;font-weight:900;letter-spacing:.06em}
+.ai-store-page .ai-package-payment{margin-top:auto}
+.ai-store-page .ai-package-line.ai-package-bonus{display:none}
+.ai-store-page .ai-store-selected-summary{transition:border-color .2s,box-shadow .2s,background .2s}
+.ai-store-page .ai-store-status-message{animation:store-feedback-enter .3s cubic-bezier(.2,.8,.2,1) both}
+.ai-store-page .ai-package-just-selected{animation:store-package-selected .62s cubic-bezier(.2,.8,.2,1) both}
+@keyframes store-package-selected{0%{transform:scale(1)}28%{transform:scale(1.025);box-shadow:0 0 0 3px rgba(183,243,74,.2),0 0 30px rgba(183,243,74,.14)}58%{transform:scale(.995)}100%{transform:scale(1)}}
+@keyframes store-feedback-enter{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:700px){
+ .ai-store-page .ai-store-page-card:has(.ai-package-tag){padding-top:40px}
+ .ai-store-page .ai-store-page-card .ai-package-tag{top:9px;right:9px;min-height:20px;padding:4px 7px;font-size:7px}
+ .ai-store-page .ai-package-reward{gap:6px;margin-bottom:6px;padding:8px 7px;border-radius:8px}
+ .ai-store-page .ai-package-reward-icon{width:25px;height:25px;flex-basis:25px;border-radius:7px}
+ .ai-store-page .ai-package-reward-icon svg{width:13px;height:13px}
+ .ai-store-page .ai-package-reward-copy small{font-size:6px;letter-spacing:.035em}
+ .ai-store-page .ai-package-reward-copy strong{font-size:clamp(12px,3.5vw,16px)}
+ .ai-store-page .ai-package-reward-label{font-size:5px;padding:4px}
+}
+@media(max-width:360px){
+ .ai-store-page .ai-store-page-card:has(.ai-package-tag){padding-top:37px}
+ .ai-store-page .ai-package-reward{gap:5px;padding:7px 6px}
+ .ai-store-page .ai-package-reward-icon{width:22px;height:22px;flex-basis:22px}
+ .ai-store-page .ai-package-reward-copy strong{font-size:12px}
+ .ai-store-page .ai-package-reward-label{display:none}
+}
+@media(prefers-reduced-motion:reduce){
+ .ai-store-page .ai-store-page-card,.ai-store-page .ai-store-selected-summary{transition:none!important}
+ .ai-store-page .ai-package-just-selected,.ai-store-page .ai-store-status-message{animation:none!important}
+}
