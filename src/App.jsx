@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, Bell, Bot, ChartNoAxesCombined, Check, ChevronDown, ChevronRight, CircleHelp, CircleDollarSign, Flame, Gift, Home, Layers3, Menu, Search, Settings, ShieldCheck, Sparkles, Target, Trophy, Users, X, Zap, TrendingUp, BrainCircuit, CandlestickChart, Clock3, CalendarDays, LockKeyhole } from 'lucide-react';
 import { useTonConnectUI, useTonWallet, useTonAddress } from '@tonconnect/ui-react';
 import './App.css';
