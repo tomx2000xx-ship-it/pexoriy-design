@@ -756,3 +756,101 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible{outline:2px s
  .ai-package-payment{align-items:flex-start;flex-direction:column;gap:3px}
  .ai-store-connect{font-size:7px}
 }
+
+/* Dedicated AI Credit Store page */
+.ai-store-page{width:100%;max-width:1240px;margin:0 auto;padding:clamp(4px,1.2vw,16px) 0 34px;color:var(--text-primary,#f4f6ef)}
+.ai-store-back{display:inline-flex;align-items:center;gap:8px;padding:8px 0;margin:0 0 18px;background:transparent;border:0;color:var(--text-secondary,#a9b1a0);font:600 12px 'DM Sans',sans-serif;cursor:pointer}
+.ai-store-back svg{transform:rotate(180deg)}
+.ai-store-back:hover{color:#b7f34a}
+.ai-store-page-heading{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-bottom:22px}
+.ai-store-page-heading .eyebrow{color:#b7f34a;font-size:10px;letter-spacing:.14em;font-weight:800}
+.ai-store-page-heading h1{margin:8px 0 9px;font:800 clamp(27px,3.5vw,42px)/1.08 Manrope,sans-serif;letter-spacing:-.045em;color:#f2f6eb}
+.ai-store-page-heading p{max-width:670px;margin:0;color:#9da697;font-size:13px;line-height:1.65}
+.ai-store-page-mark{width:82px;height:82px;flex:0 0 82px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;border:1px solid rgba(183,243,74,.2);border-radius:22px;background:linear-gradient(145deg,rgba(183,243,74,.12),rgba(183,243,74,.025));color:#b7f34a}
+.ai-store-page-mark span{font:800 8px/1.05 'DM Sans',sans-serif;letter-spacing:.12em;text-align:center}
+.ai-store-page .ai-store-checkout-bar{margin-bottom:20px;padding:15px 17px;border-radius:14px;gap:16px}
+.ai-store-page .ai-store-payment strong{font-size:13px}
+.ai-store-page .ai-store-payment small{font-size:10px}
+.ai-store-page .ai-store-wallet-action{max-width:none}
+.ai-store-page .ai-store-connect{min-height:42px;padding:0 16px;font-size:11px;border-radius:9px;background:#0098ea;border:1px solid #21a8f4;color:#fff;box-shadow:0 5px 18px rgba(0,152,234,.18);font-weight:800}
+.ai-store-page .ai-store-connect:hover{background:#16a8f8;border-color:#4dbdff;box-shadow:0 7px 22px rgba(0,152,234,.27);transform:translateY(-1px)}
+.ai-store-page .ai-store-connect .ai-store-connect-dot{background:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.18)}
+.ai-store-page .ai-store-heading{margin-bottom:14px;padding:0;align-items:flex-end}
+.ai-store-page .ai-store-heading p{max-width:730px;font-size:11px;line-height:1.55}
+.ai-store-page .ai-store-quote-state{font-size:8px}
+.ai-store-page .ai-package-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}
+.ai-store-page .ai-store-page-card{min-height:236px;display:flex;flex-direction:column;padding:21px 18px 16px;border-radius:15px;cursor:pointer;position:relative;overflow:hidden}
+.ai-store-page .ai-store-page-card .ai-package-value{margin:10px 0 14px}
+.ai-store-page .ai-store-page-card .ai-package-value>span{font-size:9px}
+.ai-store-page .ai-store-page-card .ai-package-value>strong{font-size:clamp(25px,2.3vw,32px)}
+.ai-store-page .ai-store-page-card .ai-package-value>strong small{font-size:12px}
+.ai-store-page .ai-store-page-card .ai-package-line{padding:10px 0;font-size:10px}
+.ai-store-page .ai-store-page-card .ai-package-line strong{font-size:11px}
+.ai-store-page .ai-store-page-card .ai-package-payment{margin-top:auto;padding-top:12px;gap:8px}
+.ai-store-page .ai-store-page-card .ai-package-payment>strong{font-size:16px}
+.ai-store-page .ai-store-page-card .ai-package-payment>strong small{font-size:10px}
+.ai-store-page .ai-store-page-card .ai-package-payment>span{font-size:10px}
+.ai-store-page .ai-store-page-card .ai-package-button{min-height:37px;margin-top:13px;padding:0 10px;font-size:10px;border-radius:9px}
+.ai-store-page .ai-store-selected-summary{margin-top:18px;padding:17px 19px;border-radius:14px;gap:20px}
+.ai-store-page .ai-store-selected-summary .eyebrow{font-size:8px}
+.ai-store-page .ai-store-selected-summary strong{font-size:15px;line-height:1.45}
+.ai-store-page .ai-store-selected-summary small{font-size:10px;line-height:1.5}
+.ai-store-page .ai-store-primary-cta{min-height:44px;padding:0 17px;font-size:11px;border-radius:10px}
+.ai-store-page .ai-store-note{margin-top:15px;font-size:10px;line-height:1.6}
+.ai-store-page .ai-store-quote-footnote{margin-top:7px;font-size:9px;line-height:1.5}
+.ai-store-page .ai-store-status-message{font-size:11px;margin:10px 0 0}
+@media(max-width:1050px){
+ .ai-store-page .ai-package-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:11px}
+ .ai-store-page .ai-store-page-card{min-height:225px;padding:18px 15px 14px}
+}
+@media(max-width:700px){
+ .ai-store-page{padding:0 0 28px}
+ .ai-store-back{margin-bottom:12px;font-size:11px}
+ .ai-store-page-heading{align-items:flex-start;gap:10px;margin-bottom:16px}
+ .ai-store-page-heading h1{font-size:27px;max-width:340px}
+ .ai-store-page-heading p{font-size:11px;line-height:1.55}
+ .ai-store-page-mark{width:58px;height:58px;flex-basis:58px;border-radius:15px}
+ .ai-store-page-mark svg{width:17px;height:17px}
+ .ai-store-page-mark span{font-size:6px}
+ .ai-store-page .ai-store-checkout-bar{align-items:center;flex-direction:row;padding:11px 10px;margin-bottom:17px;gap:8px}
+ .ai-store-page .ai-store-payment{min-width:0;gap:7px}
+ .ai-store-page .ai-store-payment .gram-mini-mark{width:30px;height:30px;flex-basis:30px}
+ .ai-store-page .ai-store-payment .gram-mini-mark .asset-logo,.ai-store-page .ai-store-payment .gram-mini-mark .asset-logo svg{width:30px;height:30px;flex-basis:30px}
+ .ai-store-page .ai-store-payment strong{font-size:10px}
+ .ai-store-page .ai-store-payment small{font-size:8px;max-width:150px}
+ .ai-store-page .ai-store-wallet-action{min-width:0;max-width:53%;gap:4px}
+ .ai-store-page .ai-store-connect{min-height:36px;padding:0 9px;font-size:8px;gap:5px;white-space:nowrap}
+ .ai-store-page .ai-store-connect svg{width:12px;height:12px}
+ .ai-store-page .ai-store-heading{align-items:flex-start;gap:8px}
+ .ai-store-page .ai-store-heading p{font-size:9px;max-width:275px}
+ .ai-store-page .ai-store-quote-state{font-size:7px}
+ .ai-store-page .ai-package-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+ .ai-store-page .ai-store-page-card{min-height:220px;padding:16px 12px 12px;border-radius:12px}
+ .ai-store-page .ai-store-page-card .ai-package-value{margin:12px 0 10px}
+ .ai-store-page .ai-store-page-card .ai-package-value>span{font-size:7px}
+ .ai-store-page .ai-store-page-card .ai-package-value>strong{font-size:clamp(20px,5.8vw,27px)}
+ .ai-store-page .ai-store-page-card .ai-package-value>strong small{font-size:10px}
+ .ai-store-page .ai-store-page-card .ai-package-line{padding:8px 0;font-size:8px}
+ .ai-store-page .ai-store-page-card .ai-package-line strong{font-size:9px}
+ .ai-store-page .ai-store-page-card .ai-package-payment{align-items:flex-start;flex-direction:column;gap:4px;padding-top:9px}
+ .ai-store-page .ai-store-page-card .ai-package-payment>strong{font-size:13px}
+ .ai-store-page .ai-store-page-card .ai-package-payment>strong small{font-size:8px}
+ .ai-store-page .ai-store-page-card .ai-package-payment>span{font-size:8px}
+ .ai-store-page .ai-store-page-card .ai-package-button{min-height:34px;margin-top:10px;padding:0 6px;font-size:8px;gap:4px}
+ .ai-store-page .ai-store-page-card .ai-package-button svg{width:12px;height:12px}
+ .ai-store-page .ai-store-selected-summary{align-items:stretch;flex-direction:column;margin-top:14px;padding:14px;gap:12px}
+ .ai-store-page .ai-store-selected-summary strong{font-size:13px}
+ .ai-store-page .ai-store-selected-summary small{font-size:9px}
+ .ai-store-page .ai-store-primary-cta{width:100%;min-height:42px;font-size:10px}
+ .ai-store-page .ai-store-note{font-size:9px}
+}
+@media(max-width:360px){
+ .ai-store-page-heading h1{font-size:24px}
+ .ai-store-page-mark{display:none}
+ .ai-store-page .ai-store-checkout-bar{align-items:flex-start}
+ .ai-store-page .ai-store-connect{font-size:7px;padding:0 7px}
+ .ai-store-page .ai-store-page-card{padding:13px 9px 10px}
+ .ai-store-page .ai-store-page-card .ai-package-value>strong{font-size:19px}
+ .ai-store-page .ai-store-page-card .ai-package-line{font-size:7px}
+ .ai-store-page .ai-store-page-card .ai-package-line strong{font-size:8px}
+}
