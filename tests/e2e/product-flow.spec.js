@@ -9,7 +9,10 @@ async function enterApp(page) {
 }
 
 async function goTo(page, label) {
-  await page.getByRole('button', { name: label, exact: true }).first().click();
+  const mobile = (page.viewportSize()?.width || 1200) <= 600;
+  const mobileLabels = { 'Practice Trading': 'Practice', 'AI Trading': 'AI Centre' };
+  const visibleLabel = mobile ? (mobileLabels[label] || label) : label;
+  await page.getByRole('button', { name: visibleLabel, exact: true }).first().click();
 }
 
 test('Practice visibly connects to AI Trading and blocks over-balance orders', async ({ page }) => {
