@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
 
-async function enterApp(page) {
+async function enterApp(page, path = '/') {
   await page.addInitScript(() => {
     localStorage.setItem('pexoriy-demo-entered', '1');
     localStorage.setItem('pexoriy-onboarding-complete', '1');
   });
-  await page.goto('/');
+  await page.goto(path);
 }
 
 async function goTo(page, label) {
@@ -67,6 +67,17 @@ test('AI session lifecycle, trade open/close, and Activity Centre ledger work', 
   await expect(page.getByText('AI-assisted position opened')).toBeVisible();
   await expect(page.getByText('AI-assisted position closed')).toBeVisible();
   await expect(page.getByText('AI session stopped')).toBeVisible();
+});
+
+test('AI trading blocks a proposed action when AI Credit balance is insufficient', async ({ page }) => {
+  await enterApp(page, '/?e2e=low-balance');
+  await goTo(page, 'AI Trading');
+  await expect(page.getByText('0', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /Start AI session/ }).click();
+  await page.getByRole('button', { name: /Review AI trade/ }).click();
+  await expect(page.getByText(/Not enough AI Credits/)).toBeVisible();
+  await expect(page.locator('.ai-action-review')).toHaveCount(0);
+  await expect(page.getByText('0', { exact: true })).toBeVisible();
 });
 
 test('mobile layout stays within the viewport on Practice and AI Trading', async ({ page, isMobile }) => {
