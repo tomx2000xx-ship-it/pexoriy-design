@@ -64,10 +64,10 @@ Use the latest explicitly agreed project decisions in the conversation when they
 - **Design standard:** Finished-product layout; if data is unavailable, use a purposeful loading/empty/unavailable state rather than fake account metrics.
 
 ### Practice Trading
-- **Required:** Asset search/category/watchlist, chart and timeframe controls, market status/freshness, trade ticket, risk/size preview, confirmation, open positions, close confirmation, realized/unrealized simulated P&L, history.
-- **Current gaps:** Current implementation returns allocated TC on close and does not calculate P&L; static sample market prices are used; no explicit order summary or complete trade audit is visible.
-- **Design standard:** Keep “Practice Mode” clear, but do not clutter every section with disclaimers. Pause affected markets when quotes are stale or unavailable.
-
+- **Design pass completed:** Added a review-before-entry step, an explicit simulated entry confirmation, open-position cards with entry/reference prices and unrealized simulated P&L, a close-position review dialog, and a closed-trade history with exit price, realized simulated P&L, and returned TC.
+- **Balance behavior:** Opening reserves the chosen TC allocation. Closing returns the allocation adjusted by the simulated price-move result, with a non-negative return floor; the position is removed once and recorded in history. AI-managed positions remain visible in the same position list and are labelled as AI-assisted.
+- **Important data boundary:** P&L is derived from the repository's existing static market snapshot. It will often remain unchanged until the displayed reference price changes; it is not a live quote or real-money return. No exchange execution or backend persistence was added.
+- **Remaining validation:** Run a fresh production build and test desktop/tablet/mobile layouts and the open-review-close-history path before treating this pass as verified.
 ### AI Trading
 - **Required:** User-defined guardrails, eligible market selection, AI plan/decision summary, operation-cost confirmation, start/pause/stop, live status, activity log, per-operation credit ledger, risk-limit events and service-error recovery.
 - **Current gaps:** The frontend simulates AI selection locally; the displayed “session active” state is not a connected persistent automation service. The selected-market filtering bug was corrected in the first design pass (15 October 2026).
