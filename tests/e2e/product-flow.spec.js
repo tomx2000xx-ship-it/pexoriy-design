@@ -72,7 +72,7 @@ test('AI session lifecycle, trade open/close, and Activity Centre ledger work', 
 test('AI trading blocks a proposed action when AI Credit balance is insufficient', async ({ page }) => {
   await enterApp(page, '/?e2e=low-balance');
   await goTo(page, 'AI Trading');
-  await expect(page.getByText('0', { exact: true })).toBeVisible();
+  await expect(page.locator('.ai-balance-purchase strong')).toContainText('0');
   await page.getByRole('button', { name: /Start AI session/ }).click();
   await page.getByRole('button', { name: /Review AI trade/ }).click();
   await expect(page.getByText(/Not enough AI Credits/)).toBeVisible();
