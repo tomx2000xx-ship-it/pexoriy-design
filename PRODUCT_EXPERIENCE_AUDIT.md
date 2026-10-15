@@ -152,3 +152,14 @@ Use concise operational messages rather than repeated global disclaimers. Keep t
 - Mission and challenge completion currently depend on local state rather than verified completion.
 - Activity history is local and incomplete.
 - Profile/settings controls are descriptive placeholders rather than functional settings.
+
+## 8. Build and rendered-flow verification gate — 15 October 2026
+
+- Added a prominent Practice Trading bridge to AI Trading near the top of the Practice screen. It explains the value of AI-assisted practice and leads directly to the AI Trading Centre.
+- Added GitHub Actions workflow `.github/workflows/verify-product-flow.yml`: install dependencies, run the production Vite build, then run Playwright Chromium browser tests.
+- Added desktop and mobile Chromium test projects in `playwright.config.js` and rendered-flow tests in `tests/e2e/product-flow.spec.js`.
+- Automated browser coverage is intended to check the Practice-to-AI route, over-balance manual order prevention, AI session start/pause/resume/stop, the 1.5 AC trade confirmation flow, position opening and closing, AI event ledger entries in Activity Centre, and mobile horizontal overflow. The stop test deliberately verifies that an already-open position remains available to close after the AI session is stopped.
+- **Verification status: pending a genuine CI run.** The GitHub connector did not return any commit status checks at the last inspection, and no successful build/browser run has been observed. Do not describe the production bundle or rendered mobile flow as verified until the workflow reports a completed result and failures, if any, are fixed.
+- Cloudflare account inspection found a deployed Worker script named `pexoriy-design`, no Cloudflare Pages projects, and no Workers Builds trigger associated with that script. The current script's settings report no bindings. This means a Cloudflare build pipeline and database bindings are not yet verified as configured. Do not create or migrate infrastructure as part of this UI verification step.
+- Architecture direction recorded for the backend phase: keep GitHub as the source-control workflow and use Cloudflare as the default platform foundation. Evaluate D1 for relational application data, Workers for edge APIs, and other Cloudflare services only when justified by the approved requirements. Do not claim database persistence or server-side validation until real bindings, schema, API paths, authorization, and migrations are implemented and tested.
+- This verification gate must be cleared before starting another product area: obtain a successful production build, inspect the actual rendered desktop/mobile flows, fix any failures, and re-run the suite.
