@@ -71,7 +71,7 @@ Use the latest explicitly agreed project decisions in the conversation when they
 
 ### AI Trading
 - **Required:** User-defined guardrails, eligible market selection, AI plan/decision summary, operation-cost confirmation, start/pause/stop, live status, activity log, per-operation credit ledger, risk-limit events and service-error recovery.
-- **Current gaps:** The frontend simulates AI selection locally; the displayed “session active” state is not a connected persistent automation service. Current asset filtering logic should be checked because a selected asset may be excluded instead of selected.
+- **Current gaps:** The frontend simulates AI selection locally; the displayed “session active” state is not a connected persistent automation service. The selected-market filtering bug was corrected in the first design pass (15 October 2026), but the broader AI workflow still needs a full design review.
 - **Design standard:** AI operates only within user-approved controls; never imply continuous monitoring or market analysis that is not actually running.
 
 ### AI Credit Store
@@ -141,6 +141,7 @@ Use concise operational messages rather than repeated global disclaimers. Keep t
 - Current Practice Trading closes positions without simulated P&L.
 - Current market data is static and must have a clear illustrative/unavailable state until a verified feed is connected.
 - AI Trading locally simulates AI behavior and must not imply an active connected AI service.
+- First design pass completed 15 October 2026: added this product-experience audit, refined dashboard copy to remove session/demo notices, and corrected AI Trading's selected-market filter. These changes were committed directly to main; no production backend was added.
 - Referral sharing currently shares a generic platform URL rather than a unique tracked referral.
 - Mission and challenge completion currently depend on local state rather than verified completion.
 - Activity history is local and incomplete.
