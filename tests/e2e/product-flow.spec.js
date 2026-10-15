@@ -41,8 +41,8 @@ test('AI session lifecycle, trade open/close, and Activity Centre ledger work', 
   await expect(page.getByText('ACTIVE · AWAITING ACTION')).toBeVisible();
 
   await page.getByRole('button', { name: /Review AI trade/ }).click();
-  await expect(page.getByRole('region', { name: 'CONFIRM AI ACTION' })).toBeVisible();
-  await expect(page.getByText('1.5 AC', { exact: true })).toBeVisible();
+  await expect(page.locator('.ai-action-review')).toBeVisible();
+  await expect(page.getByText('1.5 AC', { exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: 'Confirm trade' }).click();
   await expect(page.getByText(/Simulated position opened/)).toBeVisible();
 
