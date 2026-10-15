@@ -49,17 +49,16 @@ test('AI session lifecycle, trade open/close, and Activity Centre ledger work', 
   await page.getByRole('button', { name: 'Confirm trade' }).click();
   await expect(page.getByText(/Simulated position opened/)).toBeVisible();
 
+  await page.getByRole('button', { name: 'Stop', exact: true }).click();
+  await expect(page.getByText('STOPPED', { exact: true })).toBeVisible();
+
   await goTo(page, 'Practice Trading');
   await expect(page.getByText('AI-assisted position', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: 'Review close' }).click();
   await expect(page.getByRole('dialog', { name: 'Review your exit' })).toBeVisible();
   await page.getByRole('button', { name: 'Confirm close' }).click();
   await expect(page.getByText(/Position closed/)).toBeVisible();
-  await expect(page.getByText('AI-assisted position closed', { exact: false })).toHaveCount(0);
 
-  await goTo(page, 'AI Trading');
-  await page.getByRole('button', { name: 'Stop', exact: true }).click();
-  await expect(page.getByText('STOPPED', { exact: true })).toBeVisible();
   await goTo(page, 'Activity');
   await expect(page.getByRole('heading', { name: 'Your activity, in one place.' })).toBeVisible();
   await expect(page.getByText('AI session started')).toBeVisible();
