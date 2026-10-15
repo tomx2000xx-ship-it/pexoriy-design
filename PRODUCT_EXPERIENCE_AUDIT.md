@@ -25,10 +25,9 @@ Use the latest explicitly agreed project decisions in the conversation when they
 - TC history may contribute to a future airdrop calculation, but no conversion rate or guaranteed allocation is promised.
 - User preference: React JSX + Vite, preserve repository structure, direct commits to the connected Remote GitHub repository and Cloudflare workflow; no PRs or Lovable.
 
-### Decisions that must remain open until explicitly finalized
-- Exact AI Credit package tiers beyond the confirmed minimum package.
-- Current confirmed minimum package direction: $5 equivalent in GRAM for 70 AI Credits + 10 PXY bonus; the maximum package is capped at 500 AI Credits. Do not keep the older README's $10–$500 schedule or larger PXY bonuses as if approved.
-- The community allocation percentage in PXY tokenomics needs reconciliation; do not present the repository's 60% figure as final until confirmed.
+### Decisions already finalized — preserve without reopening
+- **AI Credit Store package schedule is fixed and must remain unchanged:** $5 equivalent in GRAM = 70 AI Credits + 100 PXY; $10 = 140 AI Credits + 200 PXY; $25 = 350 AI Credits + 500 PXY; $50 = 700 AI Credits + 1,000 PXY; $100 = 1,400 AI Credits + 2,000 PXY; $250 = 3,500 AI Credits + 5,000 PXY; $500 = 7,000 AI Credits + 10,000 PXY. Do not replace, reduce, cap, or reinterpret these approved packages or PXY bonuses without the user's explicit instruction.
+- **PXY community allocation is fixed at 60% of the 100,000,000 supply (60,000,000 PXY):** 30% initial airdrop (30,000,000 PXY), 20% ongoing community rewards (20,000,000 PXY), and 10% future community reserve (10,000,000 PXY). Do not mark this as unresolved or ask the user to reconfirm it.
 - Final simulated execution rules: spread/fees, leverage, order types, position sizing/risk limits and P&L calculation.
 - Market-data provider, freshness thresholds and final asset catalogue.
 - Exact definition of one billable AI operation/cycle and when credits are reserved, charged or refunded.
@@ -75,9 +74,9 @@ Use the latest explicitly agreed project decisions in the conversation when they
 - **Design standard:** AI operates only within user-approved controls; never imply continuous monitoring or market analysis that is not actually running.
 
 ### AI Credit Store
-- **Required:** Approved packages only; AI Credit amount and PXY bonus separated; GRAM estimate and quote timestamp; wallet connect/disconnect; payment review; pending/confirmed/failed/refunded states.
-- **Current gap:** The current code/README contain an older package schedule (up to 7,000 AC and up to 10,000 PXY bonuses) that conflicts with the latest recorded direction of a $5 minimum package for 70 AC + 10 PXY and a maximum of 500 AC.
-- **Design decision:** Remove unapproved tiers/bonuses from the design. Do not fabricate intermediate tiers to fill the grid. Use a compact confirmed package card and an intentional “more packages” area only after the tiers are approved.
+- **Required:** Preserve the seven approved packages exactly; display AI Credit quantity and PXY bonus separately; GRAM estimate and quote timestamp; wallet connect/disconnect; payment review; pending/confirmed/failed/refunded states.
+- **Approved package schedule:** $5/70 AC/100 PXY; $10/140 AC/200 PXY; $25/350 AC/500 PXY; $50/700 AC/1,000 PXY; $100/1,400 AC/2,000 PXY; $250/3,500 AC/5,000 PXY; $500/7,000 AC/10,000 PXY. Prices are USD equivalents paid in GRAM.
+- **Design decision:** Improve the store's hierarchy, responsiveness, GRAM payment journey, package comparison, and transaction states without changing any approved package value or bonus.
 - **Implementation caution:** A displayed GRAM quote is an estimate until the actual supported payment quote and transaction are verified. Do not charge or issue balances based on client-side state.
 
 ### Community Challenges
@@ -96,8 +95,8 @@ Use the latest explicitly agreed project decisions in the conversation when they
 - **Design standard:** Reward legitimate participation, not raw sign-ups or recruitment chains. Do not show fake referral counts.
 
 ### PXY Token
-- **Required:** Pre-launch/not-listed state, token purpose, distribution pathways, project-level supply/allocation only when approved, eligibility explanation and launch updates.
-- **Current gap:** The current page exposes a 60% community allocation as a working plan; this must not be presented as final until the latest allocation decision is reconciled.
+- **Required:** Pre-launch/not-listed state, token purpose, distribution pathways, approved supply/allocation, eligibility explanation and launch updates.
+- **Confirmed allocation:** 60% community allocation (60,000,000 PXY): 30% initial airdrop (30,000,000 PXY), 20% ongoing community rewards (20,000,000 PXY), and 10% future community reserve (10,000,000 PXY). Keep this split consistent wherever tokenomics are shown.
 - **Design standard:** No invented price, value, launch date, listing, guaranteed reward or personal airdrop amount.
 
 ### Activity and Profile
@@ -124,8 +123,8 @@ Use concise operational messages rather than repeated global disclaimers. Keep t
 
 ## 6. Implementation and validation sequence
 
-1. Reconcile product rules and mark unresolved economics as open.
-2. Update this document whenever a decision is explicitly approved.
+1. Preserve all already-approved product rules and economics; do not reopen them without an explicit user change.
+2. Update this document only when a decision is explicitly changed or newly approved.
 3. Refine entry/onboarding and shared navigation.
 4. Refine Practice Trading and its complete trade lifecycle.
 5. Refine AI Trading and the AI Credit Store, using only approved package terms.
@@ -136,8 +135,8 @@ Use concise operational messages rather than repeated global disclaimers. Keep t
 
 ## 7. Known repository mismatches to fix during the design pass
 
-- README and AI Store contain an outdated purchase schedule and PXY bonus quantities.
-- PXY page's community allocation needs reconciliation before being treated as final.
+- The AI Store and README package schedule must match the approved seven-tier schedule exactly; improve presentation without changing values.
+- PXY page must consistently show the approved 60% community allocation split (30% initial airdrop, 20% ongoing rewards, 10% future community reserve).
 - Current Practice Trading closes positions without simulated P&L.
 - Current market data is static and must have a clear illustrative/unavailable state until a verified feed is connected.
 - AI Trading locally simulates AI behavior and must not imply an active connected AI service.
