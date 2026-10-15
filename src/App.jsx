@@ -18,9 +18,9 @@ const initialMissions=[
  {id:'community',title:'Join a community challenge',detail:'Join an available Pexoriy challenge.',reward:200,icon:Users,done:false}
 ];
 const challenges=[
- {id:'daily',name:'Daily Sprint',type:'24-hour challenge',length:'24 hours',prize:5000,detail:'Complete the daily practice objectives and show up consistently during this 24-hour community sprint.'},
- {id:'sprint',name:'Community Sprint',type:'Open challenge',length:'7 days',prize:12000,detail:'Build a consistent practice streak and complete the weekly community objectives.'},
- {id:'league',name:'Consistency League',type:'Consistency',length:'14 days',prize:25000,detail:'Show up consistently, complete objectives, and climb the community leaderboard.'}
+ {id:'daily',name:'24h Sprint',type:'24-hour challenge',length:'24 hours',prize:5000,detail:'Complete the published practice objectives and show up consistently during this 24-hour community sprint.'},
+ {id:'sprint',name:'7-day Consistency League',type:'Consistency league',length:'7 days',prize:12000,detail:'Build a steady practice streak across seven days and complete the published weekly community objectives.'},
+ {id:'league',name:'14-day Challenge',type:'Community challenge',length:'14 days',prize:25000,detail:'Show up consistently for fourteen days, complete the published objectives, and climb the shared community leaderboard.'}
 ];
 const money=n=>Number(n||0).toLocaleString('en-US',{maximumFractionDigits:2});
 function Brand(){return <div className="brand-mark"><span className="brand-glyph">p</span><span>pexoriy<span className="brand-period">.</span></span></div>}
