@@ -22,7 +22,7 @@ npm run preview
 
 - **Overview:** balances, market pulse, prominent Community Challenges, missions, and open positions
 - **Practice Trading:** asset selector, long/short choice, TC allocation, simulated position opening/closing
-- **AI Trading:** automated simulated trading workspace with risk preference, AI-selected TC allocation, sample opportunity scan, and pause control; 50 AC session cost
+- **AI Trading:** automated simulated trading workspace with risk preference, AI-selected TC allocation, sample opportunity scan, and pause control; 1.5 AC charged per successfully executed simulated AI trade
 - **Community Challenges:** challenge cards, join action, joined filter, sample PXY reward pools
 - **Missions & Rewards:** completion states and TC reward previews
 - **PXY & Rewards:** proposed token concept and separation of TC, AC, and PXY
