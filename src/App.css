@@ -1004,3 +1004,51 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible{outline:2px s
 .pxy-allocation-note svg{flex:0 0 auto;margin-top:1px;color:var(--lime)}
 @media(max-width:760px){.pxy-supply-overview{grid-template-columns:1fr}.pxy-supply-total{padding:18px}.pxy-community-total{padding:18px}.pxy-community-total>strong{font-size:27px}.pxy-allocation-legend{gap:7px}}
 @media(max-width:420px){.pxy-allocation-legend{grid-template-columns:1fr;gap:9px}.pxy-allocation-legend>span{grid-template-columns:9px auto 1fr}.pxy-allocation-legend strong{grid-column:3;justify-self:end}.pxy-supply-total>strong{font-size:28px}}
+
+
+/* AI CENTER — Market Opportunities redesign */
+.ai-opportunities-section{margin-top:26px}
+.ai-opportunities-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:20px}
+.ai-opportunities-heading .eyebrow{display:flex;align-items:center;gap:7px;color:var(--lime)}
+.ai-opportunities-heading h2{font-family:Manrope,sans-serif;font-size:25px;letter-spacing:-.65px;margin:8px 0 6px}
+.ai-opportunities-heading p{font-size:11px;color:#9da590;line-height:1.65;margin:0;max-width:540px}
+.opportunity-count{display:flex;flex-direction:column;align-items:flex-end;gap:4px;padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:#141710;flex-shrink:0}
+.opportunity-count strong{font-size:21px;color:var(--lime);font-variant-numeric:tabular-nums}
+.opportunity-count span{font-size:9px;color:#9da590}
+.opportunity-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:13px}
+.opportunity-filters{display:flex;gap:5px;padding:4px;background:#11130f;border:1px solid var(--line);border-radius:9px}
+.opportunity-filters button{border:0;background:transparent;color:#929989;font-size:10px;padding:8px 13px;border-radius:6px;cursor:pointer}
+.opportunity-filters button.active{background:rgba(183,243,74,.12);color:var(--lime)}
+.opportunity-sort{display:flex;align-items:center;gap:6px;color:#8e9684;font-size:9px}
+.ai-opportunity-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.ai-opportunity-card{min-width:0;padding:15px;border:1px solid rgba(231,238,219,.09);border-radius:13px;background:linear-gradient(145deg,#191c16,#141710);transition:border-color .18s,transform .18s}
+.ai-opportunity-card:hover{border-color:rgba(183,243,74,.3);transform:translateY(-2px)}
+.ai-opportunity-card.opportunity-focused{border-color:rgba(183,243,74,.58);box-shadow:inset 0 0 0 1px rgba(183,243,74,.08)}
+.opportunity-card-top{display:flex;align-items:center;gap:9px;min-width:0}
+.opportunity-asset-mark{display:grid;place-items:center;width:37px;height:37px;border-radius:10px;background:color-mix(in srgb,var(--asset-color) 13%,#141710);border:1px solid color-mix(in srgb,var(--asset-color) 30%,transparent);color:var(--asset-color);font-size:17px;font-weight:800;flex-shrink:0}
+.opportunity-asset-name{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+.opportunity-asset-name strong{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.opportunity-asset-name span{font-size:9px;color:#8f9785}
+.opportunity-direction{font-size:8px;font-weight:800;padding:5px 7px;border-radius:5px;flex-shrink:0}
+.opportunity-direction.bullish{color:#b7f34a;background:rgba(183,243,74,.09)}
+.opportunity-direction.bearish{color:#ff9a8e;background:rgba(255,117,105,.09)}
+.opportunity-price-line{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:21px 0 18px}
+.opportunity-price-line>strong{font-size:21px;letter-spacing:-.5px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.opportunity-price-line>.change{font-size:11px;font-weight:750;white-space:nowrap}
+.opportunity-momentum{padding:11px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.opportunity-momentum-label{display:flex;justify-content:space-between;gap:8px;margin-bottom:9px}
+.opportunity-momentum-label span{font-size:9px;color:#929989}
+.opportunity-momentum-label strong{font-size:9px;color:#d8decf}
+.opportunity-momentum-track{height:5px;border-radius:9px;background:#292d23;overflow:hidden}
+.opportunity-momentum-track span{display:block;height:100%;border-radius:9px;min-width:4px}
+.momentum-positive{background:var(--lime)}
+.momentum-negative{background:#fa8b7d}
+.opportunity-card-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:12px 0}
+.opportunity-card-footer>span{font-size:9px;color:#9da590}
+.opportunity-card-footer button{display:flex;align-items:center;gap:3px;border:0;background:transparent;color:var(--lime);font-size:9px;white-space:nowrap;cursor:pointer}
+.opportunity-review-button{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;padding:10px;border:1px solid rgba(183,243,74,.23);border-radius:8px;background:rgba(183,243,74,.06);color:#d8f6a4;font-size:10px;font-weight:750;cursor:pointer;transition:background .18s}
+.opportunity-review-button:hover{background:rgba(183,243,74,.13)}
+.opportunity-method-note{display:flex;align-items:flex-start;gap:8px;margin-top:13px;padding:12px 13px;border-radius:9px;background:#131610;color:#929989;font-size:9px;line-height:1.65}
+.opportunity-method-note svg{flex-shrink:0;color:#a6b88c;margin-top:1px}
+@media(max-width:1050px){.ai-opportunity-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.ai-opportunities-heading{align-items:flex-start}.ai-opportunities-heading h2{font-size:22px}.opportunity-count{padding:9px}.opportunity-count strong{font-size:18px}.opportunity-count span{font-size:8px}.opportunity-toolbar{align-items:flex-start;flex-direction:column}.ai-opportunity-grid{grid-template-columns:1fr}.ai-opportunity-card{padding:14px}.opportunity-price-line{margin:16px 0}.opportunity-price-line>strong{font-size:20px}.opportunity-sort{font-size:8px}}
