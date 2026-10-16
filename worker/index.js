@@ -827,6 +827,17 @@ async function handleApi(request, env) {
   }
 
 
+  if (path === "/api/ai/config" && request.method === "GET") {
+    return json({
+      provider: "cloudflare-workers-ai",
+      providerConfigured: Boolean(env.AI && typeof env.AI.run === "function"),
+      executionEnabled: Boolean(env.AI && typeof env.AI.run === "function"),
+      model: AI_MODEL_NAME,
+      operationCostAC: 1.5,
+      network: "simulated-practice-only",
+    });
+  }
+
   if (path === "/api/ai/session" && request.method === "GET") {
     const user = await currentUser(request, env);
     if (!user) return json({ error: "Authentication required." }, 401);
