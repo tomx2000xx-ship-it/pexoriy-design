@@ -503,11 +503,25 @@ async function handleApi(request, env) {
         "UPDATE payment_orders SET status = 'confirmed', tx_hash = ?, received_amount_atoms = expected_amount_atoms, confirmed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'), confirmed_slot = ?, chain_finality = 'finalized' WHERE id = ? AND tx_hash IS NULL AND status IN ('created','pending','confirmed')",
       ).bind(match.signature, match.slot, order.id).run();
     } catch {
-      const latest = await env.DB.prepare("SELECT status, tx_hash FROM payment_orders WHERE id = ?").bind(order.id).first();
-      if (latest?.tx_hash !== match.signature) {
-        await env.DB.prepare("UPDATE payment_orders SET status = 'review' WHERE id = ? AND status <> 'credited'").bind(order.id).run();
-        return json({ status: "review", message: "This transaction is already associated with another payment or needs review." }, 409);
+      // A concurrent verifier may already have confirmed or credited this exact transaction.
+    }
+
+    const latestConfirmation = await env.DB.prepare(
+      "SELECT status, tx_hash FROM payment_orders WHERE id = ?",
+    ).bind(order.id).first();
+    if (latestConfirmation?.tx_hash !== match.signature) {
+      if (latestConfirmation && latestConfirmation.status !== "credited") {
+        await env.DB.prepare(
+          "UPDATE payment_orders SET status = 'review' WHERE id = ? AND status <> 'credited'",
+        ).bind(order.id).run();
       }
+      return json({ status: "review", message: "This transaction is already associated with another payment or needs review." }, 409);
+    }
+    if (latestConfirmation.status === "credited") {
+      return json({ status: "credited", aiCredits: Number(order.credited_ac), duplicate: true });
+    }
+    if (latestConfirmation.status !== "confirmed") {
+      return json({ status: "review", message: "Payment confirmation needs support review before credits can be issued." }, 409);
     }
 
     await recordSolanaPaymentEvent(env, {
