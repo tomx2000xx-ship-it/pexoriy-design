@@ -72,11 +72,11 @@ test("USDC verification requires matching reference, receiving wallet, mint and 
     }),
     /REFERENCE_MISMATCH/,
   );
-  assert.throws(
-    () => validateUsdcPaymentTransaction(makeTransaction({ reference, recipient, mint: "FakeMint111111111111111111111111111111111" }), {
+  assert.deepEqual(
+    validateUsdcPaymentTransaction(makeTransaction({ reference, recipient, mint: "FakeMint111111111111111111111111111111111" }), {
       recipient, reference, expectedAmountAtoms: 5_000_000,
     }),
-    /REFERENCE_MISMATCH|Invalid/,
+    { valid: false, receivedAtoms: "0", reason: "underpaid" },
   );
   assert.deepEqual(
     validateUsdcPaymentTransaction(makeTransaction({ reference, recipient, amount: "4990000" }), {
