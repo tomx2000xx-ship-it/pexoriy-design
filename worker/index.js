@@ -223,11 +223,12 @@ async function handleApi(request, env) {
     const fetchBinanceQuote = async (market) => {
       for (const host of binanceHosts) {
         try {
-          const quote = await fetchJson(host + "/api/v3/avgPrice?symbol=" + encodeURIComponent(market.binance));
-          // Binance avgPrice.closeTime is the timestamp of the last trade, not
-          // the time our Worker fetched the response.
+          const trades = await fetchJson(host + "/api/v3/trades?symbol=" + encodeURIComponent(market.binance) + "&limit=1");
+          // Use the latest actual trade, including its exchange-assigned time.
+          // avgPrice is a rolling five-minute average and is not a fill quote.
+          const quote = Array.isArray(trades) ? trades[trades.length - 1] : null;
           const normalized = normalizeMarketQuote({
-            price: quote?.price, timestamp: quote?.closeTime, provider: "binance-spot-public",
+            price: quote?.price, timestamp: quote?.time, provider: "binance-spot-public",
           }, now, maxQuoteAgeMs);
           if (normalized) return { ...normalized, change24h: null };
         } catch {
