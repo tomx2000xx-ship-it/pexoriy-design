@@ -33,21 +33,22 @@ async function goTo(page, label) {
   await nav.getByRole('button', { name: visibleLabel, exact: true }).click();
 }
 
-test('registration requires email verification and provides password recovery screens', async ({ page }) => {
-  await page.route('**/api/auth/register', route => route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({ok:true,verificationRequired:true,message:'Check your inbox for a verification link before signing in.'})}));
+test('registration signs in immediately while email verification and recovery remain deferred', async ({ page }) => {
+  await page.route('**/api/auth/register', route => route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({user:{id:'test-user',email:'verified@example.test',displayName:'Verified User',balances:{TC:12450,AC:840,PXY:0}}})}));
   await page.goto('/');
   await page.getByRole('button', {name:/Log in or create account/}).click();
   await expect(page.getByRole('heading',{name:'Log in to Pexoriy'})).toBeVisible();
   await page.getByRole('button',{name:'Forgot password?'}).click();
   await expect(page.getByRole('heading',{name:'Recover your account'})).toBeVisible();
+  await expect(page.getByText('Password recovery will be available after domain-based email delivery is configured.')).toBeVisible();
   await page.getByRole('button',{name:'Back to sign in'}).click();
   await page.getByRole('button',{name:'Create an account'}).click();
   await page.getByLabel('Display name').fill('Verified User');
   await page.getByLabel('Email address').fill('verified@example.test');
   await page.getByLabel('Password',{exact:true}).fill('Verified-Test-Password-932!');
   await page.getByRole('button',{name:'Create account'}).click();
-  await expect(page.getByRole('heading',{name:'Check your inbox'})).toBeVisible();
-  await expect(page.getByRole('button',{name:'Resend verification email'})).toBeVisible();
+  await expect(page.locator('.app-shell')).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Check your inbox'})).toHaveCount(0);
 });
 
 test('verification links open the account verification screen', async ({ page }) => {
@@ -123,17 +124,25 @@ test('AI execution remains disabled regardless of the displayed AI Credit balanc
   await expect(page.locator('.ai-balance-purchase strong')).toContainText('0');
 });
 
-test('AI Credit Store separates the USD package price from the exact SOL quote and requires sign-in', async ({ page }) => {
+test('AI Credit Store shows real network logos and live SOL and GRAM token equivalents', async ({ page }) => {
+  await page.route('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', route => route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({solana:{usd:100}})}));
+  await page.route('https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd', route => route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({'the-open-network':{usd:5}})}));
   await enterApp(page);
   await goTo(page, 'AI Trading');
   await page.getByRole('button', { name: /Buy more AI Credits/ }).click();
 
   await expect(page.getByRole('heading', { name: 'Power your next AI session.' })).toBeVisible();
   const entryPackage = page.locator('.ai-package-card').first();
-  await expect(entryPackage.locator('.ai-package-payment strong')).toContainText('$5');
-  await expect(entryPackage.locator('.ai-package-payment strong')).toContainText('USD');
-  await expect(entryPackage.locator('.ai-package-payment')).toContainText('Exact SOL quote at checkout');
-  await expect(page.locator('.ai-store-selected-summary button')).toContainText('Sign in to buy AI Credits');
+  await expect(entryPackage.locator('.ai-package-payment strong')).toContainText('0.0500');
+  await expect(entryPackage.locator('.ai-package-payment strong')).toContainText('SOL');
+  await expect(entryPackage.locator('.ai-package-payment')).toContainText('≈ $5 USD · live estimate');
+  await expect(page.locator('.solana-network-icon img')).toHaveCount(1);
+  await expect(page.locator('.gram-network-icon svg')).toHaveCount(1);
+  await expect(page.getByRole('tab', { name: /GRAM \(TON\)/ })).toBeVisible();
+  await page.getByRole('tab', { name: /GRAM \(TON\)/ }).click();
+  await expect(page.locator('.ai-package-card').first().locator('.ai-package-payment strong')).toContainText('1.00');
+  await expect(page.locator('.ai-package-card').first().locator('.ai-package-payment strong')).toContainText('GRAM');
+  await expect(page.locator('.ai-store-selected-summary button')).toContainText('Connect GRAM Wallet');
 });
 
 test('AI Credit Store restores an existing pending Solana order after navigation', async ({ page }) => {
