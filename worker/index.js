@@ -391,11 +391,6 @@ async function handleApi(request, env) {
     if (["underpaid", "overpaid", "review", "refunded", "reversed"].includes(order.status)) {
       return json({ status: order.status, message: "This payment needs support review." }, 409);
     }
-    if (Date.parse(order.expires_at || 0) <= Date.now() && !order.tx_hash) {
-      await env.DB.prepare("UPDATE payment_orders SET status = 'failed' WHERE id = ? AND status IN ('created','pending')")
-        .bind(order.id).run();
-      return json({ status: "expired", message: "This payment request expired. Create a new order." }, 410);
-    }
     if (!env.SOLANA_RPC_URL) return json({ error: "Solana payment verification is not configured yet." }, 503);
 
     const rpc = async (method, params) => {
@@ -442,7 +437,9 @@ async function handleApi(request, env) {
           match = { signature: item.signature, slot: Number(transaction.slot) };
           break;
         }
-        mismatch = { signature: item.signature, slot: Number(transaction.slot), reason: validation.reason };
+        if (BigInt(validation.receivedAtoms) > 0n) {
+          mismatch = { signature: item.signature, slot: Number(transaction.slot), reason: validation.reason };
+        }
       } catch {
         // A transaction with a matching reference but wrong mint/recipient is never credited.
       }
@@ -450,21 +447,21 @@ async function handleApi(request, env) {
 
     if (!match && mismatch) {
       const status = mismatch.reason === "underpaid" ? "underpaid" : "overpaid";
-      try {
-        await env.DB.prepare(
-          "UPDATE payment_orders SET status = ?, tx_hash = ?, confirmed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'), confirmed_slot = ?, chain_finality = 'finalized' WHERE id = ? AND tx_hash IS NULL AND status IN ('created','pending')",
-        ).bind(status, mismatch.signature, mismatch.slot, order.id).run();
-      } catch {
-        await env.DB.prepare("UPDATE payment_orders SET status = 'review' WHERE id = ? AND status <> 'credited'").bind(order.id).run();
-        return json({ status: "review", message: "This transaction needs support review." }, 409);
-      }
       await appendAudit(env, {
         actorUserId: user.id, eventType: `payment.solana_${status}`, entityType: "payment_order",
         entityId: order.id, requestId, details: { signature: mismatch.signature, slot: mismatch.slot },
       });
-      return json({ status, message: "The received amount does not exactly match the order. Credits were not added." }, 409);
+      return json({
+        status,
+        message: "A USDC transfer was found, but its amount does not exactly match this order. No credits were added. You may send the exact requested amount or contact support.",
+      }, 409);
     }
     if (!match) {
+      if (Date.parse(order.expires_at || 0) <= Date.now()) {
+        await env.DB.prepare("UPDATE payment_orders SET status = 'failed' WHERE id = ? AND status IN ('created','pending')")
+          .bind(order.id).run();
+        return json({ status: "expired", message: "No matching finalized payment was found before this request expired. Create a new order." }, 410);
+      }
       if (order.status === "created") {
         await env.DB.prepare("UPDATE payment_orders SET status = 'pending' WHERE id = ? AND status = 'created'").bind(order.id).run();
       }
