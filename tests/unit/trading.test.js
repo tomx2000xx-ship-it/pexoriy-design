@@ -24,7 +24,7 @@ test("short winner and losing trades settle directionally and cap loss at reserv
   assert.equal(longLoss.returnedTc, 800);
   assert.equal(longLoss.postings.reduce((sum, item) => sum + item.amount, 0), 0);
 
-  const wiped = calculateRealizedSettlement({ allocationTc: 1000, side: "long", entryPriceMicros: 100000000, exitPriceMicros: 0.5 });
+  const wiped = calculateRealizedSettlement({ allocationTc: 1000, side: "long", entryPriceMicros: 100000000, exitPriceMicros: 1 });
   assert.equal(wiped.realizedPnlTc, -1000);
   assert.equal(wiped.returnedTc, 0);
   assert.equal(wiped.postings.reduce((sum, item) => sum + item.amount, 0), 0);
