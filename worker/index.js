@@ -958,6 +958,13 @@ async function handleApi(request, env) {
     const quote = await env.DB.prepare("SELECT price_micros, provider_timestamp_ms, validation_status, provider FROM market_snapshots WHERE symbol = ? ORDER BY provider_timestamp_ms DESC, received_at DESC LIMIT 1")
       .bind(symbol).first();
     if (!isFreshValidatedQuote(quote, Date.now())) return json({ error: "A fresh validated market quote is required before AI can prepare a setup." }, 503);
+    const recentQuoteRows = await env.DB.prepare(
+      "SELECT price_micros, provider_timestamp_ms FROM market_snapshots WHERE symbol = ? AND validation_status = 'valid' ORDER BY provider_timestamp_ms DESC LIMIT 6",
+    ).bind(symbol).all();
+    const recentSnapshots = (recentQuoteRows.results || []).slice().reverse().map(row => ({
+      price: Number(row.price_micros) / 1000000,
+      timestamp: new Date(Number(row.provider_timestamp_ms)).toISOString(),
+    }));
 
     const availableAcAtoms = await getLedgerBalance(env.DB, "user:" + user.id + ":AC");
     if (availableAcAtoms < AI_TRADE_RESERVATION_ATOMS) return json({ error: "Not enough AI Credits to reserve 1.5 AC for this setup." }, 409);
@@ -990,7 +997,7 @@ async function handleApi(request, env) {
       aiResult = await env.AI.run(AI_MODEL_NAME, {
         messages: [
           { role: "system", content: "You are Pexoriy's simulated crypto trading setup analyst. This is educational simulated trading, not financial advice. Use only the supplied market snapshot and risk profile. Do not invent prices, news, or indicators. Return ONLY valid JSON with keys side (long or short), rationale (plain text under 350 characters), and confidence (integer 0 to 100). Be conservative and explicitly acknowledge uncertainty." },
-          { role: "user", content: JSON.stringify({ market: symbol, referencePrice: Number(quote.price_micros) / 1000000, quoteProvider: quote.provider, quoteTimestamp: new Date(Number(quote.provider_timestamp_ms)).toISOString(), riskProfile: session.risk_profile, task: "Suggest one direction for a simulated practice setup. Do not claim certainty." }) },
+          { role: "user", content: JSON.stringify({ market: symbol, referencePrice: Number(quote.price_micros) / 1000000, quoteProvider: quote.provider, quoteTimestamp: new Date(Number(quote.provider_timestamp_ms)).toISOString(), riskProfile: session.risk_profile, recentSnapshots, task: "Suggest one direction for a simulated practice setup based on the supplied recent price snapshots. Do not claim certainty." }) },
         ],
         max_tokens: 280,
         temperature: 0.2,
