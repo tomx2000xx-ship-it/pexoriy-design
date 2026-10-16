@@ -55,8 +55,8 @@ const duplicateOpen = await call("/api/trading/positions", {
   method: "POST",
   body: { symbol: "BTC/USDT", side: "long", allocationTc: 500, idempotencyKey: openKey },
 });
-assert.ok([200, 409].includes(duplicateOpen.response.status), JSON.stringify(duplicateOpen.payload));
-if (duplicateOpen.response.status === 200) assert.equal(duplicateOpen.payload?.order?.duplicate, true);
+assert.equal(duplicateOpen.response.status, 200, JSON.stringify(duplicateOpen.payload));
+assert.equal(duplicateOpen.payload?.order?.duplicate, true);
 
 const afterOpen = await call("/api/me");
 assert.equal(Number(afterOpen.payload?.user?.balances?.TC), 11950, "open must reserve TC exactly once");
