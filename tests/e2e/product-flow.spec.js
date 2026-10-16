@@ -164,6 +164,62 @@ test('AI Credit Store restores an existing pending Solana order after navigation
   await expect(page.getByText('No matching finalized payment was found yet.')).toBeVisible();
 });
 
+test('authenticated practice orders persist through the server API and settle the ledger balance', async ({ page }) => {
+  let tc = 12450;
+  let openPosition = null;
+  let closedHistory = [];
+  const openedAt = new Date().toISOString();
+  await page.route('**/api/me', async route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ user: { id: 'account-user', email: 'account@example.com', displayName: 'Account User', balances: { TC: tc, AC: 840, PXY: 0 } } })
+  }));
+  await page.route('**/api/trading/positions', async route => {
+    if (route.request().method() === 'GET') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ positions: openPosition ? [openPosition] : [] }) });
+    }
+    const body = route.request().postDataJSON();
+    tc -= body.allocationTc;
+    openPosition = {
+      id: 'position-server-001', symbol: body.symbol, market: body.symbol, side: body.side, direction: body.side === 'long' ? 'Long' : 'Short',
+      status: 'open', leverage: 1, quantity_atoms: body.allocationTc * 1000000, entry_price_micros: 67482200000,
+      mark_price_micros: 67482200000, reserved_tc: body.allocationTc, amount: body.allocationTc, entry: 67482.2,
+      markPrice: 67482.2, realized_pnl_tc: 0, opened_at: openedAt, openedAt, time: '04:20 AM', aiManaged: false
+    };
+    return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ order: { id: 'order-server-001' }, position: openPosition }) });
+  });
+  await page.route('**/api/trading/history', async route => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({ history: closedHistory })
+  }));
+  await page.route('**/api/trading/positions/close', async route => {
+    const returned = Number(openPosition?.reserved_tc || 0) + 4;
+    tc += returned;
+    const closed = {
+      ...openPosition, status: 'closed', exit: 68000, mark_price_micros: 68000000000,
+      realizedPnl: 4, realized_pnl_tc: 4, tcReturned: returned, closedAtIso: new Date().toISOString()
+    };
+    closedHistory = [{
+      id: closed.id, market: closed.market, direction: closed.direction, amount: closed.amount,
+      entry: closed.entry, exit: closed.exit, realizedPnl: 4, tcReturned: returned,
+      time: '04:20 AM', closedAt: '04:21 AM', closedAtIso: closed.closedAtIso
+    }];
+    openPosition = null;
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ closed: true, position: closed }) });
+  });
+
+  await enterApp(page);
+  await goTo(page, 'Practice Trading');
+  await expect(page.getByRole('heading', { name: 'Practice Trading' })).toBeVisible();
+  await page.getByRole('button', { name: /Review Buy \/ Long order/ }).click();
+  await page.getByRole('button', { name: /Confirm simulated entry/ }).click();
+  await expect(page.getByText('Practice position', { exact: false })).toBeVisible();
+  await expect(page.getByText('11,950', { exact: false }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'Review close' }).click();
+  await page.getByRole('button', { name: 'Confirm close' }).click();
+  await expect(page.getByText('Position closed and settlement recorded.')).toBeVisible();
+  await expect(page.getByText('+4 TC', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('12,454', { exact: false }).first()).toBeVisible();
+});
+
 test('mobile layout stays within the viewport on Practice and AI Trading', async ({ page, isMobile }) => {
   test.skip(!isMobile, 'Mobile viewport is covered by the mobile Chromium project.');
   await enterApp(page);
