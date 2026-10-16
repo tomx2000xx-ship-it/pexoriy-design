@@ -1,6 +1,7 @@
 -- Versioned simulation fills, separately accounted fees, and D1-enforced exposure ceilings.
 ALTER TABLE trading_positions ADD COLUMN open_fee_tc INTEGER NOT NULL DEFAULT 0 CHECK (open_fee_tc >= 0);
 ALTER TABLE trading_positions ADD COLUMN entry_quote_price_micros INTEGER;
+ALTER TABLE trading_positions ADD COLUMN close_return_tc INTEGER NOT NULL DEFAULT 0 CHECK (close_return_tc >= 0);
 
 CREATE TRIGGER IF NOT EXISTS trg_trading_position_open_risk_caps
 BEFORE INSERT ON trading_positions
