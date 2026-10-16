@@ -501,9 +501,7 @@ async function handleApi(request, env) {
     if (position.status !== "open") return json({ error: "This position is no longer open." }, 409);
     const quote = await env.DB.prepare("SELECT price_micros, provider_timestamp_ms, validation_status FROM market_snapshots WHERE symbol = ? ORDER BY provider_timestamp_ms DESC, received_at DESC LIMIT 1")
       .bind(position.symbol).first();
-    const quoteAge = Date.now() - Number(quote?.provider_timestamp_ms || 0);
-    if (!quote || quote.validation_status !== "valid" || !Number.isFinite(Number(quote.price_micros)) ||
-        Number(quote.price_micros) <= 0 || quoteAge < -15000 || quoteAge > 90000) {
+    if (!isFreshValidatedQuote(quote, Date.now())) {
       return json({ error: "A fresh, validated market quote is required to close this position. Refresh the market and try again." }, 503);
     }
     const exitPriceMicros = Number(quote.price_micros);
