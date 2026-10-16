@@ -1685,6 +1685,15 @@ export default {
         "x-content-type-options": "nosniff",
       } });
     }
+    if (url.pathname === "/tonconnect-manifest.json") {
+      const assetResponse = await env.ASSETS.fetch(request);
+      const headers = new Headers(assetResponse.headers);
+      headers.set("content-type", "application/json; charset=utf-8");
+      headers.set("access-control-allow-origin", "*");
+      headers.set("cache-control", "public, max-age=300");
+      headers.set("x-content-type-options", "nosniff");
+      return new Response(assetResponse.body, { status: assetResponse.status, headers });
+    }
     if (url.pathname.startsWith("/api/")) {
       try {
         return await handleApi(request, env);
