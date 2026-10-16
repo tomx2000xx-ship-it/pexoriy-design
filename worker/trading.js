@@ -51,6 +51,21 @@ export function calculateRealizedSettlement({ allocationTc, side, entryPriceMicr
   return { allocationTc, grossPnlTc: grossReturnedTc - allocationTc, grossReturnedTc, openFeeTc, closeFeeTc: appliedCloseFeeTc, returnedTc, realizedPnlTc, postings };
 }
 
+export function calculateUnrealizedPnlTc({ allocationTc, side, entryPriceMicros, markQuotePriceMicros, openFeeTc = 0 }) {
+  const exitPriceMicros = calculateSimulatedFillPrice({
+    quotePriceMicros: markQuotePriceMicros,
+    action: side === "long" ? "sell" : "buy",
+  });
+  const beforeFee = calculateRealizedSettlement({
+    allocationTc, side, entryPriceMicros, exitPriceMicros,
+  });
+  return calculateRealizedSettlement({
+    allocationTc, side, entryPriceMicros, exitPriceMicros,
+    openFeeTc,
+    closeFeeTc: calculateTakerFeeTc(beforeFee.grossReturnedTc),
+  }).realizedPnlTc;
+}
+
 export function isFreshValidatedQuote(quote, nowMs, maxAgeMs = 90000) {
   if (!quote || quote.validation_status !== "valid") return false;
   const timestamp = Number(quote.provider_timestamp_ms);
