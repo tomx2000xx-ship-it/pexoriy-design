@@ -66,7 +66,7 @@ const positions = await call("/api/trading/positions");
 assert.equal(positions.response.status, 200, JSON.stringify(positions.payload));
 assert.equal(positions.payload?.positions?.length, 1);
 assert.equal(positions.payload?.positions?.[0]?.quoteStatus, "live");
-assert.equal(Number(positions.payload?.positions?.[0]?.unrealizedPnlTc), 0);
+assert.equal(Number(positions.payload?.positions?.[0]?.unrealizedPnlTc), -3, "immediate mark reflects the adverse spread/slippage and fees");
 
 // Simulate a later exchange snapshot and confirm the API marks the open
 // position from the fresh server-side quote, not a browser-only price.
