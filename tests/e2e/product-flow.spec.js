@@ -10,7 +10,7 @@ async function enterApp(page, path = '/', marketMode = 'live') {
       { symbol: 'DOGE/USDT', name: 'Dogecoin', price: stale ? null : 0.1642, change24h: stale ? null : 4.12, updatedAt: stale ? null : new Date().toISOString(), status: stale ? 'stale' : 'live' },
       { symbol: 'GRAM/USDT', name: 'Gram', price: stale ? null : 5.42, change24h: stale ? null : -1.18, updatedAt: stale ? null : new Date().toISOString(), status: stale ? 'stale' : 'live' },
     ];
-    await route.fulfill({ status: stale ? 503 : 200, contentType: 'application/json', body: JSON.stringify({ provider: 'test-fixture', quoteCurrency: 'USD', markets }) });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ provider: 'test-fixture', quoteCurrency: 'USD', markets }) });
   });
   await page.addInitScript(() => {
     localStorage.setItem('pexoriy-demo-entered', '1');
