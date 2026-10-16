@@ -109,14 +109,14 @@ test('AI Centre stays rendered when live market quotes are stale or unavailable'
   await enterApp(page, '/', 'stale');
   await goTo(page, 'AI Trading');
   await expect(page.getByRole('heading', { name: /AI-assisted practice/ })).toBeVisible();
-  await expect(page.getByText('AI-assisted execution is not enabled yet.', { exact: false })).toBeVisible();
+  await expect(page.getByText('Sign in to connect the server-backed AI session.', { exact: false })).toBeVisible();
   await expect(page.locator('.page-render-error')).toHaveCount(0);
 });
 
 test('AI execution stays disabled until the server-side provider and credit settlement are ready', async ({ page }) => {
   await enterApp(page);
   await goTo(page, 'AI Trading');
-  await expect(page.getByText('AI-assisted execution is not enabled yet.', { exact: false })).toBeVisible();
+  await expect(page.getByText('Sign in to connect the server-backed AI session.', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: /Start AI session/ })).toBeDisabled();
   await expect(page.locator('.ai-action-review')).toHaveCount(0);
 
@@ -132,7 +132,7 @@ test('AI execution remains disabled regardless of the displayed AI Credit balanc
   await enterApp(page, '/?e2e=low-balance');
   await goTo(page, 'AI Trading');
   await expect(page.locator('.ai-balance-purchase strong')).toContainText('0');
-  await expect(page.getByText('AI-assisted execution is not enabled yet.', { exact: false })).toBeVisible();
+  await expect(page.getByText('Sign in to connect the server-backed AI session.', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: /Start AI session/ })).toBeDisabled();
   await expect(page.locator('.ai-action-review')).toHaveCount(0);
   await expect(page.locator('.ai-balance-purchase strong')).toContainText('0');
