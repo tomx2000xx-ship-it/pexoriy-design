@@ -12,7 +12,10 @@ async function goTo(page, label) {
   const mobile = (page.viewportSize()?.width || 1200) <= 600;
   const mobileLabels = { 'Practice Trading': 'Practice', 'AI Trading': 'AI Centre' };
   const visibleLabel = mobile ? (mobileLabels[label] || label) : label;
-  await page.getByRole('button', { name: visibleLabel, exact: true }).first().click();
+  const nav = mobile
+    ? page.locator('.mobile-bottom-nav')
+    : page.locator('.sidebar');
+  await nav.getByRole('button', { name: visibleLabel, exact: true }).click();
 }
 
 test('Practice visibly connects to AI Trading and blocks over-balance orders', async ({ page }) => {
