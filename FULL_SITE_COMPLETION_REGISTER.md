@@ -27,8 +27,9 @@ Do not hand off for owner testing until all launch-critical site functionality i
 - [x] Server-side Solana payment-order and transaction-verification foundation.
 - [x] Native-SOL package quote shown separately from USD package price.
 - [x] Duplicate-credit/concurrent-verification safeguards and resumable pending-order lookup.
-- [x] Automated CI: production build, deterministic unit tests, and Playwright desktop/mobile flows passed on commit `8431d38b121a43bc281c4c8c011a8cb0552dc3f2` (13 passed, 1 skipped; run [38844835359](https://github.com/tomx2000xx-ship-it/pexoriy-design/actions/runs/38844835359)).
-- [ ] Passing automated checks are not a substitute for end-to-end provider and production configuration evidence.
+- [x] Automated CI: production build, deterministic unit tests, Playwright desktop/mobile flows, authenticated local-D1 trading integration, and repeated deployed market-feed smoke checks passed on commit `2acc22725d6187e8fab5b5fe3c4a18f8078dd87c` (run [38848110241](https://github.com/tomx2000xx-ship-it/pexoriy-design/actions/runs/38848110241)).
+- [x] Production Worker health and D1 connection verified; all five supported markets returned fresh quotes on the first request and valid cached quotes on the second request five seconds later.
+- [ ] Passing automated checks are not a substitute for provider-term review and final production configuration evidence.
 
 ## Launch work remaining
 
@@ -46,7 +47,7 @@ Do not hand off for owner testing until all launch-critical site functionality i
 - [x] Keep provider timestamps separate from Worker fetch time; only exchange-timestamped, validated quotes can be marked live or used to open/close simulated positions.
 - [x] Keep stale/missing quotes non-tradable and return a clear market-paused state; retain only still-fresh cached snapshots when providers are unavailable.
 - [x] Add deterministic tests for timestamp/price normalization and preserve the deployed API smoke gate.
-- [ ] Confirm the new multi-provider adapter returns fresh quotes from the deployed Worker in CI and repeatedly over time, including GRAM.
+- [x] Confirm the multi-provider adapter returns fresh quotes for BTC, ETH, SOL, DOGE, and GRAM from the deployed Worker; repeated smoke requests verify fresh quotes and D1-cached quotes.
 - [ ] Review provider terms, rate limits, regional reachability, quote source disclosure, and commercial-use requirements before public launch.
 
 #### Market-feed research decision (16 October 2026)
@@ -58,12 +59,14 @@ Do not hand off for owner testing until all launch-critical site functionality i
 - Safety policy: no fabricated prices, no marking Worker fetch time as exchange time, no silently mixing quote currencies, no new simulated trade when the selected market has no valid quote inside the freshness window. An available provider is not considered production-ready until deployed smoke checks and repeat observations pass.
 
 ### P0 — Server-authoritative practice trading
-- [ ] Implement authenticated order/open-position/close-position endpoints; current positions endpoint is read-only.
-- [ ] Use server-authoritative quotes, deterministic fill/slippage/fee model, and fixed-precision integer accounting.
-- [ ] Enforce balance/collateral/exposure caps atomically and prevent concurrent double-reservation.
-- [ ] Persist positions, orders, fills, marks, closes, realized/unrealized P&L, and immutable ledger entries.
-- [ ] Add idempotent close/retry/recovery paths and market-pause behavior on bad data.
-- [ ] Calibrate starting TC, leverage, fees/spread, position limits, and virtual-reserve policy before enabling exposure.
+- [x] Implement authenticated order/open-position/close-position endpoints; verify them against a real local Worker with local D1 migrations and seeded market snapshots in CI.
+- [x] Require a fresh, validated server-side market quote to open or close; stale/missing quotes block execution.
+- [x] Use integer micro-prices and integer TC ledger settlement; D1 triggers reject negative user balances and enforce balanced postings before ledger transactions can post.
+- [x] Persist open/closed positions, orders/fills, realized P&L, ledger postings, audit events, and market snapshots; calculate unrealized P&L from the latest fresh server-side quote.
+- [x] Add idempotent open/close retry paths; integration tests verify duplicate requests do not reserve or return TC twice.
+- [ ] Finalize and implement the published simulated spread/fee and fill-price assumptions. These are open decisions in the Master Brief; no real exchange execution is involved.
+- [ ] Add explicit open-position/exposure caps and a concurrency stress test for simultaneous distinct orders before public competition exposure is enabled.
+- [ ] Confirm product-level defaults for leverage, position sizing, starting TC and virtual-reserve policy before enabling competitive exposure.
 
 ### P0 — AI operation service
 - [ ] Replace client-side “AI-like” selection logic with a real server-side AI provider/service.
