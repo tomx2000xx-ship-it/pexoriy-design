@@ -37,6 +37,15 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Test rendered product flows
         run: npx playwright test
+      - name: Smoke-test deployed API health and market feed
+        env:
+          PEXORIY_API_BASE: https://pexoriy-design.mails4dikewills.workers.dev
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 5 "$PEXORIY_API_BASE/api/health" -o /tmp/pexoriy-health.json
+          node -e 'const d=require("/tmp/pexoriy-health.json"); if(!d.ok || d.database!=="connected") { console.error(d); process.exit(1); } console.log("Worker health OK; D1 tables:", d.tables);'
+          code=$(curl --silent --show-error --retry 5 --retry-all-errors --retry-delay 4 "$PEXORIY_API_BASE/api/markets" -o /tmp/pexoriy-markets.json -w '%{http_code}')
+          node -e 'const d=require("/tmp/pexoriy-markets.json"); if(!Array.isArray(d.markets) || d.markets.length < 5) { console.error("Market API did not return the supported catalogue", d); process.exit(1); } const tradable=d.markets.filter(m=>["live","cached"].includes(m.status) && Number.isFinite(Number(m.price)) && Number(m.price)>0); if(!tradable.length) { console.error("No fresh validated market quote is available", d.markets); process.exit(1); } console.log("Market API catalogue OK; fresh/cached markets:", tradable.length, "HTTP", process.env.MARKET_HTTP_STATUS || "checked");'
       - name: Upload Playwright diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
