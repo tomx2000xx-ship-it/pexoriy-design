@@ -1,7 +1,7 @@
 name: Pexoriy validation
 on:
   push:
-    branches: [main]
+    branches: [main, 'scope/**']
   pull_request:
     branches: [main]
 permissions:
@@ -23,6 +23,27 @@ jobs:
         run: bun install
       - name: Validate Worker JavaScript syntax
         run: node --check worker/index.js
+      - name: Validate ordered SQL migrations against SQLite
+        run: |
+          python3 - <<'PY'
+          import sqlite3
+          from pathlib import Path
+          db = sqlite3.connect(":memory:")
+          migrations = sorted(Path("migrations").glob("*.sql"))
+          if not migrations:
+              raise SystemExit("No migrations found")
+          for migration in migrations:
+              db.executescript(migration.read_text(encoding="utf-8"))
+          required = {"referral_codes", "referral_attributions", "learning_lessons", "learning_attempts", "learning_progress", "presale_settings"}
+          found = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+          missing = required - found
+          if missing:
+              raise SystemExit("Missing migration tables: " + ", ".join(sorted(missing)))
+          lessons = db.execute("SELECT COUNT(*) FROM learning_lessons WHERE active=1").fetchone()[0]
+          if lessons < 5:
+              raise SystemExit(f"Expected at least five active learning lessons, found {lessons}")
+          print(f"Validated {len(migrations)} ordered migrations and {lessons} learning lessons.")
+          PY
       - name: Run deterministic simulation and payment unit tests
         run: bun run test:unit
       - name: Build production bundle
