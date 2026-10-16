@@ -1,4 +1,4 @@
--- Solana USDC checkout metadata. Prices and credit amounts are enforced by the Worker.
+-- Native SOL checkout metadata on Solana. Prices and credit amounts are enforced by the Worker.
 ALTER TABLE payment_orders ADD COLUMN reference_key TEXT;
 ALTER TABLE payment_orders ADD COLUMN token_mint TEXT;
 ALTER TABLE payment_orders ADD COLUMN package_id TEXT;
