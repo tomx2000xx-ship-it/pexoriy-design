@@ -52,6 +52,8 @@ assert.equal(opened.response.status, 201, JSON.stringify(opened.payload));
 assert.equal(opened.payload?.position?.status, "open");
 assert.equal(Number(opened.payload?.position?.reserved_tc), 500);
 assert.equal(Number(opened.payload?.position?.unrealizedPnlTc), -3, "open response must include fee-aware server P&L immediately");
+assert.equal(Number(opened.payload?.position?.mark_price_micros), 67482200000, "stored mark price must be the exchange quote, not the adverse entry fill");
+assert.ok(Number(opened.payload?.position?.entry_price_micros) > Number(opened.payload?.position?.mark_price_micros), "long entry fill should include the adverse simulated execution adjustment");
 
 const duplicateOpen = await call("/api/trading/positions", {
   method: "POST",
