@@ -16,7 +16,7 @@ Do not hand off for owner testing until all launch-critical site functionality i
 - TC is simulated-trading utility, AC pays for defined AI operations, PXY is the actual intended project token and remains pre-launch until genuinely issued.
 - Challenge direction: 24-hour Sprint (5,000 PXY), 7-day Consistency League (12,000 PXY), 14-day Challenge (25,000 PXY). Prize pools must be budgeted/funded before activation.
 - AI Credit package schedule remains the approved schedule: $5/70 AC/100 PXY; $10/140 AC/200 PXY; $25/350 AC/500 PXY; $50/700 AC/1,000 PXY; $100/1,400 AC/2,000 PXY; $250/3,500 AC/5,000 PXY; $500/7,000 AC/10,000 PXY. Token bonuses must not be issued until allocation/reserve controls are approved and funded.
-- Solana payment means native SOL only; no USDC. GRAM checkout requires the exact network/token/recipient and a reliable verification design before activation.
+- Solana payment means native SOL only; no USDC. Owner confirmed the GRAM-branded checkout uses the native coin on TON mainnet, displayed as GRAM, with the supplied receiving address. Server verification and deployment remain release gates.
 - No real private keys or seed phrases are to be requested or stored by the app.
 
 ## Current implementation evidence
@@ -217,7 +217,8 @@ A screen is finished only when its primary actions call an authenticated backend
 - [x] Added an E2E regression test for restoring and verifying a pending native GRAM order.
 - [ ] Run the full project unit/build/E2E regression against the current branch. The GitHub status endpoint has not reported a fresh check for this pass, so no full-suite pass is claimed.
 - [ ] Deploy the latest Worker and static build, then smoke-test the TON config/order/verify routes in the deployed environment. The latest observed Cloudflare deployment predates these commits.
-- [ ] Confirm the TON Connect manifest can be fetched successfully by wallet clients. The current manifest points to an SVG icon, while TON's current setup guide specifies PNG or ICO; replace this with a valid PNG/ICO icon and update the manifest when the domain/asset path is finalized.
+- [x] Changed the TON Connect manifest icon to `/pexoriy-icon.png`; the Worker serves a valid 180×180 PNG from the existing Pexoriy brand mark and adds public CORS headers to the manifest route.
+- [ ] Verify the manifest and icon from a wallet client after deployment, then update the manifest URL when the custom domain is configured.
 - [ ] Perform a controlled mainnet transaction and reconcile the confirmed on-chain transfer, payment order, ledger transaction, and user AC balance before describing the checkout as production-verified. Never use a real customer payment as a test.
 - [ ] Add operational reconciliation for payments that arrive after quote expiry, mismatched transfers, provider downtime, and confirmed payments whose ledger delivery needs retry.
 - [ ] The user-supplied receiving address is implemented as the public fallback address; the wallet owner must verify it is the intended receiving wallet before launch. No private keys or seed phrases are required or stored by Pexoriy.
