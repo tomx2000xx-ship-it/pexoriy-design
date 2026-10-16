@@ -139,7 +139,7 @@ test('AI execution remains disabled regardless of the displayed AI Credit balanc
 });
 
 test('authenticated AI session creates a server proposal and charges AC only after a simulated trade opens', async ({ page }) => {
-  let session = { id: 'ai-session-1', state: 'idle', risk_profile: 'Balanced', market_symbol: 'BTC/USDT' };
+  let session = { id: 'ai-session-1', state: 'idle', risk_profile: 'Balanced', market_symbol: 'DOGE/USDT' };
   let proposal = null;
   let openedPosition = null;
   let acBalance = 840;
