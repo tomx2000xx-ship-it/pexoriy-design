@@ -157,7 +157,7 @@ async function currentUser(request, env) {
      FROM auth_sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token_hash = ? AND s.revoked_at IS NULL`,
   ).bind(tokenHash).first();
-  if (!session || session.status !== "active" || !session.email_verified_at || Date.parse(session.expires_at) <= Date.now()) return null;
+  if (!session || session.status !== "active" || Date.parse(session.expires_at) <= Date.now()) return null;
   return session;
 }
 
@@ -362,14 +362,14 @@ async function handleApi(request, env) {
     if (password.length<12||password.length>128) return json({error:"Password must be 12–128 characters."},400);
     if (!(await consumeAuthRateLimit(request,env,"register-email",email,3,3600))) return json({error:"Too many account-creation attempts. Please wait before trying again."},429,{"retry-after":"3600"});
     const testBypass=env.PEXORIY_TEST_AUTH_BYPASS==="1";
-    if (!testBypass&&!authEmailConfigured(env)) return json({error:"Account creation is temporarily unavailable because email verification is not configured yet.",emailSetupRequired:true},503);
+    
     const userId=crypto.randomUUID(),sessionId=crypto.randomUUID(),token=randomHex(32),salt=randomHex(16),hash=await passwordHash(password,salt),tokenHash=await sha256Hex(token),expiresAt=new Date(Date.now()+SESSION_TTL_SECONDS*1000).toISOString();
     try {
       const tcTx=crypto.randomUUID(),acTx=crypto.randomUUID();
       await env.DB.batch([
         env.DB.prepare("INSERT INTO users (id,email,display_name,password_salt,password_hash,email_verified_at) VALUES (?,?,?,?,?,?)").bind(userId,email,displayName,salt,hash,testBypass?new Date().toISOString():null),
         env.DB.prepare("INSERT INTO ledger_accounts (account_key,owner_user_id,currency,account_type) VALUES (?,?,'TC','user'),(?,?,'AC','user'),(?,?,'PXY','user')").bind("user:"+userId+":TC",userId,"user:"+userId+":AC",userId,"user:"+userId+":PXY",userId),
-        ...(testBypass?[env.DB.prepare("INSERT INTO auth_sessions (id,user_id,token_hash,expires_at) VALUES (?,?,?,?)").bind(sessionId,userId,tokenHash,expiresAt)]:[]),
+        env.DB.prepare("INSERT INTO auth_sessions (id,user_id,token_hash,expires_at) VALUES (?,?,?,?)").bind(sessionId,userId,tokenHash,expiresAt),
         env.DB.prepare("INSERT INTO audit_events (id,actor_user_id,event_type,entity_type,entity_id,request_id,details_json) VALUES (?,?,'account.registered','user',?,?,'{}')").bind(crypto.randomUUID(),userId,userId,requestId),
         env.DB.prepare("INSERT INTO ledger_transactions (id,idempotency_key,user_id,event_type,status,metadata_json) VALUES (?, ?, ?, 'account.welcome_tc_issued','pending','{}'),(?, ?, ?, 'account.welcome_ac_issued','pending','{}')").bind(tcTx,"welcome-tc:"+userId,userId,acTx,"welcome-ac:"+userId,userId),
         env.DB.prepare("INSERT INTO ledger_postings (id,transaction_id,account_key,amount_atoms,currency) VALUES (?, ?, ?, 12450,'TC'),(?, ?, 'system:issuance:TC',-12450,'TC'),(?, ?, ?,840,'AC'),(?, ?, 'system:issuance:AC',-840,'AC')").bind(crypto.randomUUID(),tcTx,"user:"+userId+":TC",crypto.randomUUID(),tcTx,crypto.randomUUID(),acTx,"user:"+userId+":AC",crypto.randomUUID(),acTx),
@@ -380,10 +380,7 @@ async function handleApi(request, env) {
       return json({error:"Account creation could not be completed."},500);
     }
     const user={id:userId,email,display_name:displayName,email_verified_at:testBypass?new Date().toISOString():null};
-    if(testBypass)return json({user:await publicUser(env,user)},201,{"set-cookie":sessionCookie(token)});
-    const delivery=await issueAuthToken(env,request,userId,"email_verification");
-    if(!delivery.sent)return json({error:"Your account record was created, but the verification email could not be delivered. Try resending after email service setup.",accountCreated:true},503);
-    return json({ok:true,verificationRequired:true,message:"Account created. Check your inbox for a verification link before signing in."},201);
+    return json({user:await publicUser(env,user)},201,{"set-cookie":sessionCookie(token)});
   }
 
   if (path === "/api/auth/verify-email" && request.method === "POST") {
@@ -458,7 +455,7 @@ async function handleApi(request, env) {
       await appendAudit(env, { eventType: "auth.login_failed", entityType: "user", entityId: user.id, requestId });
       return json({ error: "Email or password is incorrect." }, 401);
     }
-    if (!user.email_verified_at) return json({ error: "Verify your email address before signing in. You can request a new verification link.", emailUnverified: true }, 403);
+    
     const sessionId = crypto.randomUUID();
     const token = randomHex(32);
     const tokenHash = await sha256Hex(token);
