@@ -1062,3 +1062,45 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible{outline:2px s
 /* AI Trading — explicit session lifecycle, per-action review, and ledger */
 .ai-paused{background:rgba(244,163,64,.12);color:#f4b35c}.ai-paused>span{background:#f4b35c}.ai-stopped{background:rgba(255,105,105,.1);color:#ff9b9b}.ai-stopped>span{background:#ff9b9b}.ai-session-actions{display:flex;flex-wrap:wrap;gap:8px}.ai-session-actions .btn{flex:1;justify-content:center;min-width:105px}.ai-action-review{margin-top:14px;padding:16px;border:1px solid rgba(183,243,74,.34);border-radius:13px;background:linear-gradient(145deg,rgba(183,243,74,.065),transparent 75%),#11140f}.ai-action-review h3{font-family:Manrope,sans-serif;font-size:15px;margin:13px 0}.ai-action-review h3 small{display:block;margin-top:5px;color:#929a87;font-size:10px;font-weight:500}.ai-action-review>p{font-size:9px;line-height:1.7;color:#929a87;margin:14px 0}.ai-cost-emphasis{color:var(--lime)!important}.ai-cost-card{margin-top:20px;padding:14px;border:1px solid var(--line);border-radius:12px;background:#151811}.ai-cost-card>div{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}.ai-cost-card>div span{font-size:10px;color:#9ba38f}.ai-cost-card>div strong{font-family:Manrope,sans-serif;font-size:13px;color:var(--lime)}.ai-cost-card>p{font-size:9px;line-height:1.7;color:#929a87;margin:12px 0 0}.ai-managed-panel,.ai-activity-section{padding:20px;border:1px solid var(--line);border-radius:14px;background:#12150f}.ai-managed-list,.ai-event-list{display:flex;flex-direction:column;gap:0}.ai-managed-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0;border-bottom:1px solid var(--line)}.ai-managed-row:last-child,.ai-event-row:last-child{border-bottom:0}.ai-managed-row>div{display:flex;flex-direction:column;gap:5px;min-width:0}.ai-managed-row>div strong{font-size:11px}.ai-managed-row>div small{font-size:9px;color:#929a87;line-height:1.5}.ai-managed-row>span{font-size:11px;font-weight:800;white-space:nowrap}.ai-event-count{font-size:10px;color:#a1aa94;border:1px solid var(--line);border-radius:99px;padding:7px 10px;white-space:nowrap}.ai-event-row{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:12px;align-items:start;padding:15px 0;border-bottom:1px solid var(--line)}.ai-event-icon{width:32px;height:32px;display:grid;place-items:center;border-radius:10px;background:#24291d;color:#b6c19f}.ai-event-icon.ai-event-trade{background:rgba(183,243,74,.12);color:var(--lime)}.ai-event-copy{min-width:0}.ai-event-copy>strong{display:block;font-size:11px;line-height:1.5}.ai-event-copy>p{font-size:9px;line-height:1.6;color:#a0a791;margin:4px 0}.ai-event-copy>small{font-size:8px;color:#737c68}.ai-event-ledger{display:flex;flex-direction:column;align-items:flex-end;gap:6px;padding-top:2px;white-space:nowrap}.ai-event-ledger span{font-size:9px;font-weight:800}.muted-ledger{color:#858d79}.activity-ledger{display:flex;gap:10px;margin-top:7px}.activity-ledger span{font-size:9px;font-weight:800}.compact-empty{padding:24px 12px}.activity-panel .activity-row{align-items:flex-start}
 @media(max-width:650px){.ai-session-actions{display:grid;grid-template-columns:1fr 1fr}.ai-session-actions .btn:first-child{grid-column:1/-1}.ai-managed-panel,.ai-activity-section{padding:14px}.ai-event-row{grid-template-columns:30px minmax(0,1fr);gap:9px}.ai-event-ledger{grid-column:2;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px;padding:0}.ai-event-copy>p{overflow-wrap:anywhere}.ai-managed-row{align-items:flex-start}.ai-managed-row>span{padding-top:3px}.ai-action-review .order-review-actions{flex-direction:column}}
+
+/* Verified Solana checkout */
+.ai-store-method-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:18px 0 14px}
+.ai-store-method-tabs>button{display:flex;align-items:center;gap:11px;min-width:0;padding:13px 15px;border:1px solid var(--border,rgba(255,255,255,.1));border-radius:14px;background:rgba(255,255,255,.025);color:var(--text,#f5f5f0);text-align:left;cursor:pointer}
+.ai-store-method-tabs>button.active{border-color:rgba(183,243,74,.65);background:rgba(183,243,74,.065);box-shadow:inset 0 0 0 1px rgba(183,243,74,.12)}
+.ai-store-method-tabs>button>span:nth-child(2){display:flex;flex-direction:column;gap:3px;min-width:0}
+.ai-store-method-tabs>button strong{font-size:12px;font-weight:800}
+.ai-store-method-tabs>button small{font-size:10px;color:var(--muted,#9ca38f)}
+.ai-store-network-icon{display:grid;place-items:center;width:34px;height:34px;flex:0 0 34px;border-radius:11px;font-weight:900;font-size:18px}
+.solana-network-icon{color:#d7ff80;background:linear-gradient(135deg,#493c8e,#1a7468)}
+.gram-network-icon{color:#fff;background:#30a1f5}
+.ai-store-method-status{margin-left:auto;font-size:8px;letter-spacing:.08em;font-weight:800;color:#a6ad9b;text-align:right}
+.ai-store-solana-panel,.ai-store-gram-panel{padding:16px;border:1px solid var(--border,rgba(255,255,255,.1));border-radius:16px;background:rgba(255,255,255,.02)}
+.ai-store-solana-intro{display:flex;align-items:center;gap:12px}
+.ai-store-solana-mark{display:grid;place-items:center;flex:0 0 42px;width:42px;height:42px;border-radius:13px;background:rgba(153,115,255,.13);color:#c2b0ff;font-size:27px}
+.ai-store-solana-intro>div:nth-child(2){flex:1;min-width:0}
+.ai-store-solana-intro>div:nth-child(2)>strong{display:block;font-size:13px}
+.ai-store-solana-intro p{font-size:10px;line-height:1.65;color:var(--muted,#9ca38f);margin:4px 0 0}
+.ai-store-usdc-pill{padding:5px 8px;border-radius:7px;background:rgba(39,117,202,.16);color:#7fbaff;font-size:9px;font-weight:900;letter-spacing:.06em}
+.ai-store-solana-checkout{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:15px 0 0;margin-top:14px;border-top:1px solid var(--border,rgba(255,255,255,.1))}
+.ai-store-solana-checkout>div{min-width:0;display:flex;flex-direction:column;gap:5px}
+.ai-store-solana-checkout>div>strong{font-size:17px;font-weight:900}
+.ai-store-solana-checkout>div>strong small{font-size:11px;color:var(--muted,#9ca38f)}
+.ai-store-solana-checkout p{font-size:9px;line-height:1.5;color:var(--muted,#9ca38f);margin:0}
+.ai-store-solana-checkout .ai-store-primary-cta{flex-shrink:0}
+.ai-store-payment-order{margin-top:14px;padding:15px;border:1px solid rgba(183,243,74,.25);border-radius:13px;background:rgba(183,243,74,.035)}
+.ai-store-order-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ai-store-order-status{padding:5px 7px;border-radius:6px;background:rgba(255,255,255,.07);color:#d5d9cc;font-size:8px;font-weight:900;letter-spacing:.07em}
+.ai-store-order-status.status-credited{background:rgba(183,243,74,.12);color:var(--lime,#b7f34a)}
+.ai-store-order-amount{display:block;margin-top:10px;font-size:25px;font-weight:900;letter-spacing:-.04em}
+.ai-store-payment-order>p{margin:6px 0 12px;font-size:10px;line-height:1.65;color:var(--muted,#9ca38f)}
+.ai-store-order-actions{display:flex;flex-wrap:wrap;gap:9px}
+.ai-store-open-wallet,.ai-store-verify-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:39px;padding:0 12px;border-radius:9px;font-size:10px;font-weight:850;text-decoration:none;cursor:pointer}
+.ai-store-open-wallet{background:var(--lime,#b7f34a);color:#15190e;border:1px solid transparent}
+.ai-store-verify-button{background:rgba(255,255,255,.04);color:var(--text,#f5f5f0);border:1px solid var(--border,rgba(255,255,255,.13))}
+.ai-store-verify-button:disabled,.ai-store-primary-cta:disabled{opacity:.55;cursor:not-allowed}
+.ai-store-order-expiry{display:block;margin-top:10px;color:var(--muted,#9ca38f);font-size:9px;overflow-wrap:anywhere}
+.ai-store-page-card .ai-package-reward-label{max-width:58px;white-space:normal;text-align:center;font-size:7px;line-height:1.3}
+.ai-store-page-card .ai-package-reward-copy small{font-size:8px}
+.ai-store-page-card .ai-package-reward-copy strong{font-size:12px}
+@media(max-width:700px){.ai-store-method-tabs{gap:7px}.ai-store-method-tabs>button{padding:10px 9px;gap:8px}.ai-store-method-status{display:none}.ai-store-solana-panel,.ai-store-gram-panel{padding:12px}.ai-store-solana-checkout{align-items:stretch;flex-direction:column}.ai-store-solana-checkout .ai-store-primary-cta{width:100%;justify-content:center}.ai-store-order-actions{display:grid;grid-template-columns:1fr}.ai-store-open-wallet,.ai-store-verify-button{width:100%;box-sizing:border-box}.ai-store-page-card .ai-package-reward-label{display:none}}
+@media(max-width:390px){.ai-store-method-tabs>button{gap:6px;padding:9px 7px}.ai-store-network-icon{width:29px;height:29px;flex-basis:29px;font-size:15px}.ai-store-method-tabs>button strong{font-size:11px}.ai-store-method-tabs>button small{font-size:9px}.ai-store-solana-intro{align-items:flex-start}.ai-store-solana-mark{width:34px;height:34px;flex-basis:34px}.ai-store-usdc-pill{font-size:8px;padding:4px 6px}.ai-store-order-amount{font-size:22px}}
