@@ -258,3 +258,9 @@ Proceed next with the AI execution service rather than polishing more UI. Requir
 - [ ] Verify the configured Workers AI binding and run a controlled inference against the deployed provider; provider failures must release the AC reservation.
 - [ ] Verify the complete AI lifecycle in the deployed app: start/pause/resume/stop, proposal generation, cancellation/expiry refund, execution, duplicate retries, failed trade settlement, and account/activity refresh.
 - [ ] Native TON checkout and AI execution are source-implemented but **not production-deployed or end-to-end verified yet**. Do not invite the owner to the final test pass until CI and deployment smoke checks are green.
+
+## Release-note correction — TON Connect asset and AI provider
+
+- [x] The TON Connect manifest now points to `/pexoriy-icon.png`, served by the Worker from the existing Pexoriy brand mark as a real 180×180 PNG. The Worker also adds public CORS and cache headers to `/tonconnect-manifest.json`, matching TON Connect's documented manifest requirements. <https://docs.ton.org/applications/ton-connect/get-started>
+- [x] AI inference parsing now handles Cloudflare Workers AI's documented chat-completion response shape (`choices[0].message.content`) and uses the currently documented `@cf/google/gemma-4-26b-a4b-it` model with reasoning disabled. <https://developers.cloudflare.com/workers-ai/get-started/workers-wrangler/>
+- [ ] These Worker and asset changes still need deployment and live smoke tests. The repository code is updated, but the currently observed Cloudflare deployment predates this implementation pass.
