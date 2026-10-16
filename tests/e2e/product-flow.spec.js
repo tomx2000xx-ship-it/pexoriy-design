@@ -140,6 +140,7 @@ test('AI execution remains disabled regardless of the displayed AI Credit balanc
 
 test('AI Credit Store shows real network logos and live SOL and GRAM token equivalents', async ({ page }) => {
   await page.route('**/api/payments/solana/config', route => route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({enabled:false})}));
+  await page.route('**/api/payments/ton/config', route => route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({enabled:false,network:'ton-mainnet',asset:'GRAM'})}));
   await page.route('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', route => route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({solana:{usd:100}})}));
   await page.route('https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd', route => route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({'the-open-network':{usd:5}})}));
   await enterApp(page);
@@ -164,7 +165,45 @@ test('AI Credit Store shows real network logos and live SOL and GRAM token equiv
   await expect(page.locator('.ai-package-card').first().locator('.ai-package-payment strong')).toContainText('1 GRAM');
   await expect(page.locator('.ai-package-card').first().locator('.ai-package-payment strong')).toContainText('GRAM');
   await expect(page.locator('.ai-store-selected-summary button')).toContainText('GRAM checkout unavailable');
-  await expect(page.locator('.ai-store-gram-panel')).toContainText('CHECKOUT NOT ENABLED');
+  await expect(page.locator('.ai-store-gram-panel')).toContainText('Native GRAM is sent on TON mainnet.');
+  await expect(page.locator('.ai-store-gram-panel')).toContainText('Connect wallet');
+});
+
+test('AI Credit Store restores a pending native GRAM payment and verifies through the TON API', async ({ page }) => {
+  await page.route('**/api/me', async route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ user: { id: 'test-user', email: 'tester@example.com', displayName: 'Tester', balances: { TC: 12450, AC: 840, PXY: 0 } } })
+  }));
+  await page.route('**/api/payments/ton/config', async route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ enabled: true, network: 'ton-mainnet', asset: 'GRAM', quoteCurrency: 'USD', walletProtocol: 'ton-connect' })
+  }));
+  await page.route('**/api/payments/ton/orders', async route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ orders: [{
+      id: '7f5e4c3b-2a19-4d8e-9f01-123456789abc',
+      network: 'ton-mainnet', asset: 'GRAM', status: 'pending',
+      expectedAmountAtoms: 250000000, amountGram: '0.25', aiCredits: 70,
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      txHash: null, createdAt: new Date().toISOString(),
+      recipientAddress: 'UQDONKXS7co5fixO6FDnicHEcdCtBRF_arFw0dgvFyjgQqoW',
+      referenceKey: 'PEXORIY:7f5e4c3b-2a19-4d8e-9f01-123456789abc'
+    }] })
+  }));
+  await page.route('**/api/payments/ton/verify', async route => route.fulfill({
+    status: 202, contentType: 'application/json',
+    body: JSON.stringify({ status: 'pending', message: 'No matching confirmed GRAM payment is visible yet. You can safely check again.' })
+  }));
+  await enterApp(page, '/', 'live', 'account');
+  await goTo(page, 'AI Trading');
+  await page.getByRole('button', { name: /Buy more AI Credits/ }).click();
+  await page.getByRole('tab', { name: /GRAM \(TON\)/ }).click();
+  await expect(page.locator('.ai-store-payment-order')).toBeVisible();
+  await expect(page.locator('.ai-store-order-amount')).toContainText('0.25 GRAM');
+  await expect(page.locator('.ai-store-order-status')).toContainText('PENDING');
+  await expect(page.locator('.ai-store-payment-order')).toContainText('PEXORIY:7f5e4c3b-2a19-4d8e-9f01-123456789abc');
+  await page.getByRole('button', { name: 'I’ve paid — verify' }).click();
+  await expect(page.getByText('No matching confirmed GRAM payment is visible yet.')).toBeVisible();
 });
 
 test('AI Credit Store restores an existing pending Solana order after navigation', async ({ page }) => {
