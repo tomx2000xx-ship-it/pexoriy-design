@@ -741,7 +741,7 @@ async function handleApi(request, env) {
 
 
   if (path === "/api/payments/ton/config" && request.method === "GET") {
-    const recipient = env.TON_RECEIVE_ADDRESS || TON_RECEIVE_ADDRESS;
+    const recipient = (env.TON_RECEIVE_ADDRESS || TON_RECEIVE_ADDRESS).trim();
     let enabled = false;
     try { normalizeTonAddress(recipient); enabled = true; } catch {}
     return json({ enabled, network: TON_NETWORK, asset: "GRAM", quoteCurrency: "USD", walletProtocol: "ton-connect" });
@@ -757,7 +757,7 @@ async function handleApi(request, env) {
     if (!pack) return json({ error: "Choose an available AI Credit package." }, 400);
     if (!/^[a-zA-Z0-9:_-]{8,160}$/.test(clientKey)) return json({ error: "A valid idempotency key is required." }, 400);
     const idempotencyKey = "ton:" + user.id + ":" + clientKey;
-    const recipient = env.TON_RECEIVE_ADDRESS || TON_RECEIVE_ADDRESS;
+    const recipient = (env.TON_RECEIVE_ADDRESS || TON_RECEIVE_ADDRESS).trim();
     try { normalizeTonAddress(recipient); } catch { return json({ error: "The TON receiving wallet is not valid. No payment order was created." }, 503); }
 
     const prior = await env.DB.prepare(
@@ -847,7 +847,7 @@ async function handleApi(request, env) {
       endpoint.searchParams.set("address", order.recipient_address || (env.TON_RECEIVE_ADDRESS || TON_RECEIVE_ADDRESS));
       endpoint.searchParams.set("limit", "100");
       endpoint.searchParams.set("archival", "true");
-      const response = await fetch(endpoint.toString(), { headers: { accept: "application/json" } });
+      const response = await fetch(endpoint.toString(), { headers: { accept: "application/json", ...(env.TONCENTER_API_KEY ? { "X-API-Key": env.TONCENTER_API_KEY } : {}) } });
       if (!response.ok) throw new Error("TONCENTER_HTTP_ERROR");
       const payload = await response.json();
       if (payload?.ok !== true || !Array.isArray(payload.result)) throw new Error("TONCENTER_RESPONSE_INVALID");
