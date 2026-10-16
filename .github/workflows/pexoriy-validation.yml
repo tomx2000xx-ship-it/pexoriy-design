@@ -1,0 +1,44 @@
+name: Pexoriy validation
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  build-and-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install app dependencies
+        run: bun install
+      - name: Validate Worker JavaScript syntax
+        run: node --check worker/index.js
+      - name: Run deterministic simulation and payment unit tests
+        run: bun run test:unit
+      - name: Build production bundle
+        run: bun run build
+      - name: Install Playwright test runner
+        run: npm install --no-save @playwright/test
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Test rendered desktop and mobile product flows
+        run: npx playwright test tests/e2e/product-flow.spec.js --reporter=line
+      - name: Upload Playwright diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pexoriy-playwright-diagnostics
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
