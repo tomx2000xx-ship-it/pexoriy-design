@@ -148,7 +148,7 @@ test('AI Credit Store shows real network logos and live SOL and GRAM token equiv
   await goTo(page, 'AI Trading');
   await page.getByRole('button', { name: /Buy more AI Credits/ }).click();
 
-  await expect(page.getByRole('heading', { name: 'Power your next AI session.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Get AI Credits.' })).toBeVisible();
   await expect(page.locator('.ai-store-page-mark .ai-credit-mark')).toBeVisible();
   await expect(page.locator('.ai-package-card.ai-package-popular')).toHaveCount(1);
   await expect(page.locator('.ai-package-card.ai-package-popular')).toContainText('MOST POPULAR');
