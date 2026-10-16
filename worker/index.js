@@ -149,7 +149,7 @@ async function recordSolanaPaymentEvent(env, { orderId, signature, eventType, pr
   ).bind(crypto.randomUUID(), orderId, `solana:${signature}`, eventType, payloadHash, processingStatus).run();
 }
 
-const AI_MODEL_NAME = "@cf/meta/llama-3.1-8b-instruct";
+const AI_MODEL_NAME = "@cf/google/gemma-4-26b-a4b-it";
 const AI_TRADE_RESERVATION_ATOMS = 3; // 1.5 displayed AC; migration 0007 defines 2 ledger atoms per displayed AC.
 const AI_ALLOWED_SYMBOLS = new Set(["BTC/USDT", "ETH/USDT", "SOL/USDT", "DOGE/USDT", "GRAM/USDT"]);
 const AI_ALLOWED_RISKS = new Set(["Cautious", "Balanced", "Aggressive"]);
@@ -1001,8 +1001,9 @@ async function handleApi(request, env) {
         ],
         max_tokens: 280,
         temperature: 0.2,
+        chat_template_kwargs: { enable_thinking: false },
       });
-      const responseText = typeof aiResult?.response === "string" ? aiResult.response : typeof aiResult?.result === "string" ? aiResult.result : "";
+      const responseText = typeof aiResult?.choices?.[0]?.message?.content === "string" ? aiResult.choices[0].message.content : typeof aiResult?.response === "string" ? aiResult.response : typeof aiResult?.result === "string" ? aiResult.result : "";
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error("AI_OUTPUT_NOT_JSON");
       const parsed = JSON.parse(jsonMatch[0]);
