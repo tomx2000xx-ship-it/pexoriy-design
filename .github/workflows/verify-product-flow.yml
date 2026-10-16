@@ -32,11 +32,27 @@ jobs:
         env:
           VITE_E2E_TESTS: 'true'
       - name: Install Playwright test runner
-        run: npm install --no-save --no-audit --no-fund @playwright/test
+        run: npm install --no-save --no-audit --no-fund @playwright/test wrangler
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Test rendered product flows
         run: npx playwright test
+      - name: Exercise authenticated trading against local D1
+        run: |
+          set -euo pipefail
+          npx wrangler d1 migrations apply pexoriy-core --local --yes
+          NOW_MS=$(node -e 'process.stdout.write(String(Date.now()))')
+          npx wrangler d1 execute pexoriy-core --local --command "INSERT INTO market_snapshots (id, provider, symbol, price_micros, provider_timestamp_ms, validation_status, model_version) VALUES ('ci-market-btc', 'ci-fixture', 'BTC/USDT', 67482200000, $NOW_MS, 'valid', 'ci-test')"
+          npx wrangler dev --local --ip 127.0.0.1 --port 8787 > /tmp/pexoriy-local-worker.log 2>&1 &
+          worker_pid=$!
+          trap 'kill "$worker_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:8787/api/health -o /tmp/pexoriy-local-health.json; then ready=1; break; fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then cat /tmp/pexoriy-local-worker.log; exit 1; fi
+          node tests/integration/trading-api.mjs
       - name: Smoke-test deployed API health and market feed
         env:
           PEXORIY_API_BASE: https://pexoriy-design.mails4dikewills.workers.dev
