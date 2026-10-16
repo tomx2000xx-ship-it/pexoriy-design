@@ -178,7 +178,7 @@ async function handleApi(request, env) {
     const now = Date.now();
     const maxQuoteAgeMs = 90000;
     const latestRows = await env.DB.prepare(
-      "SELECT symbol, price_micros, provider_timestamp_ms, validation_status, provider FROM market_snapshots WHERE id IN (SELECT id FROM market_snapshots s2 WHERE s2.symbol = market_snapshots.symbol ORDER BY provider_timestamp_ms DESC, received_at DESC LIMIT 1)",
+      "SELECT symbol, price_micros, provider_timestamp_ms, validation_status, provider, received_at FROM market_snapshots WHERE id IN (SELECT id FROM market_snapshots s2 WHERE s2.symbol = market_snapshots.symbol ORDER BY provider_timestamp_ms DESC, received_at DESC LIMIT 1)",
     ).all().catch(() => ({ results: [] }));
     const latest = new Map((latestRows.results || []).map((row) => [row.symbol, row]));
     const isUsableTimestamp = (timestamp) => Boolean(normalizeMarketQuote({
@@ -197,9 +197,10 @@ async function handleApi(request, env) {
     };
     const hasRecentCompleteCache = marketCatalogue.every((market) => {
       const row = latest.get(market.symbol);
+      const receivedAt = Date.parse(row?.received_at || "");
       return row && row.validation_status === "valid" &&
         isUsableTimestamp(Number(row.provider_timestamp_ms)) &&
-        now - Number(row.provider_timestamp_ms) <= 15000;
+        Number.isFinite(receivedAt) && now - receivedAt >= -1000 && now - receivedAt <= 10000;
     });
     if (hasRecentCompleteCache) {
       const markets = marketCatalogue.map((market) => toMarket(market, latest.get(market.symbol), "cached"));
