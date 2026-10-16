@@ -596,7 +596,7 @@ async function handleApi(request, env) {
     const user = await currentUser(request, env);
     if (!user) return json({ error: "Authentication required." }, 401);
     const result = await env.DB.prepare(
-      "SELECT id, symbol, side, status, leverage, quantity_atoms, entry_price_micros, mark_price_micros, reserved_tc, realized_pnl_tc, open_fee_tc, opened_at, closed_at FROM trading_positions WHERE user_id = ? AND status = 'open' ORDER BY opened_at DESC LIMIT 100",
+      "SELECT p.id, p.symbol, p.side, p.status, p.leverage, p.quantity_atoms, p.entry_price_micros, p.mark_price_micros, p.reserved_tc, p.realized_pnl_tc, p.open_fee_tc, p.opened_at, p.closed_at, EXISTS (SELECT 1 FROM ai_trade_proposals ap JOIN trade_orders o ON o.id = ap.trade_order_id WHERE o.position_id = p.id AND ap.user_id = p.user_id AND ap.status IN ('executed','review','executing')) AS ai_managed FROM trading_positions p WHERE p.user_id = ? AND p.status = 'open' ORDER BY p.opened_at DESC LIMIT 100",
     ).bind(user.id).all();
     const now = Date.now();
     const quoteRows = await env.DB.prepare(
@@ -627,7 +627,7 @@ async function handleApi(request, env) {
         entry, markPrice: mark, unrealizedPnlTc: pnl, quoteStatus: hasFreshQuote ? "live" : "stale",
         quoteProvider: hasFreshQuote ? quote.provider : null,
         time: new Date(row.opened_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
-        openedAt: row.opened_at, aiManaged: false };
+        openedAt: row.opened_at, aiManaged: Boolean(row.ai_managed) };
     });
     return json({ positions, serverTime: new Date(now).toISOString() });
   }
