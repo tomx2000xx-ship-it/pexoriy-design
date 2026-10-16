@@ -1,6 +1,6 @@
 # Pexoriy — Full-Site Completion and Go-Live Register
 
-Updated: 16 October 2026 (market-data integration and safety verification)  
+Updated: 16 October 2026 (server-side execution-cost and exposure controls)  
 Purpose: internal implementation tracker. This is not customer-facing copy and does not declare production readiness.
 
 ## Release rule
@@ -64,9 +64,9 @@ Do not hand off for owner testing until all launch-critical site functionality i
 - [x] Use integer micro-prices and integer TC ledger settlement; D1 triggers reject negative user balances and enforce balanced postings before ledger transactions can post.
 - [x] Persist open/closed positions, orders/fills, realized P&L, ledger postings, audit events, and market snapshots; calculate unrealized P&L from the latest fresh server-side quote.
 - [x] Add idempotent open/close retry paths; integration tests verify duplicate requests do not reserve or return TC twice.
-- [ ] Finalize and implement the published simulated spread/fee and fill-price assumptions. These are open decisions in the Master Brief; no real exchange execution is involved.
-- [ ] Add explicit open-position/exposure caps and a concurrency stress test for simultaneous distinct orders before public competition exposure is enabled.
-- [ ] Confirm product-level defaults for leverage, position sizing, starting TC and virtual-reserve policy before enabling competitive exposure.
+- [x] Implement versioned simulated market fills: adverse 13 bps per fill (3 bps half-spread plus 10 bps conservative slippage where reliable depth is unavailable), plus a 5 bps taker fee. Maker fees are not offered because only market orders are currently supported; simulated fees are internal TC accounting, never reported as real revenue.
+- [x] Add D1-enforced caps: maximum 5 open positions, each position no more than 25% of account equity, and aggregate open collateral no more than 75% of account equity. Added concurrency stress coverage for simultaneous distinct orders; competitive exposure remains gated on a separately approved virtual-reserve budget.
+- [x] Preserve the existing 12,450 TC welcome balance and 1x leverage. Relative exposure limits are conservative practice-mode defaults; higher leverage and public competition exposure remain disabled until the virtual-reserve budget and tier schedule are reviewed.
 
 ### P0 — AI operation service
 - [ ] Replace client-side “AI-like” selection logic with a real server-side AI provider/service.
@@ -130,7 +130,7 @@ Do not hand off for owner testing until all launch-critical site functionality i
 
 These are not reasons to stop coding around them; implement safe defaults and keep affected capabilities disabled until evidence/configuration exists:
 1. Final market provider approval and its production access/terms.
-2. Authoritative trade execution model, starting TC, leverage/position caps, fees/spread, and reserve budget.
+2. Public competition exposure and any leverage above 1x remain gated on the reserve budget; the current 12,450 TC welcome balance, 1x leverage, 13 bps adverse fill model, 5 bps taker fee, and relative exposure limits are implemented as the conservative practice-mode baseline.
 3. AI provider and credentials plus the final definition of a billable AI operation.
 4. Email delivery provider/domain for verification and recovery.
 5. GRAM asset/network/recipient and verification details.
