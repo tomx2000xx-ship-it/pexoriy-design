@@ -1,6 +1,6 @@
 # Pexoriy — Full-Site Completion and Go-Live Register
 
-Updated: 16 October 2026 (server-side execution-cost and exposure controls)  
+Updated: 16 October 2026 (Stage 2 market-feed and server-trading closeout)  
 Purpose: internal implementation tracker. This is not customer-facing copy and does not declare production readiness.
 
 ## Release rule
@@ -27,10 +27,21 @@ Do not hand off for owner testing until all launch-critical site functionality i
 - [x] Server-side Solana payment-order and transaction-verification foundation.
 - [x] Native-SOL package quote shown separately from USD package price.
 - [x] Duplicate-credit/concurrent-verification safeguards and resumable pending-order lookup.
-- [x] Automated CI: production build, deterministic unit tests, Playwright desktop/mobile flows, authenticated local-D1 trading integration, simultaneous distinct-order exposure stress test, and repeated deployed market-feed smoke checks passed on commit `be2de7cf4a8534350a5d2a8ce5f2fc33168cccd9` (run [38849769237](https://github.com/tomx2000xx-ship-it/pexoriy-design/actions/runs/38849769237)).
+- [x] Automated CI: production build, deterministic unit tests, Playwright desktop/mobile flows, authenticated local-D1 trading integration, fee-aware server P&L, distinct-order exposure stress tests, and deployed market-feed smoke checks passed on commit `c3b297d4e49106a0b0e64be58f2202058b18db64` (run [38851136150](https://github.com/tomx2000xx-ship-it/pexoriy-design/actions/runs/38851136150)).
 - [x] Production Worker health and D1 connection verified; all five supported markets returned fresh quotes on the first request and valid cached quotes on the second request five seconds later.
 - [x] Applied and verified production D1 migration `0005_trade_execution_risk.sql`; `open_fee_tc`, `entry_quote_price_micros`, and `close_return_tc` columns plus the database-enforced position/exposure trigger are present in the live database.
+- [x] Server P&L is calculated by the shared Worker settlement helper, returned on initial position open, and refreshed with persisted positions/balances/history every 15 seconds; stale server P&L is shown as unavailable rather than recomputed in the browser.
+- [x] Removed browser-only manual trade fallback: unauthenticated/demo users cannot open or close practice positions as if they were persisted account trades. AI-assisted execution remains disabled until the server-side AI provider and AC settlement are implemented and verified.
 - [ ] Passing automated checks are not a substitute for provider-term review and final production configuration evidence.
+
+## Stage 2 closeout — live market feed and server-authoritative practice trading (16 October 2026)
+
+- [x] Complete: multi-provider, exchange-timestamped market data for BTC, ETH, SOL, DOGE, and GRAM; stale quotes block order entry and close settlement.
+- [x] Complete: authenticated manual simulated-trade open/close, integer TC ledger settlement, idempotency, fee-aware unrealized/realized P&L, persisted history, and database-enforced position/exposure caps.
+- [x] Complete: browser UI consumes server P&L and periodically refreshes persisted account/trade state; no browser-only manual-trade fallback.
+- [x] Complete: latest full automated workflow and deployed API smoke checks passed in run [38851136150](https://github.com/tomx2000xx-ship-it/pexoriy-design/actions/runs/38851136150).
+- [x] Complete: live D1 migration and risk trigger verified; latest live snapshots showed fresh, validated exchange timestamps for all five supported markets.
+- [ ] Overall product launch is **not** declared complete: the other P0/P1 items below remain separate release gates. AI execution, public competitions, token bonuses, and unverified payment methods remain disabled until their server-side controls are ready.
 
 ## Launch work remaining
 
