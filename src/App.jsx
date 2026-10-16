@@ -292,7 +292,7 @@ function AITrading({ac,setAC,tc,setTC,positions,setPositions,aiEvents,setAIEvent
    if(data.status==='review'){setNotice(data.message||'The simulated trade opened, but AI Credit settlement needs reconciliation. Do not retry.');return}
    if(!response.ok||data.status!=='executed'||!data.position)throw new Error(data.error||'The simulated trade could not be opened. No AI Credit fee was charged.');
    const raw=data.position;
-   const position={...raw,id:raw.id||data.order?.id,market:raw.market||raw.symbol||reviewAction.market,direction:raw.direction||(raw.side==='short'?'Short':'Long'),amount:Number(raw.reserved_tc??raw.amount??reviewAction.amount),entry:Number(raw.entry??Number(raw.entry_price_micros||0)/1000000||reviewAction.price),time:raw.time||new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),openedAt:raw.opened_at||new Date().toISOString(),aiManaged:true,aiCreditCost:1.5};
+   const position={...raw,id:raw.id||data.order?.id,market:raw.market||raw.symbol||reviewAction.market,direction:raw.direction||(raw.side==='short'?'Short':'Long'),amount:Number(raw.reserved_tc??raw.amount??reviewAction.amount),entry:Number(raw.entry??(raw.entry_price_micros?Number(raw.entry_price_micros)/1000000:reviewAction.price)),time:raw.time||new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),openedAt:raw.opened_at||new Date().toISOString(),aiManaged:true,aiCreditCost:1.5};
    setPositions(prev=>[position,...prev.filter(p=>p.id!==position.id)]);
    setTC(v=>Math.max(0,Number((v-reviewAction.amount).toFixed(2))));
    setAC(v=>Math.max(0,Number((v-1.5).toFixed(2))));
