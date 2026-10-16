@@ -460,3 +460,14 @@ test('team quest rewards are shown only after the server confirms the claim', as
   await expect(page.getByText('Team quest completed: +300 TC recorded.')).toBeVisible();
   await expect(page.getByText('REWARD CLAIMED')).toBeVisible();
 });
+
+
+test('presale preview never appears live without a verified purchase flow', async ({ page }) => {
+  await page.route('**/api/presale/status', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ previewEnabled: true, saleEnabled: true, launchState: 'active' }) }));
+  await enterApp(page);
+  await goTo(page, 'PXY Presale Preview');
+  await expect(page.getByText('PRE-LAUNCH PREVIEW')).toBeVisible();
+  await expect(page.getByText('Activation flag set; review required')).toBeVisible();
+  await expect(page.getByText('Disabled')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Buy PXY|Purchase tokens|Connect wallet/i })).toHaveCount(0);
+});
