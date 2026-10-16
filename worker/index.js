@@ -446,6 +446,10 @@ async function handleApi(request, env) {
   if (path === "/api/auth/register" && request.method === "POST") {
     if (!(await consumeAuthRateLimit(request,env,"register-ip","",8,3600))) return json({error:"Too many account-creation attempts. Please wait before trying again."},429,{"retry-after":"3600"});
     const body=await readJson(request),email=typeof body?.email==="string"?body.email.trim().toLowerCase():"",displayName=typeof body?.displayName==="string"?body.displayName.trim():"",password=typeof body?.password==="string"?body.password:"";
+    const referralCode = typeof body?.referralCode === "string" ? body.referralCode.trim().toUpperCase() : "";
+    if (referralCode && !/^[A-F0-9]{8,16}$/.test(referralCode)) return json({ error: "This referral code is invalid." }, 400);
+    const referralOwner = referralCode ? await env.DB.prepare("SELECT user_id FROM referral_codes WHERE code = ?").bind(referralCode).first() : null;
+    if (referralCode && !referralOwner) return json({ error: "This referral code is not recognised." }, 400);
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254) return json({error:"Enter a valid email address."},400);
     if (displayName.length<2||displayName.length>60) return json({error:"Display name must be between 2 and 60 characters."},400);
     if (password.length<12||password.length>128) return json({error:"Password must be 12–128 characters."},400);
@@ -457,6 +461,8 @@ async function handleApi(request, env) {
       const tcTx=crypto.randomUUID(),acTx=crypto.randomUUID();
       await env.DB.batch([
         env.DB.prepare("INSERT INTO users (id,email,display_name,password_salt,password_hash,email_verified_at) VALUES (?,?,?,?,?,?)").bind(userId,email,displayName,salt,hash,testBypass?new Date().toISOString():null),
+        env.DB.prepare("INSERT INTO referral_codes (user_id, code) VALUES (?, ?)").bind(userId, randomHex(6).toUpperCase()),
+        ...(referralOwner && referralOwner.user_id !== userId ? [env.DB.prepare("INSERT INTO referral_attributions (id, referrer_user_id, referred_user_id, referral_code, status) VALUES (?, ?, ?, ?, 'pending')").bind(crypto.randomUUID(), referralOwner.user_id, userId, referralCode)] : []),
         env.DB.prepare("INSERT INTO ledger_accounts (account_key,owner_user_id,currency,account_type) VALUES (?,?,'TC','user'),(?,?,'AC','user'),(?,?,'PXY','user')").bind("user:"+userId+":TC",userId,"user:"+userId+":AC",userId,"user:"+userId+":PXY",userId),
         env.DB.prepare("INSERT INTO auth_sessions (id,user_id,token_hash,expires_at) VALUES (?,?,?,?)").bind(sessionId,userId,tokenHash,expiresAt),
         env.DB.prepare("INSERT INTO audit_events (id,actor_user_id,event_type,entity_type,entity_id,request_id,details_json) VALUES (?,?,'account.registered','user',?,?,'{}')").bind(crypto.randomUUID(),userId,userId,requestId),
@@ -569,6 +575,138 @@ async function handleApi(request, env) {
     }
     if (user) await appendAudit(env, { actorUserId: user.id, eventType: "auth.logout", entityType: "user", entityId: user.id, requestId });
     return json({ ok: true }, 200, { "set-cookie": clearSessionCookie() });
+  }
+
+
+  if (path === "/api/referrals" && request.method === "GET") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    let ownCode = await env.DB.prepare("SELECT code FROM referral_codes WHERE user_id = ?").bind(user.id).first();
+    if (!ownCode) {
+      const code = randomHex(6).toUpperCase();
+      try { await env.DB.prepare("INSERT OR IGNORE INTO referral_codes (user_id, code) VALUES (?, ?)").bind(user.id, code).run(); } catch {}
+      ownCode = await env.DB.prepare("SELECT code FROM referral_codes WHERE user_id = ?").bind(user.id).first();
+    }
+    const counts = await env.DB.prepare("SELECT COUNT(*) AS invited, SUM(CASE WHEN status='activated' THEN 1 ELSE 0 END) AS activated FROM referral_attributions WHERE referrer_user_id = ?").bind(user.id).first();
+    const rows = await env.DB.prepare("SELECT status, created_at, activated_at FROM referral_attributions WHERE referrer_user_id = ? ORDER BY created_at DESC LIMIT 50").bind(user.id).all();
+    return json({ code: ownCode?.code || null, invited: Number(counts?.invited || 0), activated: Number(counts?.activated || 0), milestones: [{ id: "first", target: 1, reached: Number(counts?.activated || 0) >= 1 }, { id: "squad", target: 3, reached: Number(counts?.activated || 0) >= 3 }, { id: "community", target: 5, reached: Number(counts?.activated || 0) >= 5 }], referrals: rows.results || [], rewards: { referrerTC: 250, referredTC: 100, currency: "TC" } });
+  }
+
+  if (path === "/api/referrals/activate" && request.method === "POST") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    if (!(await consumeAuthRateLimit(request, env, "referral-activation", user.id, 10, 3600))) return json({ error: "Too many activation checks. Try again later." }, 429);
+    if (!user.email_verified_at) return json({ error: "Verify your email before referral activation can be checked." }, 409);
+    const qualifyingTrade = await env.DB.prepare("SELECT id FROM trading_positions WHERE user_id = ? LIMIT 1").bind(user.id).first();
+    if (!qualifyingTrade) return json({ status: "pending", message: "Complete your first simulated trade to qualify." });
+    const attribution = await env.DB.prepare("SELECT id, referrer_user_id, status FROM referral_attributions WHERE referred_user_id = ?").bind(user.id).first();
+    if (!attribution) return json({ status: "not_referred", message: "No referral is attached to this account." });
+    if (attribution.referrer_user_id === user.id) return json({ error: "Self-referrals are not eligible." }, 409);
+    if (attribution.status === "pending") {
+      await env.DB.prepare("UPDATE referral_attributions SET status='activated', activated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND status='pending'").bind(attribution.id).run();
+    }
+    const latest = await env.DB.prepare("SELECT status FROM referral_attributions WHERE id=?").bind(attribution.id).first();
+    if (latest?.status !== "activated") return json({ status: latest?.status || "pending" });
+    const referrerId = attribution.referrer_user_id;
+    try {
+      await postLedgerTransaction(env.DB, { id: crypto.randomUUID(), idempotencyKey: "referral:" + attribution.id + ":referrer", userId: referrerId, eventType: "referral.activation_reward", metadata: { attributionId: attribution.id, role: "referrer" }, postings: [{ accountKey: "user:" + referrerId + ":TC", currency: "TC", amountAtoms: 250 }, { accountKey: "system:issuance:TC", currency: "TC", amountAtoms: -250 }] });
+      await postLedgerTransaction(env.DB, { id: crypto.randomUUID(), idempotencyKey: "referral:" + attribution.id + ":referred", userId: user.id, eventType: "referral.activation_reward", metadata: { attributionId: attribution.id, role: "referred" }, postings: [{ accountKey: "user:" + user.id + ":TC", currency: "TC", amountAtoms: 100 }, { accountKey: "system:issuance:TC", currency: "TC", amountAtoms: -100 }] });
+    } catch {
+      return json({ status: "activated", rewardStatus: "retrying", message: "Your activation is recorded. Reward delivery will retry safely." }, 202);
+    }
+    await appendAudit(env, { actorUserId: user.id, eventType: "referral.activated", entityType: "referral_attribution", entityId: attribution.id, requestId, details: { referrerRewardTC: 250, referredRewardTC: 100 } });
+    return json({ status: "activated", rewardStatus: "paid", referrerRewardTC: 250, referredRewardTC: 100 });
+  }
+
+  if (path === "/api/learning" && request.method === "GET") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const [lessons, progress] = await Promise.all([
+      env.DB.prepare("SELECT id, slug, title, category, summary, content_json, questions_json, reward_tc FROM learning_lessons WHERE active=1 ORDER BY sort_order, id").all(),
+      env.DB.prepare("SELECT lesson_id, best_score, completed_at, reward_transaction_id FROM learning_progress WHERE user_id=?").bind(user.id).all(),
+    ]);
+    const progressById = new Map((progress.results || []).map(row => [row.lesson_id, row]));
+    return json({ lessons: (lessons.results || []).map(row => ({ id: row.id, slug: row.slug, title: row.title, category: row.category, summary: row.summary, content: JSON.parse(row.content_json), questions: JSON.parse(row.questions_json), rewardTC: Number(row.reward_tc), progress: progressById.get(row.id) || null })), completed: (progress.results || []).length });
+  }
+
+  if (path === "/api/learning/attempt" && request.method === "POST") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    if (!(await consumeAuthRateLimit(request, env, "learning-attempt", user.id, 30, 3600))) return json({ error: "Too many quiz attempts. Take a short break and try again." }, 429);
+    const body = await readJson(request);
+    const lessonId = typeof body?.lessonId === "string" ? body.lessonId.trim() : "";
+    const answers = Array.isArray(body?.answers) && body.answers.length <= 20 ? body.answers : null;
+    if (!/^[a-z0-9-]{2,80}$/.test(lessonId) || !answers || answers.some(value => !Number.isInteger(value) || value < 0 || value > 8)) return json({ error: "Submit a valid lesson and quiz response." }, 400);
+    const lesson = await env.DB.prepare("SELECT id, answer_key_json, reward_tc FROM learning_lessons WHERE id=? AND active=1").bind(lessonId).first();
+    if (!lesson) return json({ error: "This lesson is not available." }, 404);
+    const keys = JSON.parse(lesson.answer_key_json);
+    if (answers.length !== keys.length) return json({ error: "Answer every question before submitting." }, 400);
+    const score = answers.reduce((total, answer, index) => total + (answer === keys[index] ? 1 : 0), 0);
+    const passed = score >= Math.ceil(keys.length * 2 / 3);
+    const attemptId = crypto.randomUUID();
+    await env.DB.prepare("INSERT INTO learning_attempts (id,user_id,lesson_id,answers_json,score,total_questions,passed) VALUES (?,?,?,?,?,?,?)").bind(attemptId, user.id, lessonId, JSON.stringify(answers), score, keys.length, passed ? 1 : 0).run();
+    if (!passed) return json({ passed: false, score, total: keys.length, threshold: Math.ceil(keys.length * 2 / 3), message: "Review the lesson and try again." });
+    await env.DB.prepare("INSERT OR IGNORE INTO learning_progress (user_id,lesson_id,best_score,completed_at) VALUES (?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))").bind(user.id, lessonId, score).run();
+    const progress = await env.DB.prepare("SELECT * FROM learning_progress WHERE user_id=? AND lesson_id=?").bind(user.id, lessonId).first();
+    let rewardResult;
+    try {
+      rewardResult = await postLedgerTransaction(env.DB, { id: crypto.randomUUID(), idempotencyKey: "learning-lesson:" + user.id + ":" + lessonId, userId: user.id, eventType: "learning.lesson_reward", metadata: { lessonId, attemptId, score, total: keys.length }, postings: [{ accountKey: "user:" + user.id + ":TC", currency: "TC", amountAtoms: Number(lesson.reward_tc) }, { accountKey: "system:issuance:TC", currency: "TC", amountAtoms: -Number(lesson.reward_tc) }] });
+      await env.DB.prepare("UPDATE learning_progress SET reward_transaction_id=? WHERE user_id=? AND lesson_id=? AND reward_transaction_id IS NULL").bind(rewardResult.transactionId, user.id, lessonId).run();
+    } catch {
+      return json({ passed: true, score, total: keys.length, rewardStatus: "retrying", message: "Lesson completed. Your TC reward is being reconciled safely." }, 202);
+    }
+    await appendAudit(env, { actorUserId: user.id, eventType: "learning.lesson_completed", entityType: "learning_lesson", entityId: lessonId, requestId, details: { score, total: keys.length, rewardTC: Number(lesson.reward_tc), duplicateReward: rewardResult.duplicate } });
+    return json({ passed: true, score, total: keys.length, rewardTC: Number(lesson.reward_tc), duplicate: Boolean(progress?.reward_transaction_id || rewardResult.duplicate) });
+  }
+
+  if (path === "/api/missions" && request.method === "GET") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const [missions, claims] = await Promise.all([
+      env.DB.prepare("SELECT id, title, reward_currency, reward_amount, rules_json FROM mission_definitions WHERE active=1 ORDER BY id").all(),
+      env.DB.prepare("SELECT mission_id, status, ledger_transaction_id, created_at FROM mission_claims WHERE user_id=? ORDER BY created_at DESC").bind(user.id).all(),
+    ]);
+    const claimed = new Map((claims.results || []).map(row => [row.mission_id, row]));
+    return json({ missions: (missions.results || []).map(row => ({ id: row.id, title: row.title, rewardCurrency: row.reward_currency, rewardAmount: Number(row.reward_amount), rules: JSON.parse(row.rules_json || "{}"), claim: claimed.get(row.id) || null })) });
+  }
+
+  if (path === "/api/missions/claim" && request.method === "POST") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    if (!(await consumeAuthRateLimit(request, env, "mission-claim", user.id, 20, 3600))) return json({ error: "Too many reward claims. Try again later." }, 429);
+    const body = await readJson(request);
+    const missionId = typeof body?.missionId === "string" ? body.missionId.trim() : "";
+    const mission = await env.DB.prepare("SELECT id, reward_currency, reward_amount, rules_json FROM mission_definitions WHERE id=? AND active=1").bind(missionId).first();
+    if (!mission || mission.reward_currency !== "TC" || Number(mission.reward_amount) <= 0) return json({ error: "This reward is not currently claimable." }, 404);
+    const rules = JSON.parse(mission.rules_json || "{}");
+    let eligible = false;
+    if (rules.prerequisite === "practice_trade") eligible = Boolean(await env.DB.prepare("SELECT id FROM trading_positions WHERE user_id=? LIMIT 1").bind(user.id).first());
+    else if (rules.prerequisite === "ai_setup") eligible = Boolean(await env.DB.prepare("SELECT id FROM ai_trade_proposals WHERE user_id=? LIMIT 1").bind(user.id).first());
+    else if (rules.prerequisite === "community_challenge") eligible = Boolean(await env.DB.prepare("SELECT id FROM competition_entries WHERE user_id=? LIMIT 1").bind(user.id).first());
+    else if (rules.prerequisite === "learning_complete" && typeof rules.lessonId === "string") eligible = Boolean(await env.DB.prepare("SELECT user_id FROM learning_progress WHERE user_id=? AND lesson_id=?").bind(user.id, rules.lessonId).first());
+    if (!eligible) return json({ error: "Complete the required activity first. The server has not issued a reward." }, 409);
+    const idempotencyKey = "mission:" + user.id + ":" + mission.id;
+    await env.DB.prepare("INSERT OR IGNORE INTO mission_claims (id,user_id,mission_id,idempotency_key,status,evidence_json) VALUES (?,?,?,?,'approved',?)").bind(crypto.randomUUID(), user.id, mission.id, idempotencyKey, JSON.stringify({ prerequisite: rules.prerequisite })).run();
+    const claim = await env.DB.prepare("SELECT * FROM mission_claims WHERE user_id=? AND mission_id=?").bind(user.id, mission.id).first();
+    if (claim?.status === "rejected") return json({ error: "This claim was rejected." }, 409);
+    let rewardResult;
+    try {
+      rewardResult = await postLedgerTransaction(env.DB, { id: crypto.randomUUID(), idempotencyKey, userId: user.id, eventType: "mission.tc_reward", metadata: { missionId: mission.id }, postings: [{ accountKey: "user:" + user.id + ":TC", currency: "TC", amountAtoms: Number(mission.reward_amount) }, { accountKey: "system:issuance:TC", currency: "TC", amountAtoms: -Number(mission.reward_amount) }] });
+      await env.DB.prepare("UPDATE mission_claims SET status='paid', ledger_transaction_id=? WHERE user_id=? AND mission_id=? AND status IN ('approved','paid')").bind(rewardResult.transactionId, user.id, mission.id).run();
+    } catch {
+      return json({ status: "approved", rewardStatus: "retrying", message: "Eligibility is recorded. Reward delivery will retry safely." }, 202);
+    }
+    await appendAudit(env, { actorUserId: user.id, eventType: "mission.reward_paid", entityType: "mission_claim", entityId: claim?.id || mission.id, requestId, details: { missionId: mission.id, rewardTC: Number(mission.reward_amount), duplicate: rewardResult.duplicate } });
+    return json({ status: "paid", missionId: mission.id, rewardTC: Number(mission.reward_amount), duplicate: rewardResult.duplicate });
+  }
+
+  if (path === "/api/presale/status" && request.method === "GET") {
+    try {
+      const setting = await env.DB.prepare("SELECT preview_enabled, sale_enabled, launch_state FROM presale_settings WHERE id=1").first();
+      return json({ previewEnabled: Boolean(setting?.preview_enabled), saleEnabled: Boolean(setting?.sale_enabled), launchState: setting?.launch_state || "disabled" });
+    } catch {
+      return json({ previewEnabled: true, saleEnabled: false, launchState: "disabled" });
+    }
   }
 
   if (path === "/api/me" && request.method === "GET") {
