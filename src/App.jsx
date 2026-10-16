@@ -57,8 +57,8 @@ function EntryExperience({mode,onModeChange,onEnter}) {
       if(!response.ok){
                 throw new Error(data.error||"Your request could not be completed.");
       }
-      if(activePanel==="login"){onEnter();return;}
-      if(activePanel==="register"){if(data.user){onEnter();return;}setActivePanel("login");setNotice("If this email is already registered, sign in with your password. Otherwise, try creating the account again.");return;}
+      if(activePanel==="login"){onEnter("account");return;}
+      if(activePanel==="register"){if(data.user){onEnter("account");return;}setActivePanel("login");setNotice("If this email is already registered, sign in with your password. Otherwise, try creating the account again.");return;}
       if(activePanel==="forgot"){setActivePanel("forgot-sent");setNotice(data.message||"If a verified account matches that address, password reset instructions will be sent.");return;}
       if(activePanel==="reset"){setActivePanel("login");setNotice(data.message||"Password updated. Sign in with your new password.");return;}
     }catch(error){setNotice(error?.message||"The account service is temporarily unavailable.");}
@@ -71,7 +71,7 @@ function EntryExperience({mode,onModeChange,onEnter}) {
     catch(error){setNotice(error?.message||"Email delivery is temporarily unavailable.");}
     finally{setBusy(false);}
   };
-  if(activePanel==="landing")return <EntryExperienceLegacy mode="landing" onModeChange={chooseMode} onEnter={onEnter}/>;
+  if(activePanel==="landing")return <EntryExperienceLegacy mode="landing" onModeChange={chooseMode} onEnter={()=>onEnter("demo")}/>;
   const isForm=["login","register","forgot","reset"].includes(activePanel);
   const title=activePanel==="register"?"Create your account":activePanel==="login"?"Log in to Pexoriy":activePanel==="forgot"?"Recover your account":activePanel==="reset"?"Choose a new password":activePanel==="verify"?"Verify your email":activePanel==="check-email"?"Check your inbox":"Check your email";
   const description=activePanel==="register"?"Create an account with your email and password. Email verification will be added after domain email is configured.":activePanel==="login"?"Sign in with the email address and password you used to create your account.":activePanel==="forgot"?"Password recovery will be available after domain-based email delivery is configured.":activePanel==="reset"?"Password recovery will be available after domain-based email delivery is configured.":activePanel==="verify"?"Email verification is paused until domain email is configured.":activePanel==="check-email"?"Email verification is paused until domain email is configured.":"Password recovery will be available after domain email is configured.";
