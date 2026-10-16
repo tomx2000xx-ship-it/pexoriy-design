@@ -211,7 +211,7 @@ test('authenticated practice orders persist through the server API and settle th
   await expect(page.getByRole('heading', { name: 'Practice Trading' })).toBeVisible();
   await page.getByRole('button', { name: /Review Buy \/ Long order/ }).click();
   await page.getByRole('button', { name: /Confirm simulated entry/ }).click();
-  await expect(page.getByText('Practice position', { exact: false })).toBeVisible();
+  await expect(page.getByText('Practice position', { exact: false }).first()).toBeVisible();
   await expect(page.getByText('11,950', { exact: false }).first()).toBeVisible();
   await page.getByRole('button', { name: 'Review close' }).click();
   await page.getByRole('button', { name: 'Confirm close' }).click();
