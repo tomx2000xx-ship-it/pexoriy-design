@@ -24,7 +24,7 @@ jobs:
       - name: Install app dependencies
         run: npm install --no-audit --no-fund
       - name: Validate Worker JavaScript syntax
-        run: node --check worker/index.js && node --check worker/trading.js
+        run: node --check worker/index.js && node --check worker/trading.js && node --check worker/market-feed.js
       - name: Run deterministic simulation unit tests
         run: npm run test:unit
       - name: Build production bundle with CI-only test scenario
