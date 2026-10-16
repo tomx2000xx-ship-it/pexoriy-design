@@ -174,3 +174,15 @@ These are not reasons to stop coding around them; implement safe defaults and ke
 ## Definition of “finished”
 
 A screen is finished only when its primary actions call an authenticated backend, persist authoritative state, handle loading/error/empty/success/pending states, are covered by automated tests, and cannot issue balances/rewards or claim payment success from client-side state alone. External credentials, domain ownership, provider terms, and on-chain events must be configured/verified—not faked—to close their release gates.
+
+
+## AI Credit Store conversion UX pass — 16 October 2026
+
+- Replaced the generic sparkle icon on the Overview AI Credits card and Store heading with a custom Pexoriy AC mark.
+- Restructured the Store purchase sequence so users choose a package first, select a payment network next, then see one persistent selection summary and one primary checkout CTA.
+- Added a clear “Most Popular” treatment to the existing $25 package without changing the approved package schedule or amounts.
+- Removed the duplicate Solana purchase CTA and the GRAM wallet-connect CTA while GRAM checkout remains unverified; wallet connection must not be mistaken for a working payment flow.
+- Kept package amounts, live SOL/GRAM estimates, and PXY bonus disclosures. PXY bonus figures remain explicitly planned/not active and are not included in checkout until reserve controls are approved.
+- Added responsive selected-package CTA styling and a mobile-friendly sticky order summary. Payment actions remain disabled unless the server reports checkout as configured.
+- Added E2E assertions for the custom AC mark, popular package, single CTA, and truthful disabled payment states.
+- **Verification status:** this UX pass has been committed to the default branch, but its fresh build, browser regression, and post-deployment visual check still need to be observed before marking the Store section complete. Solana checkout and GRAM payment/credit delivery remain disabled until their existing production release gates are satisfied.
