@@ -435,7 +435,6 @@ async function handleApi(request, env) {
     const quote = await env.DB.prepare(
       "SELECT price_micros, provider_timestamp_ms, validation_status FROM market_snapshots WHERE symbol = ? ORDER BY provider_timestamp_ms DESC, received_at DESC LIMIT 1",
     ).bind(symbol).first();
-    const quoteAge = Date.now() - Number(quote?.provider_timestamp_ms || 0);
     if (!isFreshValidatedQuote(quote, Date.now())) {
       return json({ error: "A fresh, validated market quote is required. Refresh the market and try again." }, 503);
     }
