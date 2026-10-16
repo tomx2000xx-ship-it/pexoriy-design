@@ -853,11 +853,15 @@ async function handleApi(request, env) {
     const action = typeof body?.action === "string" ? body.action : "";
     const riskProfile = typeof body?.riskProfile === "string" ? body.riskProfile : "Balanced";
     const marketSymbol = typeof body?.marketSymbol === "string" ? body.marketSymbol.trim().toUpperCase() : "BTC/USDT";
-    if (!["start", "pause", "resume", "stop"].includes(action)) return json({ error: "Choose a valid AI session action." }, 400);
+    if (!["start", "pause", "resume", "stop", "configure"].includes(action)) return json({ error: "Choose a valid AI session action." }, 400);
     if (!AI_ALLOWED_RISKS.has(riskProfile) || !AI_ALLOWED_SYMBOLS.has(marketSymbol)) return json({ error: "Choose a supported risk profile and market." }, 400);
     let session = await env.DB.prepare("SELECT * FROM ai_sessions WHERE user_id = ?").bind(user.id).first();
     const now = new Date().toISOString();
-    if (action === "start") {
+    if (action === "configure") {
+      if (!session || !["active", "paused"].includes(session.state)) return json({ error: "Start an AI session before changing its active strategy." }, 409);
+      await env.DB.prepare("UPDATE ai_sessions SET risk_profile=?, market_symbol=?, updated_at=? WHERE user_id=?")
+        .bind(riskProfile, marketSymbol, now, user.id).run();
+    } else if (action === "start") {
       if (session?.state === "active") return json({ session, duplicate: true });
       if (session?.state === "paused") return json({ error: "Resume the paused session instead of starting another." }, 409);
       if (session) {
@@ -999,7 +1003,7 @@ async function handleApi(request, env) {
       .bind(proposalId, user.id).first();
     if (!proposal) return json({ error: "AI proposal not found." }, 404);
     if (proposal.status === "cancelled") return json({ status: "cancelled", duplicate: true });
-    if (proposal.status === "executed") return json({ error: "An executed AI trade cannot be cancelled here." }, 409);
+    if (proposal.status === "executed" || proposal.trade_order_id || proposal.status === "executing") return json({ error: "This AI proposal already has an executed or in-progress trade. Use trade history and support review instead of cancelling its AC reservation." }, 409);
     const operation = await env.DB.prepare("SELECT * FROM ai_operations WHERE id = ? AND user_id = ?").bind(proposal.operation_id, user.id).first();
     if (!operation) return json({ error: "AI operation not found. Contact support." }, 409);
     try { await releaseAIReservation(env, user.id, operation, "cancelled", requestId); }
