@@ -37,6 +37,15 @@ const account = await call("/api/me");
 assert.equal(account.response.status, 200, JSON.stringify(account.payload));
 assert.equal(Number(account.payload?.user?.balances?.TC), 12450);
 
+const loginAttempts = await Promise.all(Array.from({ length: 6 }, () => call("/api/auth/login", {
+  method: "POST",
+  authenticated: false,
+  body: { email, password: "Definitely-Wrong-Password-932!" },
+})));
+assert.ok(loginAttempts.slice(0, 5).every((item) => item.response.status === 401),
+  "incorrect credentials should receive a generic sign-in failure before the email rate limit");
+assert.equal(loginAttempts[5].response.status, 429, "repeated sign-in failures must be throttled");
+
 const missingQuote = await call("/api/trading/positions", {
   method: "POST",
   body: { symbol: "ETH/USDT", side: "long", allocationTc: 100, idempotencyKey: `stage2-missing-${Date.now()}` },

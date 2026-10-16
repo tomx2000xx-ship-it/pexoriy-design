@@ -56,6 +56,14 @@ test('stale market data disables new practice orders', async ({ page }) => {
   await expect(page.getByText(/Live market data is unavailable/).first()).toBeVisible();
 });
 
+test('AI Centre stays rendered when live market quotes are stale or unavailable', async ({ page }) => {
+  await enterApp(page, '/', 'stale');
+  await goTo(page, 'AI Trading');
+  await expect(page.getByRole('heading', { name: /AI-assisted practice/ })).toBeVisible();
+  await expect(page.getByText('AI-assisted execution is not enabled yet.', { exact: false })).toBeVisible();
+  await expect(page.locator('.page-render-error')).toHaveCount(0);
+});
+
 test('AI execution stays disabled until the server-side provider and credit settlement are ready', async ({ page }) => {
   await enterApp(page);
   await goTo(page, 'AI Trading');

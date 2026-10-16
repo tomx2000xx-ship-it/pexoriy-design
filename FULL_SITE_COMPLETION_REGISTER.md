@@ -43,6 +43,17 @@ Do not hand off for owner testing until all launch-critical site functionality i
 - [x] Complete: live D1 migration and risk trigger verified; latest live snapshots showed fresh, validated exchange timestamps for all five supported markets.
 - [ ] Overall product launch is **not** declared complete: the other P0/P1 items below remain separate release gates. AI execution, public competitions, token bonuses, and unverified payment methods remain disabled until their server-side controls are ready.
 
+## Stage 3 progress — account security and identity flows
+
+- [x] Add durable D1-backed registration and sign-in throttles keyed by hashed client/IP and normalized identity; return HTTP 429 with retry guidance when limits are exceeded.
+- [x] Reject unsafe cross-origin mutation requests when the request does not provide a matching Origin (or same-origin Fetch Metadata).
+- [x] Add a page-level React error boundary so a single screen rendering exception shows a recoverable message instead of leaving the entire content area blank; make AI position P&L tolerate unavailable market quotes.
+- [x] Add an automated AI Centre regression check for stale/missing quotes and an integration check for repeated failed sign-ins.
+- [ ] Email verification and resend flow with a configured transactional email provider.
+- [ ] Forgot-password/reset flow with single-use, expiring tokens and abuse/rate limits.
+- [ ] Session expiry/revocation behavior, logout UI, account recovery UX, and full authentication integration tests.
+- [ ] Verify production migration `0006_auth_lifecycle.sql` after deployment.
+
 ## Launch work remaining
 
 ### P0 — Account, identity, and session lifecycle

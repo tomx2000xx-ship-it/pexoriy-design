@@ -82,12 +82,25 @@ function clearSessionCookie() {
 
 function requireSameOrigin(request) {
   const origin = request.headers.get("origin");
-  if (!origin) return true;
+  if (!origin) return request.headers.get("sec-fetch-site") === "same-origin";
   try {
     return new URL(origin).origin === new URL(request.url).origin;
   } catch {
     return false;
   }
+}
+
+async function consumeAuthRateLimit(request, env, scope, identity, limit, windowSeconds) {
+  const ip = request.headers.get("cf-connecting-ip") || "unknown-client";
+  const keyHash = await sha256Hex([scope, ip, String(identity || "").trim().toLowerCase()].join("|"));
+  const now = Math.floor(Date.now() / 1000);
+  const sql = "INSERT INTO auth_rate_limits (key_hash, window_started_at, attempts) VALUES (?, ?, 1) " +
+    "ON CONFLICT(key_hash) DO UPDATE SET " +
+    "attempts = CASE WHEN auth_rate_limits.window_started_at <= ? THEN 1 ELSE auth_rate_limits.attempts + 1 END, " +
+    "window_started_at = CASE WHEN auth_rate_limits.window_started_at <= ? THEN excluded.window_started_at ELSE auth_rate_limits.window_started_at END " +
+    "RETURNING attempts";
+  const row = await env.DB.prepare(sql).bind(keyHash, now, now - windowSeconds, now - windowSeconds).first();
+  return Number(row?.attempts || 0) <= limit;
 }
 
 async function readJson(request) {
@@ -318,6 +331,9 @@ async function handleApi(request, env) {
   }
 
   if (path === "/api/auth/register" && request.method === "POST") {
+    if (!(await consumeAuthRateLimit(request, env, "register-ip", "", 8, 3600))) {
+      return json({ error: "Too many account-creation attempts. Please wait before trying again." }, 429, { "retry-after": "3600" });
+    }
     const body = await readJson(request);
     const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
     const displayName = typeof body?.displayName === "string" ? body.displayName.trim() : "";
@@ -330,6 +346,9 @@ async function handleApi(request, env) {
     }
     if (password.length < 12 || password.length > 128) {
       return json({ error: "Password must be 12–128 characters." }, 400);
+    }
+    if (!(await consumeAuthRateLimit(request, env, "register-email", email, 3, 3600))) {
+      return json({ error: "Too many account-creation attempts. Please wait before trying again." }, 429, { "retry-after": "3600" });
     }
 
     const userId = crypto.randomUUID();
@@ -371,6 +390,10 @@ async function handleApi(request, env) {
     const body = await readJson(request);
     const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
     const password = typeof body?.password === "string" ? body.password : "";
+    if (!(await consumeAuthRateLimit(request, env, "login-ip", "", 12, 900)) ||
+        !(await consumeAuthRateLimit(request, env, "login-email", email, 5, 900))) {
+      return json({ error: "Too many sign-in attempts. Please wait before trying again." }, 429, { "retry-after": "900" });
+    }
     if (!email || !password || password.length > 128) return json({ error: "Email and password are required." }, 400);
     const user = await env.DB.prepare(
       "SELECT id, email, display_name, password_salt, password_hash, status FROM users WHERE email = ?",
