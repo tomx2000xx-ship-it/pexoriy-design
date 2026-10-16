@@ -182,6 +182,8 @@ async function handleApi(request, env) {
     const tokenHash = await sha256Hex(token);
     const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000).toISOString();
     try {
+      const welcomeTcTransactionId = crypto.randomUUID();
+      const welcomeAcTransactionId = crypto.randomUUID();
       await env.DB.batch([
         env.DB.prepare("INSERT INTO users (id, email, display_name, password_salt, password_hash) VALUES (?, ?, ?, ?, ?)")
           .bind(userId, email, displayName, salt, hash),
@@ -191,6 +193,12 @@ async function handleApi(request, env) {
           .bind(sessionId, userId, tokenHash, expiresAt),
         env.DB.prepare("INSERT INTO audit_events (id, actor_user_id, event_type, entity_type, entity_id, request_id, details_json) VALUES (?, ?, 'account.registered', 'user', ?, ?, '{}')")
           .bind(crypto.randomUUID(), userId, userId, requestId),
+        env.DB.prepare("INSERT INTO ledger_transactions (id, idempotency_key, user_id, event_type, status, metadata_json) VALUES (?, ?, ?, 'account.welcome_tc_issued', 'pending', '{}'), (?, ?, ?, 'account.welcome_ac_issued', 'pending', '{}')")
+          .bind(welcomeTcTransactionId, `welcome-tc:${userId}`, userId, welcomeAcTransactionId, `welcome-ac:${userId}`, userId),
+        env.DB.prepare("INSERT INTO ledger_postings (id, transaction_id, account_key, amount_atoms, currency) VALUES (?, ?, ?, 12450, 'TC'), (?, ?, 'system:issuance:TC', -12450, 'TC'), (?, ?, ?, 840, 'AC'), (?, ?, 'system:issuance:AC', -840, 'AC')")
+          .bind(crypto.randomUUID(), welcomeTcTransactionId, `user:${userId}:TC`, crypto.randomUUID(), welcomeTcTransactionId, crypto.randomUUID(), welcomeAcTransactionId, `user:${userId}:AC`, crypto.randomUUID(), welcomeAcTransactionId),
+        env.DB.prepare("UPDATE ledger_transactions SET status = 'posted', posted_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id IN (?, ?)")
+          .bind(welcomeTcTransactionId, welcomeAcTransactionId),
       ]);
     } catch (error) {
       const message = String(error?.message || "");
