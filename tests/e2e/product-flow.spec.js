@@ -94,7 +94,7 @@ test('Practice visibly connects to AI Trading and blocks over-balance orders', a
   await amount.fill('99999999');
   await expect(page.getByRole('button', { name: /Review Buy \/ Long order/ })).toBeDisabled();
   await bridge.getByRole('button', { name: /Explore AI Trading/ }).click();
-  await expect(page.getByRole('heading', { name: /AI-assisted practice/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Market opportunities/ })).toBeVisible();
 });
 
 test('stale market data disables new practice orders', async ({ page }) => {
