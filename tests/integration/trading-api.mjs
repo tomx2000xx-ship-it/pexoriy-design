@@ -71,7 +71,7 @@ assert.equal(Number(positions.payload?.positions?.[0]?.unrealizedPnlTc), 0);
 // Simulate a later exchange snapshot and confirm the API marks the open
 // position from the fresh server-side quote, not a browser-only price.
 const nextTimestamp = Date.now();
-const updatedPriceMicros = 68156022000; // +1% from the seeded BTC entry
+const updatedPriceMicros = 68157022000; // +1% from the seeded BTC entry
 const quoteSql = "INSERT INTO market_snapshots (id, provider, symbol, price_micros, provider_timestamp_ms, validation_status, model_version) VALUES ('ci-market-btc-updated', 'ci-fixture', 'BTC/USDT', " + updatedPriceMicros + ", " + nextTimestamp + ", 'valid', 'ci-test')";
 execFileSync("npx", ["wrangler", "d1", "execute", "pexoriy-core", "--local", "--command", quoteSql], { stdio: "pipe" });
 const markedPositions = await call("/api/trading/positions");
