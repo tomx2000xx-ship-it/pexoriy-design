@@ -1,5 +1,5 @@
 import { postLedgerTransaction } from "./ledger.js";
-import { calculateRealizedSettlement, isFreshValidatedQuote } from "./trading.js";
+import { calculateRealizedSettlement, isFreshValidatedQuote, calculateSimulatedFillPrice, calculateTakerFeeTc, SIMULATION_MODEL_VERSION, MAX_OPEN_POSITIONS, MAX_POSITION_EQUITY_BPS, MAX_TOTAL_EXPOSURE_EQUITY_BPS } from "./trading.js";
 import { normalizeMarketQuote } from "./market-feed.js";
 import {
   AI_CREDIT_PACKAGES,
@@ -433,7 +433,7 @@ async function handleApi(request, env) {
     const user = await currentUser(request, env);
     if (!user) return json({ error: "Authentication required." }, 401);
     const result = await env.DB.prepare(
-      "SELECT id, symbol, side, status, leverage, quantity_atoms, entry_price_micros, mark_price_micros, reserved_tc, realized_pnl_tc, opened_at, closed_at FROM trading_positions WHERE user_id = ? AND status = 'open' ORDER BY opened_at DESC LIMIT 100",
+      "SELECT id, symbol, side, status, leverage, quantity_atoms, entry_price_micros, mark_price_micros, reserved_tc, realized_pnl_tc, open_fee_tc, opened_at, closed_at FROM trading_positions WHERE user_id = ? AND status = 'open' ORDER BY opened_at DESC LIMIT 100",
     ).bind(user.id).all();
     const now = Date.now();
     const quoteRows = await env.DB.prepare(
@@ -451,9 +451,15 @@ async function handleApi(request, env) {
       let pnl = null;
       if (hasFreshQuote) {
         try {
+          const simulatedExit = calculateSimulatedFillPrice({
+            quotePriceMicros: markPriceMicros, action: row.side === "long" ? "sell" : "buy",
+          });
+          const beforeFee = calculateRealizedSettlement({
+            allocationTc: allocation, side: row.side, entryPriceMicros, exitPriceMicros: simulatedExit,
+          });
           pnl = calculateRealizedSettlement({
-            allocationTc: allocation, side: row.side,
-            entryPriceMicros, exitPriceMicros: markPriceMicros,
+            allocationTc: allocation, side: row.side, entryPriceMicros, exitPriceMicros: simulatedExit,
+            openFeeTc: Number(row.open_fee_tc || 0), closeFeeTc: calculateTakerFeeTc(beforeFee.grossReturnedTc),
           }).realizedPnlTc;
         } catch {
           pnl = null;
@@ -473,13 +479,13 @@ async function handleApi(request, env) {
     const user = await currentUser(request, env);
     if (!user) return json({ error: "Authentication required." }, 401);
     const result = await env.DB.prepare(
-      "SELECT id, symbol, side, reserved_tc, entry_price_micros, mark_price_micros, realized_pnl_tc, opened_at, closed_at FROM trading_positions WHERE user_id = ? AND status = 'closed' ORDER BY closed_at DESC LIMIT 100",
+      "SELECT id, symbol, side, reserved_tc, entry_price_micros, mark_price_micros, realized_pnl_tc, close_return_tc, opened_at, closed_at FROM trading_positions WHERE user_id = ? AND status = 'closed' ORDER BY closed_at DESC LIMIT 100",
     ).bind(user.id).all();
     return json({ history: (result.results || []).map((row) => ({
       id: row.id, market: row.symbol, direction: row.side === "long" ? "Long" : "Short",
       amount: Number(row.reserved_tc), entry: Number(row.entry_price_micros) / 1000000,
       exit: Number(row.mark_price_micros) / 1000000, realizedPnl: Number(row.realized_pnl_tc || 0),
-      tcReturned: Number(row.reserved_tc) + Number(row.realized_pnl_tc || 0),
+      tcReturned: Number(row.close_return_tc || 0),
       openedAt: row.opened_at, closedAtIso: row.closed_at,
       time: new Date(row.opened_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
       closedAt: row.closed_at ? new Date(row.closed_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "",
@@ -526,32 +532,46 @@ async function handleApi(request, env) {
       return json({ error: "A fresh, validated market quote is required. Refresh the market and try again." }, 503);
     }
     const balances = await balancesForUser(env, user.id);
-    if (balances.TC < allocationTc) return json({ error: "Not enough Trade Credits. Refresh your balance and reduce the allocation." }, 409);
+    const exposure = await env.DB.prepare(
+      "SELECT COUNT(*) AS open_count, COALESCE(SUM(reserved_tc), 0) AS open_reserved_tc FROM trading_positions WHERE user_id = ? AND status = 'open'",
+    ).bind(user.id).first();
+    const openCount = Number(exposure?.open_count || 0);
+    const openReservedTc = Number(exposure?.open_reserved_tc || 0);
+    const accountEquityTc = balances.TC + openReservedTc;
+    const maxPositionTc = Math.floor(accountEquityTc * MAX_POSITION_EQUITY_BPS / 10000);
+    const maxExposureTc = Math.floor(accountEquityTc * MAX_TOTAL_EXPOSURE_EQUITY_BPS / 10000);
+    const openFeeTc = calculateTakerFeeTc(allocationTc);
+    if (balances.TC < allocationTc + openFeeTc) return json({ error: "Not enough Trade Credits to cover the position and its simulated opening fee." }, 409);
+    if (openCount >= MAX_OPEN_POSITIONS) return json({ error: "You have reached the maximum of 5 open practice positions." }, 409);
+    if (allocationTc > maxPositionTc) return json({ error: "This position exceeds the current per-position limit of " + maxPositionTc.toLocaleString() + " TC." }, 409);
+    if (openReservedTc + allocationTc > maxExposureTc) return json({ error: "This position would exceed the account's total open-exposure limit." }, 409);
 
     const positionId = crypto.randomUUID();
     const orderId = crypto.randomUUID();
     const transactionId = crypto.randomUUID();
-    const priceMicros = Number(quote.price_micros);
+    const quotePriceMicros = Number(quote.price_micros);
+    const priceMicros = calculateSimulatedFillPrice({ quotePriceMicros, action: side === "long" ? "buy" : "sell" });
     const quantityAtoms = allocationTc * 1000000;
     try {
       await env.DB.batch([
         env.DB.prepare("INSERT INTO ledger_transactions (id, idempotency_key, user_id, event_type, status, metadata_json) VALUES (?, ?, ?, 'practice.trade_opened', 'pending', ?)")
           .bind(transactionId, "trade-open:" + idempotencyKey, user.id, JSON.stringify({ symbol, side, allocationTc, priceMicros, leverage: 1 })),
-        env.DB.prepare("INSERT INTO ledger_postings (id, transaction_id, account_key, amount_atoms, currency) VALUES (?, ?, ?, ?, 'TC'), (?, ?, 'system:reserve:TC', ?, 'TC')")
-          .bind(crypto.randomUUID(), transactionId, "user:" + user.id + ":TC", -allocationTc, crypto.randomUUID(), transactionId, allocationTc),
+        env.DB.prepare("INSERT INTO ledger_postings (id, transaction_id, account_key, amount_atoms, currency) VALUES (?, ?, ?, ?, 'TC'), (?, ?, 'system:reserve:TC', ?, 'TC'), (?, ?, 'system:fees:TC', ?, 'TC')")
+          .bind(crypto.randomUUID(), transactionId, "user:" + user.id + ":TC", -(allocationTc + openFeeTc), crypto.randomUUID(), transactionId, allocationTc, crypto.randomUUID(), transactionId, openFeeTc),
         env.DB.prepare("UPDATE ledger_transactions SET status = 'posted', posted_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND status = 'pending'")
           .bind(transactionId),
-        env.DB.prepare("INSERT INTO trading_positions (id, user_id, symbol, side, status, leverage, quantity_atoms, entry_price_micros, mark_price_micros, reserved_tc, realized_pnl_tc, open_transaction_id, model_version) VALUES (?, ?, ?, ?, 'open', 1, ?, ?, ?, ?, 0, ?, 'simulation-v2')")
-          .bind(positionId, user.id, symbol, side, quantityAtoms, priceMicros, priceMicros, allocationTc, transactionId),
+        env.DB.prepare("INSERT INTO trading_positions (id, user_id, symbol, side, status, leverage, quantity_atoms, entry_price_micros, mark_price_micros, reserved_tc, realized_pnl_tc, open_fee_tc, entry_quote_price_micros, open_transaction_id, model_version) VALUES (?, ?, ?, ?, 'open', 1, ?, ?, ?, ?, 0, ?, ?, ?, 'simulation-v3')")
+          .bind(positionId, user.id, symbol, side, quantityAtoms, priceMicros, priceMicros, allocationTc, openFeeTc, quotePriceMicros, transactionId),
         env.DB.prepare("INSERT INTO trade_orders (id, user_id, position_id, idempotency_key, symbol, side, order_type, status, quantity_atoms, requested_price_micros, fill_price_micros, created_at, settled_at) VALUES (?, ?, ?, ?, ?, ?, 'market', 'filled', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))")
-          .bind(orderId, user.id, positionId, idempotencyKey, symbol, side, quantityAtoms, priceMicros, priceMicros),
+          .bind(orderId, user.id, positionId, idempotencyKey, symbol, side, quantityAtoms, quotePriceMicros, priceMicros),
         env.DB.prepare("INSERT INTO audit_events (id, actor_user_id, event_type, entity_type, entity_id, request_id, details_json) VALUES (?, ?, 'practice.trade_opened', 'trading_position', ?, ?, ?)")
-          .bind(crypto.randomUUID(), user.id, positionId, requestId, JSON.stringify({ symbol, side, allocationTc, priceMicros })),
+          .bind(crypto.randomUUID(), user.id, positionId, requestId, JSON.stringify({ symbol, side, allocationTc, quotePriceMicros, fillPriceMicros: priceMicros, openFeeTc, modelVersion: SIMULATION_MODEL_VERSION })),
       ]);
     } catch (error) {
       const winner = await env.DB.prepare("SELECT id, symbol, side, position_id FROM trade_orders WHERE idempotency_key = ? AND user_id = ?").bind(idempotencyKey, user.id).first().catch(() => null);
       if (winner) return json({ error: "This order has already been processed. Refresh your positions before retrying.", orderId: winner.id }, 409);
       if (/insufficient_ledger_balance/i.test(String(error?.message || ""))) return json({ error: "Not enough Trade Credits. Refresh your balance and reduce the allocation." }, 409);
+      if (/position_limit_exceeded|position_size_limit_exceeded|total_exposure_limit_exceeded/i.test(String(error?.message || ""))) return json({ error: "This order exceeds the current practice-trading exposure limits. Refresh your balance and open positions." }, 409);
       return json({ error: "The simulated order could not be committed. No position was opened." }, 500);
     }
     return json({ order: { id: orderId, duplicate: false }, position: {
@@ -559,6 +579,7 @@ async function handleApi(request, env) {
       status: "open", leverage: 1, quantity_atoms: quantityAtoms, quantityAtoms,
       entry_price_micros: priceMicros, mark_price_micros: priceMicros, entry: priceMicros / 1000000,
       markPrice: priceMicros / 1000000, reserved_tc: allocationTc, amount: allocationTc, realized_pnl_tc: 0,
+      open_fee_tc: openFeeTc, entry_quote_price_micros: quotePriceMicros, modelVersion: SIMULATION_MODEL_VERSION,
       opened_at: new Date().toISOString(), openedAt: new Date().toISOString(),
       time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }), aiManaged: false,
     } }, 201);
@@ -590,12 +611,20 @@ async function handleApi(request, env) {
     if (!isFreshValidatedQuote(quote, Date.now())) {
       return json({ error: "A fresh, validated market quote is required to close this position. Refresh the market and try again." }, 503);
     }
-    const exitPriceMicros = Number(quote.price_micros);
+    const exitQuotePriceMicros = Number(quote.price_micros);
+    const exitPriceMicros = calculateSimulatedFillPrice({
+      quotePriceMicros: exitQuotePriceMicros, action: position.side === "long" ? "sell" : "buy",
+    });
     const allocation = Number(position.reserved_tc);
     const entryPriceMicros = Number(position.entry_price_micros);
     let settlement;
     try {
-      settlement = calculateRealizedSettlement({ allocationTc: allocation, side: position.side, entryPriceMicros, exitPriceMicros });
+      const beforeFee = calculateRealizedSettlement({ allocationTc: allocation, side: position.side, entryPriceMicros, exitPriceMicros });
+      settlement = calculateRealizedSettlement({
+        allocationTc: allocation, side: position.side, entryPriceMicros, exitPriceMicros,
+        openFeeTc: Number(position.open_fee_tc || 0),
+        closeFeeTc: calculateTakerFeeTc(beforeFee.grossReturnedTc),
+      });
     } catch {
       return json({ error: "The close settlement could not be calculated safely." }, 500);
     }
@@ -607,20 +636,23 @@ async function handleApi(request, env) {
       "INSERT INTO ledger_postings (id, transaction_id, account_key, amount_atoms, currency) VALUES (?, ?, ?, ?, 'TC')",
     ).bind(crypto.randomUUID(), transactionId, accountKeys[p.account], p.amount));
     const quantityAtoms = Number(position.quantity_atoms);
-    try {
-      await env.DB.batch([
-        env.DB.prepare("INSERT INTO ledger_transactions (id, idempotency_key, user_id, event_type, status, metadata_json) SELECT ?, ?, ?, 'practice.trade_closed', 'pending', ? WHERE EXISTS (SELECT 1 FROM trading_positions WHERE id = ? AND user_id = ? AND status = 'open')")
-          .bind(transactionId, "trade-close:" + idempotencyKey, user.id, JSON.stringify({ positionId, exitPriceMicros, realizedPnlTc, returnedTc }), positionId, user.id),
-        ...sqlPostings,
-        env.DB.prepare("UPDATE ledger_transactions SET status = 'posted', posted_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND status = 'pending'")
-          .bind(transactionId),
-        env.DB.prepare("UPDATE trading_positions SET status = 'closed', mark_price_micros = ?, realized_pnl_tc = ?, close_transaction_id = ?, closed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND user_id = ? AND status = 'open'")
-          .bind(exitPriceMicros, realizedPnlTc, transactionId, positionId, user.id),
+    const statements = [];
+    if (settlement.postings.length) {
+      statements.push(env.DB.prepare("INSERT INTO ledger_transactions (id, idempotency_key, user_id, event_type, status, metadata_json) SELECT ?, ?, ?, 'practice.trade_closed', 'pending', ? WHERE EXISTS (SELECT 1 FROM trading_positions WHERE id = ? AND user_id = ? AND status = 'open')")
+        .bind(transactionId, "trade-close:" + idempotencyKey, user.id, JSON.stringify({ positionId, exitQuotePriceMicros, exitPriceMicros, realizedPnlTc, returnedTc, closeFeeTc: settlement.closeFeeTc, modelVersion: SIMULATION_MODEL_VERSION }), positionId, user.id));
+      statements.push(...sqlPostings);
+      statements.push(env.DB.prepare("UPDATE ledger_transactions SET status = 'posted', posted_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND status = 'pending'").bind(transactionId));
+    }
+    statements.push(
+        env.DB.prepare("UPDATE trading_positions SET status = 'closed', mark_price_micros = ?, realized_pnl_tc = ?, close_return_tc = ?, close_transaction_id = ?, closed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND user_id = ? AND status = 'open'")
+          .bind(exitPriceMicros, realizedPnlTc, returnedTc, settlement.postings.length ? transactionId : null, positionId, user.id),
         env.DB.prepare("INSERT INTO trade_orders (id, user_id, position_id, idempotency_key, symbol, side, order_type, status, quantity_atoms, requested_price_micros, fill_price_micros, created_at, settled_at) VALUES (?, ?, ?, ?, ?, ?, 'market', 'filled', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))")
-          .bind(orderId, user.id, positionId, idempotencyKey, position.symbol, position.side, quantityAtoms, exitPriceMicros, exitPriceMicros),
+          .bind(orderId, user.id, positionId, idempotencyKey, position.symbol, position.side, quantityAtoms, exitQuotePriceMicros, exitPriceMicros),
         env.DB.prepare("INSERT INTO audit_events (id, actor_user_id, event_type, entity_type, entity_id, request_id, details_json) VALUES (?, ?, 'practice.trade_closed', 'trading_position', ?, ?, ?)")
-          .bind(crypto.randomUUID(), user.id, positionId, requestId, JSON.stringify({ symbol: position.symbol, side: position.side, allocationTc: allocation, exitPriceMicros, realizedPnlTc, returnedTc })),
-      ]);
+          .bind(crypto.randomUUID(), user.id, positionId, requestId, JSON.stringify({ symbol: position.symbol, side: position.side, allocationTc: allocation, exitQuotePriceMicros, exitPriceMicros, realizedPnlTc, returnedTc, closeFeeTc: settlement.closeFeeTc, modelVersion: SIMULATION_MODEL_VERSION })),
+      );
+    try {
+      await env.DB.batch(statements);
     } catch (error) {
       const current = await env.DB.prepare("SELECT status FROM trading_positions WHERE id = ? AND user_id = ?").bind(positionId, user.id).first().catch(() => null);
       if (current?.status === "closed") return json({ error: "This position has already been closed. Refresh your trade history." }, 409);
@@ -631,6 +663,7 @@ async function handleApi(request, env) {
       reserved_tc: allocation, amount: allocation, entry_price_micros: entryPriceMicros,
       mark_price_micros: exitPriceMicros, entry: entryPriceMicros / 1000000, exit: exitPriceMicros / 1000000,
       realized_pnl_tc: realizedPnlTc, realizedPnl: realizedPnlTc, tcReturned: returnedTc,
+      open_fee_tc: Number(position.open_fee_tc || 0), close_fee_tc: settlement.closeFeeTc, modelVersion: SIMULATION_MODEL_VERSION,
       opened_at: position.opened_at, closedAtIso: new Date().toISOString(),
     } });
   }
