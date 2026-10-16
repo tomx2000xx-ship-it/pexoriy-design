@@ -15,6 +15,7 @@
       "binding": "DB",
       "database_name": "pexoriy-core",
       "database_id": "3add741b-bda8-4f47-b857-538ff9a1dae8",
+      "preview_database_id": "c70a09f0-8d61-45ed-b207-c6418e42998b",
       "migrations_dir": "migrations"
     }
   ],
@@ -29,5 +30,21 @@
   },
   "ai": {
     "binding": "AI"
+  },
+  "previews": {
+    "d1_databases": [
+      {
+        "binding": "DB",
+        "database_id": "c70a09f0-8d61-45ed-b207-c6418e42998b"
+      }
+    ],
+    "send_email": [
+      {
+        "name": "EMAIL"
+      }
+    ],
+    "ai": {
+      "binding": "AI"
+    }
   }
 }
