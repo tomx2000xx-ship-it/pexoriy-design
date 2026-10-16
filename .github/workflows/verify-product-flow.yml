@@ -23,6 +23,8 @@ jobs:
           node-version: 22
       - name: Install app dependencies
         run: npm install --no-audit --no-fund
+      - name: Run deterministic simulation unit tests
+        run: npm run test:unit
       - name: Build production bundle with CI-only test scenario
         run: npm run build
         env:
