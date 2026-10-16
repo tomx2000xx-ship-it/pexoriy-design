@@ -253,14 +253,19 @@ async function handleApi(request, env) {
       // Live smoke checks showed OKX returning fresh quotes while Binance
       // did not validate reliably from the deployed Worker. Prefer OKX and
       // retain Binance as a per-market fallback.
-      const primary = await fetchOkxQuote(market);
-      if (primary) return { market, quote: primary, cachedRow: null };
-      const secondary = await fetchBinanceQuote(market);
       const previous = latest.get(market.symbol);
-      if (secondary && previous && isFreshValidatedQuote(previous, now) &&
-          Number(previous.provider_timestamp_ms) >= Number(secondary.timestamp)) {
-        // Do not let a fallback provider with an older exchange timestamp
-        // roll a market backwards after a newer valid quote was already seen.
+      const previousIsFresh = previous && isFreshValidatedQuote(previous, now);
+      const preferPrevious = (quote) => Boolean(quote && previousIsFresh &&
+        Number(previous.provider_timestamp_ms) >= Number(quote.timestamp));
+      const primary = await fetchOkxQuote(market);
+      if (primary) {
+        if (preferPrevious(primary)) return { market, quote: null, cachedRow: previous };
+        return { market, quote: primary, cachedRow: null };
+      }
+      const secondary = await fetchBinanceQuote(market);
+      if (secondary && preferPrevious(secondary)) {
+        // Do not let a provider with an older exchange timestamp roll a market
+        // backwards after a newer valid quote was already seen.
         return { market, quote: null, cachedRow: previous };
       }
       return { market, quote: secondary, cachedRow: null };
