@@ -39,7 +39,7 @@ test('AI session lifecycle, trade open/close, and Activity Centre ledger work', 
   await expect(page.getByText('ACTIVE · AWAITING ACTION')).toBeVisible();
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
   await expect(page.getByText('PAUSED', { exact: true })).toBeVisible();
-  await expect(page.getByText(/No new AI trade actions can be confirmed until you resume/)).toBeVisible();
+  await expect(page.getByText(/No new AI trade actions can be confirmed until you resume/).first()).toBeVisible();
   await page.getByRole('button', { name: /Resume session/ }).click();
   await expect(page.getByText('ACTIVE · AWAITING ACTION')).toBeVisible();
 
@@ -77,7 +77,7 @@ test('AI trading blocks a proposed action when AI Credit balance is insufficient
   await page.getByRole('button', { name: /Review AI trade/ }).click();
   await expect(page.getByText(/Not enough AI Credits/)).toBeVisible();
   await expect(page.locator('.ai-action-review')).toHaveCount(0);
-  await expect(page.getByText('0', { exact: true })).toBeVisible();
+  await expect(page.locator('.ai-balance-purchase strong')).toContainText('0');
 });
 
 test('mobile layout stays within the viewport on Practice and AI Trading', async ({ page, isMobile }) => {
