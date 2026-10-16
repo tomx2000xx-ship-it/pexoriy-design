@@ -430,3 +430,33 @@ test('referral progress is not fabricated in demo mode', async ({ page }) => {
   await expect(page.getByText('Sign in to track your squad and claim team quest rewards.')).toBeVisible();
   await expect(page.getByText('Verified referral progress is account-backed')).toBeVisible();
 });
+
+
+test('team quest rewards are shown only after the server confirms the claim', async ({ page }) => {
+  let questPaid = false;
+  await page.route('**/api/me', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { id: 'account-user', email: 'account@example.test', displayName: 'Account User', balances: { TC: 1000, AC: 10, PXY: 0 } } }) }));
+  await page.route('**/api/trading/positions', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ positions: [] }) }));
+  await page.route('**/api/trading/history', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ history: [] }) }));
+  await page.route('**/api/missions', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ missions: [
+    { id: 'first-practice-trade', title: 'Make a practice trade', rewardCurrency: 'TC', rewardAmount: 250, rules: { prerequisite: 'practice_trade' }, claim: null },
+    { id: 'review-ai-setup', title: 'Review an AI trading setup', rewardCurrency: 'TC', rewardAmount: 150, rules: { prerequisite: 'ai_setup' }, claim: null }
+  ] }) }));
+  await page.route('**/api/learning', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ lessons: [], completed: 0 }) }));
+  await page.route('**/api/referrals/activate', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'not_referred' }) }));
+  await page.route('**/api/referrals', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+    code: 'AB12CD34EF56', invited: 3, activated: 3,
+    milestones: [{ id: 'first', target: 1, reached: true }, { id: 'squad', target: 3, reached: true }],
+    rewards: { referrerTC: 250, referredTC: 100, currency: 'TC' },
+    quests: [{ id: 'squad-three', title: 'Build your squad', description: 'Activate three referred members through verified email and a first simulated trade.', target: 3, rewardTC: 300, progress: 3, claim: questPaid ? { status: 'paid', ledger_transaction_id: 'tx-team-1' } : null }]
+  }) }));
+  await page.route('**/api/referrals/quests/claim', async route => {
+    questPaid = true;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'paid', duplicate: false, rewardTC: 300, questId: 'squad-three' }) });
+  });
+  await enterApp(page, '/', 'live', 'account');
+  await goTo(page, 'Referrals');
+  await expect(page.getByRole('heading', { name: 'Team quests' })).toBeVisible();
+  await page.getByRole('button', { name: 'Claim reward' }).click();
+  await expect(page.getByText('Team quest completed: +300 TC recorded.')).toBeVisible();
+  await expect(page.getByText('REWARD CLAIMED')).toBeVisible();
+});
