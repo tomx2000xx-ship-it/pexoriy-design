@@ -1113,3 +1113,15 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible{outline:2px s
 .market-chart-unavailable{min-height:190px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:24px;text-align:center;color:var(--muted,#8d95a5);border:1px dashed var(--border,rgba(255,255,255,.12));border-radius:12px;background:rgba(255,255,255,.02)}
 .market-chart-unavailable strong{color:var(--text,#f5f7fa);font-size:14px}
 .market-chart-unavailable span{max-width:340px;font-size:12px;line-height:1.6}
+
+
+/* AI Credit Store: use the real network marks and make live token estimates readable. */
+.ai-store-network-icon .asset-logo{width:34px;height:34px;flex:0 0 34px;margin:0}
+.ai-store-network-icon .asset-logo img,.ai-store-network-icon .asset-logo svg{width:29px;height:29px}
+.solana-network-icon,.gram-network-icon{background:transparent}
+.ai-store-solana-mark .asset-logo{width:40px;height:40px;flex:0 0 40px}
+.ai-store-solana-mark .asset-logo img{width:34px;height:34px}
+.ai-store-quote-footnote{margin:10px 0 0;color:var(--muted,#9ca38f);font-size:9px;line-height:1.6}
+.ai-store-solana-intro p b{color:#e7f5c7;font-weight:800}
+.ai-package-payment>strong{font-variant-numeric:tabular-nums}
+@media(max-width:430px){.ai-store-method-status{font-size:7px;letter-spacing:0}.ai-store-method-tabs>button{gap:7px;padding:10px 8px}}
