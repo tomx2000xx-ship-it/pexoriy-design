@@ -1,4 +1,3 @@
-export const SOLANA_USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 export const SOLANA_NETWORK = "solana-mainnet";
 
 export const AI_CREDIT_PACKAGES = Object.freeze({
@@ -60,53 +59,40 @@ export function decodeBase58(value) {
   return decoded;
 }
 
-export function makeSolanaPayUrl({ recipient, amountAtoms, reference, label = "Pexoriy", message = "AI Credits" }) {
+export function formatLamports(lamports) {
+  if (!Number.isSafeInteger(lamports) || lamports <= 0) throw new TypeError("Invalid SOL amount.");
+  return (lamports / 1_000_000_000).toFixed(9).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+export function makeSolanaPayUrl({ recipient, amountLamports, reference, label = "Pexoriy", message = "AI Credits" }) {
   decodeBase58(recipient);
   decodeBase58(reference);
-  if (!Number.isSafeInteger(amountAtoms) || amountAtoms <= 0) throw new TypeError("Invalid USDC amount.");
-  const amount = (amountAtoms / 1_000_000).toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
-  const params = new URLSearchParams({
-    amount,
-    "spl-token": SOLANA_USDC_MINT,
-    reference,
-    label,
-    message,
-  });
+  const amount = formatLamports(amountLamports);
+  const params = new URLSearchParams({ amount, reference, label, message });
   return `solana:${recipient}?${params.toString()}`;
 }
 
-export function validateUsdcPaymentTransaction(tx, { recipient, reference, expectedAmountAtoms }) {
+export function validateSolPaymentTransaction(tx, { recipient, reference, expectedLamports }) {
   if (!tx || !tx.transaction || !tx.meta || tx.meta.err !== null) {
     throw new Error("SOLANA_TRANSACTION_FAILED_OR_MISSING");
   }
   const message = tx.transaction.message;
   const keys = (message?.accountKeys || []).map((key) => typeof key === "string" ? key : key.pubkey);
   if (!keys.includes(reference)) throw new Error("SOLANA_REFERENCE_MISMATCH");
-
-  const pre = new Map();
-  const post = new Map();
-  for (const balance of tx.meta.preTokenBalances || []) {
-    if (balance.mint === SOLANA_USDC_MINT && balance.owner === recipient) {
-      pre.set(balance.accountIndex, BigInt(balance.uiTokenAmount?.amount || "0"));
-    }
+  const recipientIndex = keys.indexOf(recipient);
+  if (recipientIndex < 0) throw new Error("SOLANA_RECIPIENT_MISMATCH");
+  const before = Number(tx.meta.preBalances?.[recipientIndex]);
+  const after = Number(tx.meta.postBalances?.[recipientIndex]);
+  if (!Number.isSafeInteger(before) || !Number.isSafeInteger(after) || after < before) {
+    throw new Error("SOLANA_BALANCE_DELTA_INVALID");
   }
-  for (const balance of tx.meta.postTokenBalances || []) {
-    if (balance.mint === SOLANA_USDC_MINT && balance.owner === recipient) {
-      post.set(balance.accountIndex, BigInt(balance.uiTokenAmount?.amount || "0"));
-    }
-  }
-
-  let receivedAtoms = 0n;
-  for (const [accountIndex, after] of post) {
-    const before = pre.get(accountIndex) || 0n;
-    if (after > before) receivedAtoms += after - before;
-  }
-  if (receivedAtoms !== BigInt(expectedAmountAtoms)) {
+  const receivedLamports = after - before;
+  if (receivedLamports !== expectedLamports) {
     return {
       valid: false,
-      receivedAtoms: receivedAtoms.toString(),
-      reason: receivedAtoms < BigInt(expectedAmountAtoms) ? "underpaid" : "overpaid",
+      receivedLamports,
+      reason: receivedLamports < expectedLamports ? "underpaid" : "overpaid",
     };
   }
-  return { valid: true, receivedAtoms: receivedAtoms.toString() };
+  return { valid: true, receivedLamports };
 }
