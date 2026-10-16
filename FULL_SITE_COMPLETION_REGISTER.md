@@ -109,19 +109,19 @@ Do not hand off for owner testing until all launch-critical site functionality i
 - [ ] Configure and protect the AI provider credentials; disable AI execution until verified.
 
 ### P0 — Native SOL checkout and revenue reconciliation
-- [ ] Verify live API health and the deployed Worker revision/configuration.
-- [ ] Validate package pricing, live SOL quote source/freshness, order expiry, unique reference, recipient, amount, finality, under/overpayment, wrong-recipient, replay, and duplicate-transaction cases.
-- [ ] Make payment confirmation and ledger credit crash-safe/idempotent; reconcile confirmed-but-not-credited orders.
+- [x] Confirmed the production Worker has the `SOLANA_RECEIVE_ADDRESS` secret binding configured and has deployed the authenticated order-creation and server-side verification routes. This confirms configuration is present, not yet that a real transaction has passed end-to-end verification.
+- [ ] Run a controlled real-SOL transaction against the configured receiver; verify the destination, quote, expiry, unique reference, exact amount, finality, under/overpayment, wrong-recipient, replay, and duplicate-transaction cases before announcing payment production readiness.
+- [ ] Verify the full payment-to-credit path is crash-safe/idempotent; reconcile confirmed-but-not-credited orders and duplicate verification requests.
 - [ ] Add internal payment/revenue reconciliation views or reports: confirmed receipts, pending/review, AC credits delivered, fees/costs where available, refunds/reversals, and mismatches.
 - [ ] Do not count pending/unconfirmed transfers as revenue.
 - [ ] Do not activate token bonus issuance until approved PXY reserves and cumulative bonus liabilities are enforced.
-- [ ] Complete a controlled end-to-end transaction verification before claiming payment production readiness.
+- [ ] Keep the native-SOL purchase path available whenever server configuration is valid; do not disable it merely to defer implementation. Fail closed if the receiver, quote, or verification provider is invalid or unavailable.
 
 ### P0 — GRAM checkout
-- [ ] Confirm the intended GRAM asset/network contract or jetton identity, recipient, and payment method.
+- [ ] Confirm the exact GRAM asset/network and recipient wallet; the current Store only displays a live estimate and does not implement verified GRAM order creation/settlement.
 - [ ] Implement server-side chain verification with unique order binding, amount/asset/recipient/finality checks, idempotent AC delivery, and reconciliation.
 - [ ] Confirm TON Connect manifest/domain/origin and production wallet compatibility.
-- [ ] Keep GRAM purchases disabled until the above gates pass; wallet connection alone is not payment verification.
+- [ ] Do not label GRAM as a live purchase method until its server-side payment verification and automatic AC delivery are implemented; wallet connection alone is not payment verification.
 
 ### P1 — Missions, check-ins, streaks, and achievements
 - [ ] Move check-ins, streaks, mission progress/claims, and reward grants from browser state into D1.
@@ -186,3 +186,11 @@ A screen is finished only when its primary actions call an authenticated backend
 - Added responsive selected-package CTA styling and a mobile-friendly sticky order summary. Payment actions remain disabled unless the server reports checkout as configured.
 - Added E2E assertions for the custom AC mark, popular package, single CTA, and truthful disabled payment states.
 - **Verification status:** this UX pass has been committed to the default branch, but its fresh build, browser regression, and post-deployment visual check still need to be observed before marking the Store section complete. Solana checkout and GRAM payment/credit delivery remain disabled until their existing production release gates are satisfied.
+
+
+## Owner testing direction — 16 October 2026
+
+- Owner has explicitly directed that Pexoriy be prepared as a fully working, production-like application for end-to-end owner testing; do not intentionally leave launch functionality unfinished merely to postpone testing.
+- Keep implementing the complete backend and persistence paths. Where an external service, wallet/recipient, domain, or provider credential is required, make the dependency explicit and finish everything that can be verified without inventing credentials or falsely reporting a payment as complete.
+- Native SOL order/verification routes and the receiver secret binding are present in the deployed Worker. A controlled real-transaction test and revenue reconciliation remain required evidence; configured binding alone does not prove a payment has settled correctly.
+- The GRAM panel is currently presentation/quote only and needs a real server-side payment integration. AI-assisted execution also still requires a server-side AI provider, billable-operation rules, and idempotent AC settlement.
