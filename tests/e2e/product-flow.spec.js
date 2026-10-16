@@ -140,7 +140,7 @@ test('AI Credit Store shows real network logos and live SOL and GRAM token equiv
   await expect(page.locator('.gram-network-icon svg')).toHaveCount(1);
   await expect(page.getByRole('tab', { name: /GRAM \(TON\)/ })).toBeVisible();
   await page.getByRole('tab', { name: /GRAM \(TON\)/ }).click();
-  await expect(page.locator('.ai-package-card').first().locator('.ai-package-payment strong')).toContainText('1.00');
+  await expect(page.locator('.ai-package-card').first().locator('.ai-package-payment strong')).toContainText('1 GRAM');
   await expect(page.locator('.ai-package-card').first().locator('.ai-package-payment strong')).toContainText('GRAM');
   await expect(page.locator('.ai-store-selected-summary button')).toContainText('Connect GRAM Wallet');
 });
