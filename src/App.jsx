@@ -35,6 +35,7 @@ function EntryExperience({mode,onModeChange,onEnter}) {
   const [activePanel,setActivePanel]=useState(mode||"landing"),[name,setName]=useState(""),[email,setEmail]=useState(""),[password,setPassword]=useState(""),[confirmPassword,setConfirmPassword]=useState(""),[showPassword,setShowPassword]=useState(false),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false);
   const [recoveryToken]=useState(()=>typeof window!=="undefined"?(new URLSearchParams(window.location.search).get("token")||""):"");
   useEffect(()=>{setActivePanel(mode||"landing");setNotice("")},[mode]);
+  useEffect(()=>{if(["verify","reset"].includes(activePanel)&&recoveryToken&&window.location.search.includes("token="))window.history.replaceState({}, "", window.location.pathname)},[activePanel,recoveryToken]);
   useEffect(()=>{
     if(activePanel!=="verify"||!recoveryToken)return;
     let alive=true;setBusy(true);

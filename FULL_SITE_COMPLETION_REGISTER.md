@@ -45,27 +45,26 @@ Do not hand off for owner testing until all launch-critical site functionality i
 
 ## Stage 3 progress — account security and identity flows
 
-- [x] Implement single-use email-verification tokens (60-minute expiry), resend verification, password-reset tokens (30-minute expiry), reset-time session revocation, and server-side email delivery through the Cloudflare Email Service binding.
-- [x] Require verified email before sign-in or session use; verification and reset tokens are stored as hashes, never raw tokens.
-- [x] Add responsive verification, resend, forgot-password, and reset-password account screens.
-- [x] Add a profile sign-out action that revokes the current session through the Worker endpoint.
-- [ ] Configure an owned sending domain and `AUTH_EMAIL_FROM` in Cloudflare; live email delivery remains gated until the sender domain is onboarded and tested.
-
 - [x] Add durable D1-backed registration and sign-in throttles keyed by hashed client/IP and normalized identity; return HTTP 429 with retry guidance when limits are exceeded.
 - [x] Reject unsafe cross-origin mutation requests when the request does not provide a matching Origin (or same-origin Fetch Metadata).
-- [x] Add a page-level React error boundary so a single screen rendering exception shows a recoverable message instead of leaving the entire content area blank; make AI position P&L tolerate unavailable market quotes.
-- [x] Add an automated AI Centre regression check for stale/missing quotes and an integration check for repeated failed sign-ins.
-- [ ] Email verification and resend flow with a configured transactional email provider.
-- [ ] Forgot-password/reset flow with single-use, expiring tokens and abuse/rate limits.
-- [ ] Session expiry/revocation behavior, logout UI, account recovery UX, and full authentication integration tests.
-- [ ] Verify production migration `0006_auth_lifecycle.sql` after deployment.
+- [x] Add a page-level React error boundary and guard AI opportunity cards against null/stale prices and percentage changes.
+- [x] Add automated AI Centre regression coverage for stale/missing quotes, account-screen E2E coverage for verification/reset routes, and an integration check for repeated failed sign-ins.
+- [x] Implement single-use email-verification tokens (60-minute expiry), resend verification, password-reset tokens (30-minute expiry), reset-time session revocation, and server-side email delivery through the Cloudflare Email Service binding.
+- [x] Require verified email before sign-in or session use; verification and reset tokens are stored as hashes, never raw tokens.
+- [x] Add responsive verification, resend, forgot-password, reset-password screens, and a profile sign-out action.
+- [x] Apply and verify production D1 migration `0006_auth_lifecycle.sql`; the `email_verified_at`, `auth_rate_limits`, and `auth_tokens` schema objects are present and the migration is recorded.
+- [x] Production build, AI Centre stale-data regression, desktop/mobile account-screen tests, and authenticated local-D1 trading/rate-limit integration passed in [workflow run 38878038316](https://github.com/tomx2000xx-ship-it/pexoriy-design/actions/runs/38878038316).
+- [ ] Configure an owned sending domain and `AUTH_EMAIL_FROM` in Cloudflare; live email delivery remains gated until the sender domain is onboarded and tested.
+- [ ] Run provider-backed email delivery, verification, and password-reset end-to-end tests after sender configuration.
+
 
 ## Launch work remaining
 
 ### P0 — Account, identity, and session lifecycle
-- [ ] Email verification and resend flow with a configured transactional email provider.
-- [ ] Forgot-password/reset flow with single-use, expiring tokens and abuse/rate limits.
-- [ ] Session expiry/revocation behavior, login throttling, registration/login rate limits, and account lock/recovery UX.
+- [x] Server-side email-verification/resend and single-use password-reset flows; live sending is gated on sender-domain configuration.
+- [x] Session expiry checks, reset-time session revocation, sign-out UI, and registration/login/recovery rate limits.
+- [ ] Configure and verify the production sender domain; then test real email delivery end to end.
+- [ ] Add account-lock policy and complete provider-backed recovery tests.
 - [ ] Make registered-account paths use persisted server state; keep demo mode explicitly isolated so demo balances cannot masquerade as account balances.
 - [ ] Security review for cookie flags, CSRF/origin protections, password handling, audit events, and enumeration/rate-limit behavior.
 
