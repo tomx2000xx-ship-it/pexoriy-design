@@ -139,6 +139,7 @@ test('AI execution remains disabled regardless of the displayed AI Credit balanc
 });
 
 test('AI Credit Store shows real network logos and live SOL and GRAM token equivalents', async ({ page }) => {
+  await page.route('**/api/payments/solana/config', route => route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({enabled:false})}));
   await page.route('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', route => route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({solana:{usd:100}})}));
   await page.route('https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd', route => route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({'the-open-network':{usd:5}})}));
   await enterApp(page);
