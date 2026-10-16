@@ -103,6 +103,29 @@ async function consumeAuthRateLimit(request, env, scope, identity, limit, window
   return Number(row?.attempts || 0) <= limit;
 }
 
+
+function authEmailConfigured(env) {
+  return typeof env.EMAIL?.send === "function" && typeof env.AUTH_EMAIL_FROM === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(env.AUTH_EMAIL_FROM.trim());
+}
+async function sendAuthEmail(env, to, subject, link, purpose) {
+  if (!authEmailConfigured(env)) return false;
+  const verify=purpose==="email_verification", action=verify?"verify your email address":"reset your password";
+  const text="Use this secure Pexoriy link to "+action+":\n\n"+link+"\n\nThis link expires shortly and can be used once. If you did not request this, ignore this email.";
+  const html="<div style=\"font-family:Arial,sans-serif;line-height:1.6;color:#20221c\"><h1 style=\"color:#7dbb29\">Pexoriy</h1><p>Use the link below to "+action+".</p><p><a href=\""+link+"\" style=\"display:inline-block;padding:12px 18px;background:#b7f34a;color:#171912;text-decoration:none;border-radius:8px;font-weight:700\">"+(verify?"Verify email":"Reset password")+"</a></p><p>This link expires shortly and can be used once.</p><p>If you did not request this, ignore this email. Pexoriy will never ask for your password, private key, or seed phrase.</p></div>";
+  try { await env.EMAIL.send({to,from:{email:env.AUTH_EMAIL_FROM.trim(),name:"Pexoriy"},subject,text,html}); return true; }
+  catch(error) { console.error("Pexoriy transactional email failed:",error?.code||"delivery_error"); return false; }
+}
+async function issueAuthToken(env, request, userId, purpose) {
+  const token=randomHex(32), tokenHash=await sha256Hex(token), expiresAt=new Date(Date.now()+(purpose==="email_verification"?60:30)*60*1000).toISOString(), id=crypto.randomUUID();
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM auth_tokens WHERE user_id=? AND purpose=? AND consumed_at IS NULL").bind(userId,purpose),
+    env.DB.prepare("INSERT INTO auth_tokens (id,user_id,purpose,token_hash,expires_at) VALUES (?,?,?,?,?)").bind(id,userId,purpose,tokenHash,expiresAt),
+  ]);
+  const url=new URL(request.url);url.pathname="/";url.search="";url.searchParams.set("auth",purpose==="email_verification"?"verify":"reset");url.searchParams.set("token",token);
+  const account=await env.DB.prepare("SELECT email FROM users WHERE id=?").bind(userId).first();
+  return {sent:await sendAuthEmail(env,account?.email||"",purpose==="email_verification"?"Verify your Pexoriy email":"Reset your Pexoriy password",url.toString(),purpose),expiresAt};
+}
+
 async function readJson(request) {
   try {
     const value = await request.json();
@@ -130,11 +153,11 @@ async function currentUser(request, env) {
   if (!token || token.length > 200) return null;
   const tokenHash = await sha256Hex(token);
   const session = await env.DB.prepare(
-    `SELECT u.id, u.email, u.display_name, u.status, s.id AS session_id, s.expires_at
+    `SELECT u.id, u.email, u.display_name, u.status, u.email_verified_at, s.id AS session_id, s.expires_at
      FROM auth_sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token_hash = ? AND s.revoked_at IS NULL`,
   ).bind(tokenHash).first();
-  if (!session || session.status !== "active" || Date.parse(session.expires_at) <= Date.now()) return null;
+  if (!session || session.status !== "active" || !session.email_verified_at || Date.parse(session.expires_at) <= Date.now()) return null;
   return session;
 }
 
@@ -160,6 +183,7 @@ async function publicUser(env, user) {
     id: user.id,
     email: user.email,
     displayName: user.display_name,
+    emailVerified: Boolean(user.email_verified_at),
     balances: await balancesForUser(env, user.id),
   };
 }
@@ -331,59 +355,89 @@ async function handleApi(request, env) {
   }
 
   if (path === "/api/auth/register" && request.method === "POST") {
-    if (!(await consumeAuthRateLimit(request, env, "register-ip", "", 8, 3600))) {
-      return json({ error: "Too many account-creation attempts. Please wait before trying again." }, 429, { "retry-after": "3600" });
-    }
-    const body = await readJson(request);
-    const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
-    const displayName = typeof body?.displayName === "string" ? body.displayName.trim() : "";
-    const password = typeof body?.password === "string" ? body.password : "";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
-      return json({ error: "Enter a valid email address." }, 400);
-    }
-    if (displayName.length < 2 || displayName.length > 60) {
-      return json({ error: "Display name must be between 2 and 60 characters." }, 400);
-    }
-    if (password.length < 12 || password.length > 128) {
-      return json({ error: "Password must be 12–128 characters." }, 400);
-    }
-    if (!(await consumeAuthRateLimit(request, env, "register-email", email, 3, 3600))) {
-      return json({ error: "Too many account-creation attempts. Please wait before trying again." }, 429, { "retry-after": "3600" });
-    }
-
-    const userId = crypto.randomUUID();
-    const sessionId = crypto.randomUUID();
-    const token = randomHex(32);
-    const salt = randomHex(16);
-    const hash = await passwordHash(password, salt);
-    const tokenHash = await sha256Hex(token);
-    const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000).toISOString();
+    if (!(await consumeAuthRateLimit(request,env,"register-ip","",8,3600))) return json({error:"Too many account-creation attempts. Please wait before trying again."},429,{"retry-after":"3600"});
+    const body=await readJson(request),email=typeof body?.email==="string"?body.email.trim().toLowerCase():"",displayName=typeof body?.displayName==="string"?body.displayName.trim():"",password=typeof body?.password==="string"?body.password:"";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254) return json({error:"Enter a valid email address."},400);
+    if (displayName.length<2||displayName.length>60) return json({error:"Display name must be between 2 and 60 characters."},400);
+    if (password.length<12||password.length>128) return json({error:"Password must be 12–128 characters."},400);
+    if (!(await consumeAuthRateLimit(request,env,"register-email",email,3,3600))) return json({error:"Too many account-creation attempts. Please wait before trying again."},429,{"retry-after":"3600"});
+    const testBypass=env.PEXORIY_TEST_AUTH_BYPASS==="1";
+    if (!testBypass&&!authEmailConfigured(env)) return json({error:"Account creation is temporarily unavailable because email verification is not configured yet.",emailSetupRequired:true},503);
+    const userId=crypto.randomUUID(),sessionId=crypto.randomUUID(),token=randomHex(32),salt=randomHex(16),hash=await passwordHash(password,salt),tokenHash=await sha256Hex(token),expiresAt=new Date(Date.now()+SESSION_TTL_SECONDS*1000).toISOString();
     try {
-      const welcomeTcTransactionId = crypto.randomUUID();
-      const welcomeAcTransactionId = crypto.randomUUID();
+      const tcTx=crypto.randomUUID(),acTx=crypto.randomUUID();
       await env.DB.batch([
-        env.DB.prepare("INSERT INTO users (id, email, display_name, password_salt, password_hash) VALUES (?, ?, ?, ?, ?)")
-          .bind(userId, email, displayName, salt, hash),
-        env.DB.prepare("INSERT INTO ledger_accounts (account_key, owner_user_id, currency, account_type) VALUES (?, ?, 'TC', 'user'), (?, ?, 'AC', 'user'), (?, ?, 'PXY', 'user')")
-          .bind(`user:${userId}:TC`, userId, `user:${userId}:AC`, userId, `user:${userId}:PXY`, userId),
-        env.DB.prepare("INSERT INTO auth_sessions (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)")
-          .bind(sessionId, userId, tokenHash, expiresAt),
-        env.DB.prepare("INSERT INTO audit_events (id, actor_user_id, event_type, entity_type, entity_id, request_id, details_json) VALUES (?, ?, 'account.registered', 'user', ?, ?, '{}')")
-          .bind(crypto.randomUUID(), userId, userId, requestId),
-        env.DB.prepare("INSERT INTO ledger_transactions (id, idempotency_key, user_id, event_type, status, metadata_json) VALUES (?, ?, ?, 'account.welcome_tc_issued', 'pending', '{}'), (?, ?, ?, 'account.welcome_ac_issued', 'pending', '{}')")
-          .bind(welcomeTcTransactionId, `welcome-tc:${userId}`, userId, welcomeAcTransactionId, `welcome-ac:${userId}`, userId),
-        env.DB.prepare("INSERT INTO ledger_postings (id, transaction_id, account_key, amount_atoms, currency) VALUES (?, ?, ?, 12450, 'TC'), (?, ?, 'system:issuance:TC', -12450, 'TC'), (?, ?, ?, 840, 'AC'), (?, ?, 'system:issuance:AC', -840, 'AC')")
-          .bind(crypto.randomUUID(), welcomeTcTransactionId, `user:${userId}:TC`, crypto.randomUUID(), welcomeTcTransactionId, crypto.randomUUID(), welcomeAcTransactionId, `user:${userId}:AC`, crypto.randomUUID(), welcomeAcTransactionId),
-        env.DB.prepare("UPDATE ledger_transactions SET status = 'posted', posted_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id IN (?, ?)")
-          .bind(welcomeTcTransactionId, welcomeAcTransactionId),
+        env.DB.prepare("INSERT INTO users (id,email,display_name,password_salt,password_hash,email_verified_at) VALUES (?,?,?,?,?,?)").bind(userId,email,displayName,salt,hash,testBypass?new Date().toISOString():null),
+        env.DB.prepare("INSERT INTO ledger_accounts (account_key,owner_user_id,currency,account_type) VALUES (?,?,'TC','user'),(?,?,'AC','user'),(?,?,'PXY','user')").bind("user:"+userId+":TC",userId,"user:"+userId+":AC",userId,"user:"+userId+":PXY",userId),
+        ...(testBypass?[env.DB.prepare("INSERT INTO auth_sessions (id,user_id,token_hash,expires_at) VALUES (?,?,?,?)").bind(sessionId,userId,tokenHash,expiresAt)]:[]),
+        env.DB.prepare("INSERT INTO audit_events (id,actor_user_id,event_type,entity_type,entity_id,request_id,details_json) VALUES (?,?,'account.registered','user',?,?,'{}')").bind(crypto.randomUUID(),userId,userId,requestId),
+        env.DB.prepare("INSERT INTO ledger_transactions (id,idempotency_key,user_id,event_type,status,metadata_json) VALUES (?, ?, ?, 'account.welcome_tc_issued','pending','{}'),(?, ?, ?, 'account.welcome_ac_issued','pending','{}')").bind(tcTx,"welcome-tc:"+userId,userId,acTx,"welcome-ac:"+userId,userId),
+        env.DB.prepare("INSERT INTO ledger_postings (id,transaction_id,account_key,amount_atoms,currency) VALUES (?, ?, ?, 12450,'TC'),(?, ?, 'system:issuance:TC',-12450,'TC'),(?, ?, ?,840,'AC'),(?, ?, 'system:issuance:AC',-840,'AC')").bind(crypto.randomUUID(),tcTx,"user:"+userId+":TC",crypto.randomUUID(),tcTx,crypto.randomUUID(),acTx,"user:"+userId+":AC",crypto.randomUUID(),acTx),
+        env.DB.prepare("UPDATE ledger_transactions SET status='posted',posted_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id IN (?,?)").bind(tcTx,acTx),
       ]);
-    } catch (error) {
-      const message = String(error?.message || "");
-      if (/unique|constraint/i.test(message)) return json({ error: "An account with that email may already exist." }, 409);
-      return json({ error: "Account creation could not be completed." }, 500);
+    } catch(error) {
+      if (/unique|constraint/i.test(String(error?.message||""))) return json({ok:true,verificationRequired:true,message:"If this address can be registered, verification instructions will be sent. If you already have an account, sign in."},202);
+      return json({error:"Account creation could not be completed."},500);
     }
-    const user = { id: userId, email, display_name: displayName };
-    return json({ user: await publicUser(env, user) }, 201, { "set-cookie": sessionCookie(token) });
+    const user={id:userId,email,display_name:displayName,email_verified_at:testBypass?new Date().toISOString():null};
+    if(testBypass)return json({user:await publicUser(env,user)},201,{"set-cookie":sessionCookie(token)});
+    const delivery=await issueAuthToken(env,request,userId,"email_verification");
+    if(!delivery.sent)return json({error:"Your account record was created, but the verification email could not be delivered. Try resending after email service setup.",accountCreated:true},503);
+    return json({ok:true,verificationRequired:true,message:"Account created. Check your inbox for a verification link before signing in."},201);
+  }
+
+  if (path === "/api/auth/verify-email" && request.method === "POST") {
+    if(!(await consumeAuthRateLimit(request,env,"verify-ip","",10,3600)))return json({error:"Too many verification attempts. Request a new link later."},429,{"retry-after":"3600"});
+    const body=await readJson(request),raw=typeof body?.token==="string"?body.token.trim():"";
+    if(!/^[a-f0-9]{64}$/i.test(raw))return json({error:"This verification link is invalid or expired. Request a new one."},400);
+    const hash=await sha256Hex(raw),record=await env.DB.prepare("SELECT id,user_id,expires_at,consumed_at FROM auth_tokens WHERE token_hash=? AND purpose='email_verification'").bind(hash).first();
+    if(!record||record.consumed_at||Date.parse(record.expires_at)<=Date.now())return json({error:"This verification link is invalid or expired. Request a new one."},400);
+    const marker=new Date().toISOString()+"#"+crypto.randomUUID(),verifiedAt=new Date().toISOString();
+    await env.DB.batch([
+      env.DB.prepare("UPDATE auth_tokens SET consumed_at=? WHERE id=? AND consumed_at IS NULL AND expires_at>?").bind(marker,record.id,verifiedAt),
+      env.DB.prepare("UPDATE users SET email_verified_at=COALESCE(email_verified_at,?),updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND EXISTS (SELECT 1 FROM auth_tokens WHERE id=? AND consumed_at=?)").bind(verifiedAt,record.user_id,record.id,marker),
+    ]);
+    const verified=await env.DB.prepare("SELECT email_verified_at FROM users WHERE id=?").bind(record.user_id).first();
+    if(!verified?.email_verified_at)return json({error:"This verification link has already been used or expired. Request a new one."},400);
+    await appendAudit(env,{actorUserId:record.user_id,eventType:"auth.email_verified",entityType:"user",entityId:record.user_id,requestId});
+    return json({ok:true,message:"Email verified. You can now sign in securely."});
+  }
+
+  if (path === "/api/auth/resend-verification" && request.method === "POST") {
+    const body=await readJson(request),email=typeof body?.email==="string"?body.email.trim().toLowerCase():"";
+    if(!(await consumeAuthRateLimit(request,env,"resend-ip","",5,3600))||!(await consumeAuthRateLimit(request,env,"resend-email",email,3,3600)))return json({error:"Too many requests. Please wait before trying again."},429,{"retry-after":"3600"});
+    if(!authEmailConfigured(env))return json({error:"Email delivery is not configured yet. Verification links cannot be sent."},503);
+    const user=await env.DB.prepare("SELECT id,email_verified_at FROM users WHERE email=?").bind(email).first();
+    if(user&&!user.email_verified_at)await issueAuthToken(env,request,user.id,"email_verification");
+    return json({ok:true,message:"If the account needs verification, a new link will be sent."});
+  }
+
+  if (path === "/api/auth/forgot-password" && request.method === "POST") {
+    const body=await readJson(request),email=typeof body?.email==="string"?body.email.trim().toLowerCase():"";
+    if(!(await consumeAuthRateLimit(request,env,"forgot-ip","",5,3600))||!(await consumeAuthRateLimit(request,env,"forgot-email",email,3,3600)))return json({error:"Too many recovery requests. Please wait before trying again."},429,{"retry-after":"3600"});
+    if(!authEmailConfigured(env))return json({error:"Password recovery email is not configured yet."},503);
+    const user=await env.DB.prepare("SELECT id,email_verified_at FROM users WHERE email=? AND status='active'").bind(email).first();
+    if(user?.email_verified_at)await issueAuthToken(env,request,user.id,"password_reset");
+    return json({ok:true,message:"If a verified account matches that address, password reset instructions will be sent."});
+  }
+
+  if (path === "/api/auth/reset-password" && request.method === "POST") {
+    if(!(await consumeAuthRateLimit(request,env,"reset-ip","",10,3600)))return json({error:"Too many password reset attempts. Request a new link later."},429,{"retry-after":"3600"});
+    const body=await readJson(request),raw=typeof body?.token==="string"?body.token.trim():"",password=typeof body?.password==="string"?body.password:"";
+    if(!/^[a-f0-9]{64}$/i.test(raw))return json({error:"This reset link is invalid or expired. Request a new one."},400);
+    if(password.length<12||password.length>128)return json({error:"Password must be 12–128 characters."},400);
+    const tokenHash=await sha256Hex(raw),record=await env.DB.prepare("SELECT id,user_id,expires_at,consumed_at FROM auth_tokens WHERE token_hash=? AND purpose='password_reset'").bind(tokenHash).first();
+    if(!record||record.consumed_at||Date.parse(record.expires_at)<=Date.now())return json({error:"This reset link is invalid or expired. Request a new one."},400);
+    const salt=randomHex(16),hash=await passwordHash(password,salt),marker=new Date().toISOString()+"#"+crypto.randomUUID(),nowIso=new Date().toISOString();
+    await env.DB.batch([
+      env.DB.prepare("UPDATE auth_tokens SET consumed_at=? WHERE id=? AND consumed_at IS NULL AND expires_at>?").bind(marker,record.id,nowIso),
+      env.DB.prepare("UPDATE users SET password_salt=?,password_hash=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND EXISTS (SELECT 1 FROM auth_tokens WHERE id=? AND consumed_at=?)").bind(salt,hash,record.user_id,record.id,marker),
+      env.DB.prepare("UPDATE auth_sessions SET revoked_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id=? AND revoked_at IS NULL").bind(record.user_id),
+    ]);
+    const changed=await env.DB.prepare("SELECT password_hash FROM users WHERE id=?").bind(record.user_id).first();
+    if(!changed||!constantTimeEqual(changed.password_hash,hash))return json({error:"This reset link has already been used or expired. Request a new one."},400);
+    await appendAudit(env,{actorUserId:record.user_id,eventType:"auth.password_reset",entityType:"user",entityId:record.user_id,requestId});
+    return json({ok:true,message:"Password updated. Sign in with your new password."},200,{"set-cookie":clearSessionCookie()});
   }
 
   if (path === "/api/auth/login" && request.method === "POST") {
@@ -396,7 +450,7 @@ async function handleApi(request, env) {
     }
     if (!email || !password || password.length > 128) return json({ error: "Email and password are required." }, 400);
     const user = await env.DB.prepare(
-      "SELECT id, email, display_name, password_salt, password_hash, status FROM users WHERE email = ?",
+      "SELECT id, email, display_name, password_salt, password_hash, status, email_verified_at FROM users WHERE email = ?",
     ).bind(email).first();
     if (!user || user.status !== "active") return json({ error: "Email or password is incorrect." }, 401);
     const attemptedHash = await passwordHash(password, user.password_salt);
@@ -404,6 +458,7 @@ async function handleApi(request, env) {
       await appendAudit(env, { eventType: "auth.login_failed", entityType: "user", entityId: user.id, requestId });
       return json({ error: "Email or password is incorrect." }, 401);
     }
+    if (!user.email_verified_at) return json({ error: "Verify your email address before signing in. You can request a new verification link.", emailUnverified: true }, 403);
     const sessionId = crypto.randomUUID();
     const token = randomHex(32);
     const tokenHash = await sha256Hex(token);

@@ -45,6 +45,12 @@ Do not hand off for owner testing until all launch-critical site functionality i
 
 ## Stage 3 progress — account security and identity flows
 
+- [x] Implement single-use email-verification tokens (60-minute expiry), resend verification, password-reset tokens (30-minute expiry), reset-time session revocation, and server-side email delivery through the Cloudflare Email Service binding.
+- [x] Require verified email before sign-in or session use; verification and reset tokens are stored as hashes, never raw tokens.
+- [x] Add responsive verification, resend, forgot-password, and reset-password account screens.
+- [x] Add a profile sign-out action that revokes the current session through the Worker endpoint.
+- [ ] Configure an owned sending domain and `AUTH_EMAIL_FROM` in Cloudflare; live email delivery remains gated until the sender domain is onboarded and tested.
+
 - [x] Add durable D1-backed registration and sign-in throttles keyed by hashed client/IP and normalized identity; return HTTP 429 with retry guidance when limits are exceeded.
 - [x] Reject unsafe cross-origin mutation requests when the request does not provide a matching Origin (or same-origin Fetch Metadata).
 - [x] Add a page-level React error boundary so a single screen rendering exception shows a recoverable message instead of leaving the entire content area blank; make AI position P&L tolerate unavailable market quotes.

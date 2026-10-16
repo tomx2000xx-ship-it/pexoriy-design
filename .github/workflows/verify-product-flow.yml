@@ -43,7 +43,7 @@ jobs:
           npx wrangler d1 migrations apply pexoriy-core --local
           NOW_MS=$(node -e 'process.stdout.write(String(Date.now()))')
           npx wrangler d1 execute pexoriy-core --local --command "INSERT INTO market_snapshots (id, provider, symbol, price_micros, provider_timestamp_ms, validation_status, model_version) VALUES ('ci-market-btc', 'ci-fixture', 'BTC/USDT', 67482200000, $NOW_MS, 'valid', 'ci-test')"
-          npx wrangler dev --local --ip 127.0.0.1 --port 8787 > /tmp/pexoriy-local-worker.log 2>&1 &
+          npx wrangler dev --local --var PEXORIY_TEST_AUTH_BYPASS:1 --ip 127.0.0.1 --port 8787 > /tmp/pexoriy-local-worker.log 2>&1 &
           worker_pid=$!
           trap 'kill "$worker_pid" 2>/dev/null || true' EXIT
           ready=0

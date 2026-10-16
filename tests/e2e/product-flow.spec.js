@@ -33,6 +33,40 @@ async function goTo(page, label) {
   await nav.getByRole('button', { name: visibleLabel, exact: true }).click();
 }
 
+test('registration requires email verification and provides password recovery screens', async ({ page }) => {
+  await page.route('**/api/auth/register', route => route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({ok:true,verificationRequired:true,message:'Check your inbox for a verification link before signing in.'})}));
+  await page.goto('/');
+  await page.getByRole('button', {name:/Log in or create account/}).click();
+  await expect(page.getByRole('heading',{name:'Log in to Pexoriy'})).toBeVisible();
+  await page.getByRole('button',{name:'Forgot password?'}).click();
+  await expect(page.getByRole('heading',{name:'Recover your account'})).toBeVisible();
+  await page.getByRole('button',{name:'Back to sign in'}).click();
+  await page.getByRole('button',{name:'Create an account'}).click();
+  await page.getByLabel('Display name').fill('Verified User');
+  await page.getByLabel('Email address').fill('verified@example.test');
+  await page.getByLabel('Password').fill('Verified-Test-Password-932!');
+  await page.getByRole('button',{name:'Create account'}).click();
+  await expect(page.getByRole('heading',{name:'Check your inbox'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Resend verification email'})).toBeVisible();
+});
+
+test('verification links open the account verification screen', async ({ page }) => {
+  await page.route('**/api/auth/verify-email', route => route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,message:'Email verified. You can now sign in securely.'})}));
+  await page.goto('/?auth=verify&token='+'a'.repeat(64));
+  await expect(page.getByRole('heading',{name:'Verify your email'})).toBeVisible();
+  await expect(page.getByText('Email verified. You can now sign in securely.')).toBeVisible();
+});
+
+test('password reset requires matching new passwords', async ({ page }) => {
+  await page.route('**/api/auth/reset-password', route => route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,message:'Password updated. Sign in with your new password.'})}));
+  await page.goto('/?auth=reset&token='+'b'.repeat(64));
+  await expect(page.getByRole('heading',{name:'Choose a new password'})).toBeVisible();
+  await page.getByLabel('Password').fill('New-Verified-Password-932!');
+  await page.getByLabel('Confirm new password').fill('New-Verified-Password-932!');
+  await page.getByRole('button',{name:'Update password'}).click();
+  await expect(page.getByRole('heading',{name:'Log in to Pexoriy'})).toBeVisible();
+});
+
 test('Practice visibly connects to AI Trading and blocks over-balance orders', async ({ page }) => {
   await enterApp(page);
   await goTo(page, 'Practice Trading');

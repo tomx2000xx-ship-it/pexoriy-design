@@ -16,6 +16,7 @@
       "migrations_dir": "migrations"
     }
   ],
+  "send_email": [{ "name": "EMAIL" }],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
