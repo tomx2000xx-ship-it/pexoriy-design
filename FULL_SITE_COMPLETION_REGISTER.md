@@ -40,10 +40,21 @@ Do not hand off for owner testing until all launch-critical site functionality i
 - [ ] Security review for cookie flags, CSRF/origin protections, password handling, audit events, and enumeration/rate-limit behavior.
 
 ### P0 — Live market data
-- [x] Implement provisional server-side market-data adapter for BTC, ETH, SOL, DOGE, and GRAM-labelled TON market data (CoinGecko public endpoint; provider approval/terms still pending).
-- [x] Validate provider timestamps and positive prices, store valid snapshots in D1, and return provider/source, fetched time, and per-market update time.
-- [x] Enforce stale/missing quote handling in the API and disable affected practice/AI trade actions; render an explicit paused chart state rather than crashing when a quote is unavailable.
-- [ ] Confirm provider terms, supported symbols, rate limits, regional access, and fallback policy before launch.
+- [x] Add server-side market feed for BTC, ETH, SOL, DOGE, and GRAM, with provider timestamps, positive-price/precision checks, and D1 snapshots.
+- [x] Use Binance public Spot recent-trades data as primary, with official Binance public-data host failover; use timestamped OKX Spot tickers as a secondary fallback for BTC, ETH, SOL, and DOGE.
+- [x] Use GRAMUSDT rather than the retired TONUSDT ticker after Binance's announced TON-to-GRAM rebrand. Do not assume OKX has a GRAM pair; its migration notice said the prior TON spot pairs were delisted pending a separate GRAM listing announcement.
+- [x] Keep provider timestamps separate from Worker fetch time; only exchange-timestamped, validated quotes can be marked live or used to open/close simulated positions.
+- [x] Keep stale/missing quotes non-tradable and return a clear market-paused state; retain only still-fresh cached snapshots when providers are unavailable.
+- [x] Add deterministic tests for timestamp/price normalization and preserve the deployed API smoke gate.
+- [ ] Confirm the new multi-provider adapter returns fresh quotes from the deployed Worker in CI and repeatedly over time, including GRAM.
+- [ ] Review provider terms, rate limits, regional reachability, quote source disclosure, and commercial-use requirements before public launch.
+
+#### Market-feed research decision (16 October 2026)
+- Primary: Binance public Spot API, GET /api/v3/trades?symbol=...&limit=1; this provides the latest actual trade price and exchange trade timestamp. Use the market-data-only host first, then official Binance API host alternatives.
+- Secondary: OKX public Spot ticker with its exchange timestamp for BTC/USDT, ETH/USDT, SOL/USDT, and DOGE/USDT only when the Binance quote cannot be validated.
+- GRAM: Binance's official announcement says the GRAM/USDT Spot pair opened after the TON-to-GRAM rebrand; the adapter must use GRAMUSDT, never silently substitute the retired TONUSDT symbol. [Binance rebrand announcement](https://www.binance.com/en/support/announcement/detail/fe307fba935b44698fde4db01e84a7eb).
+- Why not rely on CoinGecko's keyless public endpoint for trade execution: its public data can be cached and may not meet a strict 90-second quote freshness gate under all conditions. Its Demo plan documents a 60-second starting freshness and rate limits, so it remains a possible display/reference source but is not the primary execution quote.
+- Safety policy: no fabricated prices, no marking Worker fetch time as exchange time, no silently mixing quote currencies, no new simulated trade when the selected market has no valid quote inside the freshness window. An available provider is not considered production-ready until deployed smoke checks and repeat observations pass.
 
 ### P0 — Server-authoritative practice trading
 - [ ] Implement authenticated order/open-position/close-position endpoints; current positions endpoint is read-only.
