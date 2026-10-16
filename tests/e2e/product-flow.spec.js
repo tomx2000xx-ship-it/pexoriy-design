@@ -413,3 +413,11 @@ test('learning and presale preview remain reachable on mobile', async ({ page })
   await goTo(page, 'PXY Presale Preview');
   await expect(page.getByRole('heading', { name: /Nothing is for sale yet/ })).toBeVisible();
 });
+
+
+test('public landing exposes a presale preview without requiring sign-in', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'PXY preview', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /Nothing is for sale yet/ })).toBeVisible();
+  await expect(page.getByText(/No purchase button, payment order, wallet transaction/)).toBeVisible();
+});
