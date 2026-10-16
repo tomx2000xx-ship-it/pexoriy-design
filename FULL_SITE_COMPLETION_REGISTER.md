@@ -231,3 +231,14 @@ Proceed next with the AI execution service rather than polishing more UI. Requir
 4. Route any AI-proposed trade through the same server-authoritative quote freshness, risk/exposure, position, and TC ledger rules as manual practice trades.
 5. Persist session state and activity history; ensure the UI can never create an AI trade or charge AC from client-side state alone.
 6. Add provider failure, timeout, duplicate-request, concurrent-session, insufficient-AC, insufficient-TC, and ledger-reconciliation tests before enabling AI execution.
+
+## AI backend foundation — 16 October 2026
+
+- [x] Added the Cloudflare Workers AI binding to `wrangler.jsonc` as `env.AI`. Official Cloudflare documentation confirms the binding is configured with `"ai": { "binding": "AI" }` and does not require a separate model-provider API key.
+- [x] Added migration `0007_ai_credit_half_units.sql` so the existing UI's 1.5 AC billable-operation cost can be represented accurately without editing immutable posted ledger rows. The migration adds one balanced adjustment transaction that doubles existing AC ledger atoms; the user-facing API divides AC atoms by two, new welcome credits are issued as 1,680 half-unit atoms for 840 displayed AC, and native SOL/GRAM purchases now post twice the package's displayed AC amount.
+- [x] Validated the migration's balancing logic and posting-trigger behavior against a local SQLite schema simulation. The migration has **not** yet been applied to production D1; it must be applied through the normal Wrangler migration/deployment process.
+- [ ] Implement server-authoritative AI sessions and persisted proposals with unique idempotency keys.
+- [ ] Implement AC reservation before provider work, charge 1.5 AC only at the agreed successful billable point, and release reservations on provider failure, cancellation, expiry, or failed trade execution.
+- [ ] Route AI-confirmed trades through the existing fresh-quote, exposure, position, fee, and TC ledger controls. No AI trade action may bypass the manual trading service.
+- [ ] Choose and verify the model for market-setup generation, then add timeouts, output validation, abuse limits, and provider-failure tests.
+- [ ] Keep AI execution disabled in the UI until the server endpoints, AC settlement, persistence, and reconciliation tests pass.
