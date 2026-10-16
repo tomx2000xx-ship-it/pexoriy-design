@@ -37,8 +37,8 @@ function makeTransaction({ reference, recipient, lamports = 5_000_000_000, err =
 }
 
 test("native SOL verification requires matching reference, recipient and exact amount", () => {
-  const recipient = "11111111111111111111111111111111";
-  const reference = "11111111111111111111111111111111";
+  const recipient = encodeBase58(new Uint8Array(32).fill(3));
+  const reference = encodeBase58(new Uint8Array(32).fill(1));
   const tx = makeTransaction({ reference, recipient });
   assert.deepEqual(validateSolPaymentTransaction(tx, { recipient, reference, expectedLamports: 5_000_000_000 }), { valid: true, receivedLamports: 5_000_000_000 });
   assert.throws(() => validateSolPaymentTransaction(makeTransaction({ reference: encodeBase58(new Uint8Array(32).fill(2)), recipient }), {
