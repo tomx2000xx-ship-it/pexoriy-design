@@ -265,3 +265,28 @@ Proceed next with the AI execution service rather than polishing more UI. Requir
 - [x] The TON Connect manifest now points to `/pexoriy-icon.png`, served by the Worker from the existing Pexoriy brand mark as a real 180×180 PNG. The Worker also adds public CORS and cache headers to `/tonconnect-manifest.json`, matching TON Connect's documented manifest requirements. <https://docs.ton.org/applications/ton-connect/get-started>
 - [x] AI inference parsing now handles Cloudflare Workers AI's documented chat-completion response shape (`choices[0].message.content`) and uses the currently documented `@cf/google/gemma-4-26b-a4b-it` model with reasoning disabled. <https://developers.cloudflare.com/workers-ai/get-started/workers-wrangler/>
 - [ ] These Worker and asset changes still need deployment and live smoke tests. The repository code is updated, but the currently observed Cloudflare deployment predates this implementation pass.
+
+
+## Verified growth, learning and presale implementation — 16 October 2026
+
+### Implemented in the staged scope branch
+
+- [x] Added migration `0009_verified_growth_learning_presale.sql` for unique referral codes and attribution, learning lessons/attempts/progress, and an explicit presale settings row. The default is `preview_enabled=1`, `sale_enabled=0`, `launch_state='disabled'`.
+- [x] Seeded five short learning lessons covering market pairs and quote freshness, long/short, position sizing and leverage risk, AI Credits and AI proposals, and shared challenge rules.
+- [x] Added authenticated server endpoints for learning content and quiz attempts. Correct answers remain server-side; the server scores attempts, rate-limits attempts, persists progress, issues TC through the existing balanced ledger with a unique idempotency key, and records an audit event.
+- [x] Added server-verified mission claim endpoints. The server checks the underlying trading/AI/challenge/learning records before a TC reward can be posted. Client-only mission completion no longer issues account-mode TC.
+- [x] Added unique referral links and registration attribution, plus verified activation based on email verification and a recorded simulated trade. TC referral rewards use idempotent ledger transactions; PXY is not issued through referrals.
+- [x] Added the Learning Center page, persistent mission/reward UI, referral stats/milestones based on server counts, and a PXY Presale Preview page reachable from the sidebar and PXY Token page.
+- [x] Added mobile-responsive styles for the learning and presale preview pages.
+- [x] Added a CI step that executes the ordered SQL migrations against an in-memory SQLite database and checks the expected tables and seeded lessons.
+- [x] The first staged implementation commit passed Worker syntax validation, ordered migration validation, unit tests, production bundle build, and the existing desktop/mobile Playwright flow. The follow-up UX-safety patch has been pushed to the scope branch and requires its own fresh CI result.
+
+### Still required before production activation
+
+- [ ] Review the latest CI run after the follow-up UX-safety patch; do not rely on the earlier successful run as evidence for the latest commit.
+- [ ] Verify production D1's applied migration history and backup status, then apply migration 0009 through the controlled Wrangler migration process. No production migration has been applied by this implementation pass.
+- [ ] Review referral abuse monitoring and campaign economics before broad promotion. Current safeguards include verified email, a unique attribution per referred account, a first simulated trade requirement, request rate limits, self-referral rejection, and idempotent rewards; they are foundational, not a complete device/IP fraud-detection system.
+- [ ] Complete a full-site UX review for long pages, navigation consistency, keyboard focus, touch targets, and screen-size behavior beyond the newly added pages.
+- [ ] Review the presale with qualified legal/compliance advisers for applicable jurisdictions, offering terms, eligibility, token contract/allocation, payment/refund, and consumer disclosures before any sale is enabled.
+- [ ] Confirm the production Worker and static assets deployed successfully, then smoke-test registration without a referral code, referral registration/activation, quiz retries and duplicate claims, mission eligibility rejection, account ledger display, and presale-disabled status.
+- [ ] Keep `sale_enabled=0`. The preview contains no purchase flow, and sale activation remains a separate owner-approved launch decision.
