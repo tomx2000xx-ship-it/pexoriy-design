@@ -165,93 +165,137 @@ async function handleApi(request, env) {
   }
 
   if (path === "/api/markets" && request.method === "GET") {
+    // GRAM is the post-migration ticker for the former TON asset. Do not query
+    // TONUSDT: Binance completed its GRAM rebrand and opened GRAM spot pairs.
     const marketCatalogue = [
-      { id: "bitcoin", symbol: "BTC/USDT", name: "Bitcoin" },
-      { id: "ethereum", symbol: "ETH/USDT", name: "Ethereum" },
-      { id: "solana", symbol: "SOL/USDT", name: "Solana" },
-      { id: "dogecoin", symbol: "DOGE/USDT", name: "Dogecoin" },
-      { id: "the-open-network", symbol: "GRAM/USDT", name: "Gram" },
+      { symbol: "BTC/USDT", name: "Bitcoin", binance: "BTCUSDT", okx: "BTC-USDT" },
+      { symbol: "ETH/USDT", name: "Ethereum", binance: "ETHUSDT", okx: "ETH-USDT" },
+      { symbol: "SOL/USDT", name: "Solana", binance: "SOLUSDT", okx: "SOL-USDT" },
+      { symbol: "DOGE/USDT", name: "Dogecoin", binance: "DOGEUSDT", okx: "DOGE-USDT" },
+      { symbol: "GRAM/USDT", name: "Gram", binance: "GRAMUSDT", okx: null },
     ];
     const now = Date.now();
+    const maxQuoteAgeMs = 90000;
     const latestRows = await env.DB.prepare(
       "SELECT symbol, price_micros, provider_timestamp_ms, validation_status, provider FROM market_snapshots WHERE id IN (SELECT id FROM market_snapshots s2 WHERE s2.symbol = market_snapshots.symbol ORDER BY provider_timestamp_ms DESC, received_at DESC LIMIT 1)",
     ).all().catch(() => ({ results: [] }));
     const latest = new Map((latestRows.results || []).map((row) => [row.symbol, row]));
+    const isUsableTimestamp = (timestamp) => Number.isFinite(timestamp) &&
+      timestamp <= now + 15000 && now - timestamp >= -15000 && now - timestamp <= maxQuoteAgeMs;
+    const toMarket = (market, row, statusOverride) => {
+      const timestamp = Number(row?.provider_timestamp_ms || 0);
+      const fresh = Boolean(row && row.validation_status === "valid" && isUsableTimestamp(timestamp));
+      return {
+        symbol: market.symbol, name: market.name,
+        price: row && Number(row.price_micros) > 0 ? Number(row.price_micros) / 1000000 : null,
+        updatedAt: row && timestamp > 0 ? new Date(timestamp).toISOString() : null,
+        provider: row?.provider || null,
+        status: statusOverride || (fresh ? "cached" : "stale"),
+      };
+    };
     const hasRecentCompleteCache = marketCatalogue.every((market) => {
       const row = latest.get(market.symbol);
-      return row && Number(row.provider_timestamp_ms) <= now + 15000 && now - Number(row.provider_timestamp_ms) <= 15000 && row.validation_status === "valid";
+      return row && row.validation_status === "valid" &&
+        isUsableTimestamp(Number(row.provider_timestamp_ms)) &&
+        now - Number(row.provider_timestamp_ms) <= 15000;
     });
     if (hasRecentCompleteCache) {
-      return json({ provider: "coingecko", quoteCurrency: "USD", fetchedAt: new Date(now).toISOString(), markets: marketCatalogue.map((market) => {
-        const row = latest.get(market.symbol);
-        return { symbol: market.symbol, name: market.name, price: Number(row.price_micros) / 1000000, updatedAt: new Date(Number(row.provider_timestamp_ms)).toISOString(), status: "live" };
-      }) });
+      const markets = marketCatalogue.map((market) => toMarket(market, latest.get(market.symbol), "cached"));
+      return json({ provider: "cached-snapshots", quoteCurrency: "USDT", fetchedAt: new Date(now).toISOString(), staleAfterMs: maxQuoteAgeMs, markets });
     }
 
-    try {
-      // Binance's public 24h ticker supplies both the latest traded price and
-      // closeTime, allowing us to reject quotes whose last trade is too old.
-      // GRAM is the product's display name for the TON network asset.
-      const providerSymbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "DOGEUSDT", "TONUSDT"];
-      const response = await fetch(
-        "https://api.binance.com/api/v3/ticker/24hr?symbols=" + encodeURIComponent(JSON.stringify(providerSymbols)),
-        { headers: { "accept": "application/json" }, signal: AbortSignal.timeout(7000) },
-      );
-      if (!response.ok) throw new Error("Primary market provider returned " + response.status);
-      const rows = await response.json();
-      const bySymbol = new Map((Array.isArray(rows) ? rows : []).map((row) => [row.symbol, row]));
-      const providerByMarket = new Map([
-        ["BTC/USDT", "BTCUSDT"], ["ETH/USDT", "ETHUSDT"], ["SOL/USDT", "SOLUSDT"],
-        ["DOGE/USDT", "DOGEUSDT"], ["GRAM/USDT", "TONUSDT"],
-      ]);
-      const freshMarkets = [];
-      const statements = [];
-      for (const market of marketCatalogue) {
-        const quote = bySymbol.get(providerByMarket.get(market.symbol));
-        const price = Number(quote?.lastPrice);
-        const providerTimestamp = Number(quote?.closeTime);
-        const age = now - providerTimestamp;
-        const valid = Number.isFinite(price) && price > 0 &&
-          Number.isSafeInteger(Math.round(price * 1000000)) &&
-          Number.isFinite(providerTimestamp) && age >= -15000 && age <= 90000;
-        const prior = latest.get(market.symbol);
-        if (!valid) {
-          freshMarkets.push({
-            symbol: market.symbol, name: market.name,
-            price: prior ? Number(prior.price_micros) / 1000000 : null,
-            updatedAt: prior ? new Date(Number(prior.provider_timestamp_ms)).toISOString() : null,
-            status: "stale",
-          });
-          continue;
-        }
-        const priceMicros = Math.round(price * 1000000);
-        statements.push(env.DB.prepare(
-          "INSERT INTO market_snapshots (id, provider, symbol, price_micros, provider_timestamp_ms, validation_status, model_version) VALUES (?, 'binance-public', ?, ?, ?, 'valid', 'market-feed-v2')",
-        ).bind(crypto.randomUUID(), market.symbol, priceMicros, providerTimestamp));
-        freshMarkets.push({
-          symbol: market.symbol, name: market.name, price,
-          change24h: Number.isFinite(Number(quote.priceChangePercent)) ? Number(quote.priceChangePercent) : null,
-          updatedAt: new Date(providerTimestamp).toISOString(), status: "live",
-        });
-      }
-      if (statements.length) await env.DB.batch(statements);
-      const hasTradableMarket = freshMarkets.some((market) => market.status === "live" && market.price > 0);
-      return json({ provider: "binance-public", quoteCurrency: "USDT", fetchedAt: new Date(now).toISOString(), staleAfterMs: 90000, markets: freshMarkets }, hasTradableMarket ? 200 : 503);
-    } catch {
-      const fallback = marketCatalogue.map((market) => {
-        const row = latest.get(market.symbol);
-        const timestamp = Number(row?.provider_timestamp_ms || 0);
-        const isFresh = Boolean(row && now - timestamp >= -15000 && now - timestamp <= 90000 && row.validation_status === "valid");
-        return {
-          symbol: market.symbol, name: market.name,
-          price: row ? Number(row.price_micros) / 1000000 : null,
-          updatedAt: row ? new Date(timestamp).toISOString() : null,
-          status: isFresh ? "cached" : "stale",
-        };
+    const binanceHosts = [
+      "https://data-api.binance.vision",
+      "https://api.binance.com",
+      "https://api-gcp.binance.com",
+      "https://api1.binance.com",
+    ];
+    const fetchJson = async (url) => {
+      const response = await fetch(url, {
+        headers: { "accept": "application/json" },
+        signal: AbortSignal.timeout(4500),
       });
-      const hasFreshFallback = fallback.some((market) => market.status === "cached");
-      return json({ provider: "coingecko", quoteCurrency: "USD", fetchedAt: new Date(now).toISOString(), staleAfterMs: 90000, markets: fallback, message: "Live market quotes are temporarily unavailable. Stale markets must not accept new simulated orders." }, hasFreshFallback ? 200 : 503);
+      if (!response.ok) throw new Error("Market provider returned HTTP " + response.status);
+      return response.json();
+    };
+    const fetchBinanceQuote = async (market) => {
+      for (const host of binanceHosts) {
+        try {
+          const quote = await fetchJson(host + "/api/v3/avgPrice?symbol=" + encodeURIComponent(market.binance));
+          const price = Number(quote?.price);
+          // Binance avgPrice.closeTime is the timestamp of the last trade, not
+          // the time our Worker fetched the response.
+          const timestamp = Number(quote?.closeTime);
+          if (Number.isFinite(price) && price > 0 &&
+              Number.isSafeInteger(Math.round(price * 1000000)) && isUsableTimestamp(timestamp)) {
+            return { price, timestamp, provider: "binance-spot-public", change24h: null };
+          }
+        } catch {
+          // Try the next official public-data hostname before changing provider.
+        }
+      }
+      return null;
+    };
+    const fetchOkxQuote = async (market) => {
+      if (!market.okx) return null;
+      try {
+        const payload = await fetchJson("https://www.okx.com/api/v5/market/ticker?instId=" + encodeURIComponent(market.okx));
+        const quote = payload?.code === "0" ? payload?.data?.[0] : null;
+        const price = Number(quote?.last);
+        const timestamp = Number(quote?.ts);
+        if (Number.isFinite(price) && price > 0 &&
+            Number.isSafeInteger(Math.round(price * 1000000)) && isUsableTimestamp(timestamp)) {
+          return { price, timestamp, provider: "okx-spot-public", change24h: null };
+        }
+      } catch {
+        // Keep this optional fallback isolated; stale data is never promoted to live.
+      }
+      return null;
+    };
+
+    const fetched = await Promise.all(marketCatalogue.map(async (market) => {
+      const primary = await fetchBinanceQuote(market);
+      if (primary) return { market, quote: primary };
+      const secondary = await fetchOkxQuote(market);
+      return { market, quote: secondary };
+    }));
+    const statements = [];
+    const markets = [];
+    for (const { market, quote } of fetched) {
+      if (quote) {
+        const priceMicros = Math.round(quote.price * 1000000);
+        statements.push(env.DB.prepare(
+          "INSERT INTO market_snapshots (id, provider, symbol, price_micros, provider_timestamp_ms, validation_status, model_version) VALUES (?, ?, ?, ?, ?, 'valid', 'market-feed-v3')",
+        ).bind(crypto.randomUUID(), quote.provider, market.symbol, priceMicros, quote.timestamp));
+        markets.push({
+          symbol: market.symbol, name: market.name, price: quote.price,
+          updatedAt: new Date(quote.timestamp).toISOString(), provider: quote.provider, status: "live",
+        });
+      } else {
+        const row = latest.get(market.symbol);
+        markets.push(toMarket(market, row));
+      }
     }
+    try {
+      if (statements.length) await env.DB.batch(statements);
+    } catch {
+      // A quote is not reported as persisted/live if its snapshot write failed.
+      for (const market of markets) {
+        if (market.status === "live") {
+          const row = latest.get(market.symbol);
+          Object.assign(market, toMarket(marketCatalogue.find((item) => item.symbol === market.symbol), row));
+        }
+      }
+    }
+    const hasTradableMarket = markets.some((market) =>
+      ["live", "cached"].includes(market.status) && Number.isFinite(Number(market.price)) && Number(market.price) > 0);
+    const providers = [...new Set(markets.filter((market) => ["live", "cached"].includes(market.status)).map((market) => market.provider).filter(Boolean))];
+    return json({
+      provider: providers.length === 1 ? providers[0] : providers.length ? "multi-provider" : "unavailable",
+      quoteCurrency: "USDT", fetchedAt: new Date(now).toISOString(), staleAfterMs: maxQuoteAgeMs,
+      markets,
+      ...(hasTradableMarket ? {} : { message: "Live market quotes are temporarily unavailable. Stale markets must not accept new simulated orders." }),
+    }, hasTradableMarket ? 200 : 503);
   }
 
   if (request.method !== "GET" && !requireSameOrigin(request)) {
