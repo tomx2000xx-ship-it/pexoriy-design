@@ -290,7 +290,7 @@ async function handleApi(request, env) {
 
   if (path === "/api/payments/solana/config" && request.method === "GET") {
     return json({
-      enabled: Boolean(env.SOLANA_RECEIVE_ADDRESS && env.SOLANA_RPC_URL),
+      enabled: Boolean(env.SOLANA_RECEIVE_ADDRESS),
       network: SOLANA_NETWORK,
       asset: "USDC",
     });
@@ -414,10 +414,10 @@ async function handleApi(request, env) {
     if (["underpaid", "overpaid", "review", "refunded", "reversed"].includes(order.status)) {
       return json({ status: order.status, message: "This payment needs support review." }, 409);
     }
-    if (!env.SOLANA_RPC_URL) return json({ error: "Solana payment verification is not configured yet." }, 503);
-
+    // Public Solana RPC is a fail-closed bootstrap; set SOLANA_RPC_URL to a dedicated provider for production volume.
+    const rpcUrl = env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
     const rpc = async (method, params) => {
-      const response = await fetch(env.SOLANA_RPC_URL, {
+      const response = await fetch(rpcUrl, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id: crypto.randomUUID(), method, params }),
