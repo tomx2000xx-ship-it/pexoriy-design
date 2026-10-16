@@ -288,6 +288,14 @@ async function handleApi(request, env) {
   }
 
 
+  if (path === "/api/payments/solana/config" && request.method === "GET") {
+    return json({
+      enabled: Boolean(env.SOLANA_RECEIVE_ADDRESS && env.SOLANA_RPC_URL),
+      network: SOLANA_NETWORK,
+      asset: "USDC",
+    });
+  }
+
   if (path === "/api/payments/solana/order" && request.method === "POST") {
     const user = await currentUser(request, env);
     if (!user) return json({ error: "Authentication required." }, 401);
