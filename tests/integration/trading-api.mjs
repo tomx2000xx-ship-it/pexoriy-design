@@ -60,7 +60,7 @@ assert.equal(duplicateOpen.response.status, 200, JSON.stringify(duplicateOpen.pa
 assert.equal(duplicateOpen.payload?.order?.duplicate, true);
 
 const afterOpen = await call("/api/me");
-assert.equal(Number(afterOpen.payload?.user?.balances?.TC), 11950, "open must reserve TC exactly once");
+assert.equal(Number(afterOpen.payload?.user?.balances?.TC), 11949, "open must reserve TC and the disclosed taker fee exactly once");
 
 const positions = await call("/api/trading/positions");
 assert.equal(positions.response.status, 200, JSON.stringify(positions.payload));
@@ -76,7 +76,7 @@ const quoteSql = "INSERT INTO market_snapshots (id, provider, symbol, price_micr
 execFileSync("npx", ["wrangler", "d1", "execute", "pexoriy-core", "--local", "--command", quoteSql], { stdio: "pipe" });
 const markedPositions = await call("/api/trading/positions");
 assert.equal(markedPositions.response.status, 200);
-assert.equal(Number(markedPositions.payload?.positions?.[0]?.unrealizedPnlTc), 5, "fresh mark should show +5 TC unrealized P&L");
+assert.equal(Number(markedPositions.payload?.positions?.[0]?.unrealizedPnlTc), 2, "mark-to-market must include adverse fill costs and estimated closing fee");
 
 const tooLarge = await call("/api/trading/positions", {
   method: "POST",
@@ -91,7 +91,7 @@ const closed = await call("/api/trading/positions/close", {
 });
 assert.equal(closed.response.status, 200, JSON.stringify(closed.payload));
 assert.equal(closed.payload?.closed, true);
-assert.equal(Number(closed.payload?.realizedPnl ?? closed.payload?.position?.realized_pnl_tc ?? 0), 5);
+assert.equal(Number(closed.payload?.realizedPnl ?? closed.payload?.position?.realized_pnl_tc ?? 0), 2);
 
 const duplicateClose = await call("/api/trading/positions/close", {
   method: "POST",
@@ -101,11 +101,26 @@ assert.equal(duplicateClose.response.status, 200, JSON.stringify(duplicateClose.
 assert.equal(duplicateClose.payload?.duplicate, true);
 
 const afterClose = await call("/api/me");
-assert.equal(Number(afterClose.payload?.user?.balances?.TC), 12455, "close must return reserved TC plus realized gain exactly once");
+assert.equal(Number(afterClose.payload?.user?.balances?.TC), 12452, "close must return collateral and net simulated P&L after fees exactly once");
 const history = await call("/api/trading/history");
 assert.equal(history.response.status, 200);
 assert.equal(history.payload?.history?.length, 1);
 assert.equal(history.payload?.history?.[0]?.id, opened.payload.position.id);
-assert.equal(Number(history.payload?.history?.[0]?.realizedPnl), 5);
+assert.equal(Number(history.payload?.history?.[0]?.realizedPnl), 2);
 
-console.log("Local D1 trading integration passed: auth, fresh quote gate, open/idempotency, balance reservation, live mark-to-market, overdraw protection, close settlement/idempotency, and history.");
+// Four simultaneous distinct orders must not exceed the database-enforced 75% exposure ceiling.
+const concurrentStamp = Date.now();
+const concurrentOrders = await Promise.all(Array.from({ length: 4 }, (_, index) => call("/api/trading/positions", {
+  method: "POST",
+  body: { symbol: "BTC/USDT", side: index % 2 ? "short" : "long", allocationTc: 3000, idempotencyKey: "stage2-concurrent-" + concurrentStamp + "-" + index },
+})));
+assert.ok(concurrentOrders.every((item) => [201, 409].includes(item.response.status)),
+  "concurrent risk-limited orders should either open or be rejected safely: " + concurrentOrders.map((item) => item.response.status).join(","));
+assert.equal(concurrentOrders.filter((item) => item.response.status === 201).length, 3,
+  "only three 3,000-TC positions fit within the 75% account exposure ceiling");
+const afterConcurrent = await call("/api/trading/positions");
+assert.equal(afterConcurrent.payload?.positions?.length, 3);
+assert.ok(afterConcurrent.payload.positions.reduce((sum, item) => sum + Number(item.reserved_tc), 0) <= 9339,
+  "persisted open collateral must remain under the account exposure ceiling");
+
+console.log("Local D1 trading integration passed: auth, fresh quote gate, fees, fill pricing, open/idempotency, balance reservation, mark-to-market, overdraw and exposure limits, close settlement/idempotency, and history.");
