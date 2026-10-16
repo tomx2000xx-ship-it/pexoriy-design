@@ -87,6 +87,64 @@ test('AI trading blocks a proposed action when AI Credit balance is insufficient
   await expect(page.locator('.ai-balance-purchase strong')).toContainText('0');
 });
 
+test('AI Credit Store separates the USD package price from the exact SOL quote and requires sign-in', async ({ page }) => {
+  await enterApp(page);
+  await goTo(page, 'AI Trading');
+  await page.getByRole('button', { name: /Buy more AI Credits/ }).click();
+
+  await expect(page.getByRole('heading', { name: 'Power your next AI session.' })).toBeVisible();
+  const entryPackage = page.locator('.ai-package-card').first();
+  await expect(entryPackage.locator('.ai-package-payment strong')).toContainText('$5');
+  await expect(entryPackage.locator('.ai-package-payment strong')).toContainText('USD');
+  await expect(entryPackage.locator('.ai-package-payment')).toContainText('Exact SOL quote at checkout');
+  await expect(page.locator('.ai-store-selected-summary button')).toContainText('Sign in to buy AI Credits');
+});
+
+test('AI Credit Store restores an existing pending Solana order after navigation', async ({ page }) => {
+  await page.route('**/api/me', async route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ user: { id: 'test-user', email: 'tester@example.com', displayName: 'Tester', balances: { TC: 12450, AC: 840, PXY: 0 } } })
+  }));
+  await page.route('**/api/payments/solana/config', async route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ enabled: true, network: 'solana-mainnet', asset: 'SOL', quoteCurrency: 'USD' })
+  }));
+  await page.route('**/api/payments/solana/orders', async route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ orders: [{
+      id: 'order-restore-001',
+      network: 'solana-mainnet',
+      asset: 'SOL',
+      status: 'pending',
+      expectedAmountAtoms: 12300000,
+      amountSol: '0.0123',
+      aiCredits: 70,
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      txHash: null,
+      createdAt: new Date().toISOString(),
+      paymentUrl: 'solana:11111111111111111111111111111111?amount=0.0123&reference=11111111111111111111111111111111'
+    }] })
+  }));
+  await page.route('**/api/payments/solana/verify', async route => route.fulfill({
+    status: 202,
+    contentType: 'application/json',
+    body: JSON.stringify({ status: 'pending', message: 'No matching finalized payment was found yet. You can safely check again.' })
+  }));
+
+  await enterApp(page);
+  await goTo(page, 'AI Trading');
+  await page.getByRole('button', { name: /Buy more AI Credits/ }).click();
+
+  await expect(page.locator('.ai-store-payment-order')).toBeVisible();
+  await expect(page.locator('.ai-store-order-amount')).toContainText('0.0123 SOL');
+  await expect(page.locator('.ai-store-order-status')).toContainText('PENDING');
+  await page.getByRole('button', { name: 'I’ve paid — verify' }).click();
+  await expect(page.getByText('No matching finalized payment was found yet.')).toBeVisible();
+});
+
 test('mobile layout stays within the viewport on Practice and AI Trading', async ({ page, isMobile }) => {
   test.skip(!isMobile, 'Mobile viewport is covered by the mobile Chromium project.');
   await enterApp(page);
