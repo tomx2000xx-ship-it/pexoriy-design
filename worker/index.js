@@ -569,9 +569,34 @@ async function handleApi(request, env) {
     const user = await currentUser(request, env);
     if (!user) return json({ error: "Authentication required." }, 401);
     const result = await env.DB.prepare(
-      "SELECT id, network, asset, expected_amount_atoms, credited_ac, status, expires_at, tx_hash, created_at FROM payment_orders WHERE user_id = ? AND network = ? ORDER BY created_at DESC LIMIT 25",
+      "SELECT id, network, asset, expected_amount_atoms, credited_ac, status, expires_at, tx_hash, created_at, reference_key, recipient_address, package_id FROM payment_orders WHERE user_id = ? AND network = ? ORDER BY created_at DESC LIMIT 25",
     ).bind(user.id, SOLANA_NETWORK).all();
-    return json({ orders: result.results || [] });
+    const orders = (result.results || []).map((row) => {
+      const pack = AI_CREDIT_PACKAGES[row.package_id];
+      const amountLamports = Number(row.expected_amount_atoms);
+      return {
+        id: row.id,
+        network: row.network,
+        asset: row.asset,
+        status: row.status,
+        expectedAmountAtoms: amountLamports,
+        amountSol: formatLamports(amountLamports),
+        aiCredits: Number(row.credited_ac || pack?.aiCredits || 0),
+        expiresAt: row.expires_at,
+        txHash: row.tx_hash,
+        createdAt: row.created_at,
+        paymentUrl: pack && row.reference_key && row.recipient_address
+          ? makeSolanaPayUrl({
+              recipient: row.recipient_address,
+              amountLamports,
+              reference: row.reference_key,
+              label: "Pexoriy",
+              message: String(pack.aiCredits) + " AI Credits · " + pack.id,
+            })
+          : null,
+      };
+    });
+    return json({ orders });
   }
 
   return json({ error: "API route not found." }, 404);
