@@ -924,6 +924,7 @@ async function handleApi(request, env) {
   if (path === "/api/ai/proposals" && request.method === "GET") {
     const user = await currentUser(request, env);
     if (!user) return json({ error: "Authentication required." }, 401);
+    await reconcileStaleAIReservations(env, user.id, requestId);
     const result = await env.DB.prepare(
       "SELECT id, symbol, side, risk_profile, quote_price_micros, quote_timestamp_ms, rationale, confidence_bps, status, expires_at, trade_order_id, created_at, executed_at FROM ai_trade_proposals WHERE user_id = ? ORDER BY created_at DESC LIMIT 20",
     ).bind(user.id).all();
