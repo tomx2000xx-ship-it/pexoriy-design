@@ -1222,8 +1222,8 @@ async function handleApi(request, env) {
         eventType: "payment.ai_credits_purchased",
         metadata: { paymentOrderId: order.id, chain: SOLANA_NETWORK, signature: match.signature, packageId: order.package_id },
         postings: [
-          { accountKey: "user:" + user.id + ":AC", currency: "AC", amountAtoms: Number(order.credited_ac) },
-          { accountKey: "system:issuance:AC", currency: "AC", amountAtoms: -Number(order.credited_ac) },
+          { accountKey: "user:" + user.id + ":AC", currency: "AC", amountAtoms: Number(order.credited_ac) * 2 },
+          { accountKey: "system:issuance:AC", currency: "AC", amountAtoms: -Number(order.credited_ac) * 2 },
         ],
       });
     } catch {
