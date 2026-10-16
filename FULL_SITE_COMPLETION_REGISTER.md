@@ -1,6 +1,6 @@
 # Pexoriy — Full-Site Completion and Go-Live Register
 
-Updated: 16 October 2026  
+Updated: 16 October 2026 (market-data integration and safety verification)  
 Purpose: internal implementation tracker. This is not customer-facing copy and does not declare production readiness.
 
 ## Release rule
@@ -27,7 +27,7 @@ Do not hand off for owner testing until all launch-critical site functionality i
 - [x] Server-side Solana payment-order and transaction-verification foundation.
 - [x] Native-SOL package quote shown separately from USD package price.
 - [x] Duplicate-credit/concurrent-verification safeguards and resumable pending-order lookup.
-- [x] Automated CI: production build, unit tests, and Playwright desktop/mobile flows passed in the latest recorded run (11 passed, 1 skipped).
+- [x] Automated CI: production build, deterministic unit tests, and Playwright desktop/mobile flows passed on commit `8431d38b121a43bc281c4c8c011a8cb0552dc3f2` (13 passed, 1 skipped; run [38844835359](https://github.com/tomx2000xx-ship-it/pexoriy-design/actions/runs/38844835359)).
 - [ ] Passing automated checks are not a substitute for end-to-end provider and production configuration evidence.
 
 ## Launch work remaining
@@ -40,9 +40,9 @@ Do not hand off for owner testing until all launch-critical site functionality i
 - [ ] Security review for cookie flags, CSRF/origin protections, password handling, audit events, and enumeration/rate-limit behavior.
 
 ### P0 — Live market data
-- [ ] Implement one server-side market-data adapter for the approved supported crypto catalogue.
-- [ ] Store/validate provider timestamps and snapshots; expose provider/source and last-update time.
-- [ ] Enforce stale/missing/anomalous-price checks and disable affected markets safely.
+- [x] Implement provisional server-side market-data adapter for BTC, ETH, SOL, DOGE, and GRAM-labelled TON market data (CoinGecko public endpoint; provider approval/terms still pending).
+- [x] Validate provider timestamps and positive prices, store valid snapshots in D1, and return provider/source, fetched time, and per-market update time.
+- [x] Enforce stale/missing quote handling in the API and disable affected practice/AI trade actions; render an explicit paused chart state rather than crashing when a quote is unavailable.
 - [ ] Confirm provider terms, supported symbols, rate limits, regional access, and fallback policy before launch.
 
 ### P0 — Server-authoritative practice trading
