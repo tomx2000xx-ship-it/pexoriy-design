@@ -43,19 +43,24 @@ Do not hand off for owner testing until all launch-critical site functionality i
 - [x] Complete: live D1 migration and risk trigger verified; latest live snapshots showed fresh, validated exchange timestamps for all five supported markets.
 - [ ] Overall product launch is **not** declared complete: the other P0/P1 items below remain separate release gates. AI execution, public competitions, token bonuses, and unverified payment methods remain disabled until their server-side controls are ready.
 
-## Stage 3 progress — account security and identity flows
+## Stage 3 progress — account security, identity flows, and reliability
 
 - [x] Add durable D1-backed registration and sign-in throttles keyed by hashed client/IP and normalized identity; return HTTP 429 with retry guidance when limits are exceeded.
 - [x] Reject unsafe cross-origin mutation requests when the request does not provide a matching Origin (or same-origin Fetch Metadata).
 - [x] Add a page-level React error boundary and guard AI opportunity cards against null/stale prices and percentage changes.
-- [x] Add automated AI Centre regression coverage for stale/missing quotes, account-screen E2E coverage for verification/reset routes, and an integration check for repeated failed sign-ins.
-- [x] Implement single-use email-verification tokens (60-minute expiry), resend verification, password-reset tokens (30-minute expiry), reset-time session revocation, and server-side email delivery through the Cloudflare Email Service binding.
-- [x] Require verified email before sign-in or session use; verification and reset tokens are stored as hashes, never raw tokens.
-- [x] Add responsive verification, resend, forgot-password, reset-password screens, and a profile sign-out action.
+- [x] Preserve the AI Centre regression coverage for stale/missing market quotes and verify the page remains navigable after a rendering failure.
+- [x] Keep password hashing (PBKDF2-SHA-256), HTTP-only/Secure/SameSite session cookies, session expiry, sign-out revocation, login/register rate limits, origin checks, and audit events in place.
 - [x] Apply and verify production D1 migration `0006_auth_lifecycle.sql`; the `email_verified_at`, `auth_rate_limits`, and `auth_tokens` schema objects are present and the migration is recorded.
-- [x] Production build, AI Centre stale-data regression, desktop/mobile account-screen tests, and authenticated local-D1 trading/rate-limit integration passed in [workflow run 38878038316](https://github.com/tomx2000xx-ship-it/pexoriy-design/actions/runs/38878038316).
-- [ ] Configure an owned sending domain and `AUTH_EMAIL_FROM` in Cloudflare; live email delivery remains gated until the sender domain is onboarded and tested.
-- [ ] Run provider-backed email delivery, verification, and password-reset end-to-end tests after sender configuration.
+- [x] For the current pre-domain phase, allow account registration to create a session immediately and allow password sign-in without requiring email verification. This is an intentional temporary product decision, not a claim that email verification is complete.
+- [x] Update account-screen copy so sign-up/sign-in work with the supplied email and password; password recovery is clearly deferred until domain-based email delivery is configured.
+- [ ] Verify registration, existing unverified-account sign-in, logout/session invalidation, throttling, and authenticated trading against local D1 after the temporary email-verification change.
+- [ ] Configure an owned sending domain and `AUTH_EMAIL_FROM` after the domain purchase; then restore and test provider-backed verification and password recovery.
+- [x] Improve AI Credit Store payment-method branding: use the actual Solana logo and existing GRAM logo, and label the latter `GRAM (TON)`.
+- [x] Add a one-minute-refresh SOL/USD quote for visible package estimates; GRAM (TON) retains its live quote and dynamic amount. Server-side Solana orders still obtain their own fresh authoritative quote and exact SOL amount.
+- [ ] Keep native-SOL checkout disabled until the production receiver/configuration and on-chain verification path are confirmed. GRAM wallet connection is present, but verified GRAM payment and credit delivery remain disabled.
+- [ ] Confirm the production build, rendered AI Store/account flows, and all existing trading/payment regression checks pass on the latest commit.
+- [ ] Deploy the verified commit to the intended Cloudflare Worker and confirm the live version matches GitHub. The currently observed Worker deployment predates the latest Store/account commits; no automatic Cloudflare Builds trigger is currently attached.
+- [ ] Run post-deployment health, market-feed, account, and AI Centre smoke checks without modifying or resetting production D1 data.
 
 
 ## Launch work remaining
