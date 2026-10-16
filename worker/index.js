@@ -1,4 +1,5 @@
 import { postLedgerTransaction } from "./ledger.js";
+import { calculateRealizedSettlement, isFreshValidatedQuote } from "./trading.js";
 import {
   AI_CREDIT_PACKAGES,
   SOLANA_NETWORK,
@@ -413,10 +414,10 @@ async function handleApi(request, env) {
     if (!/^[a-zA-Z0-9:_-]{8,160}$/.test(idempotencyKey)) return json({ error: "A valid idempotency key is required." }, 400);
 
     const existing = await env.DB.prepare(
-      "SELECT o.id AS order_id, o.position_id, o.symbol, o.side, p.status AS position_status FROM trade_orders o LEFT JOIN trading_positions p ON p.id = o.position_id WHERE o.idempotency_key = ? AND o.user_id = ?",
+      "SELECT o.id AS order_id, o.position_id, o.symbol, o.side, o.quantity_atoms, p.status AS position_status FROM trade_orders o LEFT JOIN trading_positions p ON p.id = o.position_id WHERE o.idempotency_key = ? AND o.user_id = ?",
     ).bind(idempotencyKey, user.id).first();
     if (existing) {
-      if (existing.symbol !== symbol || existing.side !== side) return json({ error: "This idempotency key was already used for a different order." }, 409);
+      if (existing.symbol !== symbol || existing.side !== side || Number(existing.quantity_atoms) !== allocationTc * 1000000) return json({ error: "This idempotency key was already used for a different order." }, 409);
       const position = await env.DB.prepare(
         "SELECT id, symbol, side, status, leverage, quantity_atoms, entry_price_micros, mark_price_micros, reserved_tc, realized_pnl_tc, opened_at, closed_at FROM trading_positions WHERE id = ? AND user_id = ?",
       ).bind(existing.position_id, user.id).first();
@@ -435,8 +436,7 @@ async function handleApi(request, env) {
       "SELECT price_micros, provider_timestamp_ms, validation_status FROM market_snapshots WHERE symbol = ? ORDER BY provider_timestamp_ms DESC, received_at DESC LIMIT 1",
     ).bind(symbol).first();
     const quoteAge = Date.now() - Number(quote?.provider_timestamp_ms || 0);
-    if (!quote || quote.validation_status !== "valid" || !Number.isFinite(Number(quote.price_micros)) ||
-        Number(quote.price_micros) <= 0 || quoteAge < -15000 || quoteAge > 90000) {
+    if (!isFreshValidatedQuote(quote, Date.now())) {
       return json({ error: "A fresh, validated market quote is required. Refresh the market and try again." }, 503);
     }
     const balances = await balancesForUser(env, user.id);
@@ -509,21 +509,19 @@ async function handleApi(request, env) {
     const exitPriceMicros = Number(quote.price_micros);
     const allocation = Number(position.reserved_tc);
     const entryPriceMicros = Number(position.entry_price_micros);
-    const sign = position.side === "short" ? -1 : 1;
-    const rawPnl = Math.round(allocation * ((exitPriceMicros - entryPriceMicros) / entryPriceMicros) * sign);
-    const returnedTc = Math.max(0, allocation + rawPnl);
-    const realizedPnlTc = returnedTc - allocation;
+    let settlement;
+    try {
+      settlement = calculateRealizedSettlement({ allocationTc: allocation, side: position.side, entryPriceMicros, exitPriceMicros });
+    } catch {
+      return json({ error: "The close settlement could not be calculated safely." }, 500);
+    }
+    const { returnedTc, realizedPnlTc } = settlement;
     const transactionId = crypto.randomUUID();
     const orderId = crypto.randomUUID();
-    const postings = [];
-    if (returnedTc > 0) postings.push({ account: "user:" + user.id + ":TC", amount: returnedTc });
-    postings.push({ account: "system:reserve:TC", amount: -allocation });
-    if (realizedPnlTc > 0) postings.push({ account: "system:issuance:TC", amount: -realizedPnlTc });
-    else if (realizedPnlTc < 0) postings.push({ account: "system:fees:TC", amount: -realizedPnlTc });
-    if (postings.length < 2) return json({ error: "The close settlement could not be calculated safely." }, 500);
-    const sqlPostings = postings.map((p) => env.DB.prepare(
+    const accountKeys = { user: "user:" + user.id + ":TC", reserve: "system:reserve:TC", issuance: "system:issuance:TC", fees: "system:fees:TC" };
+    const sqlPostings = settlement.postings.map((p) => env.DB.prepare(
       "INSERT INTO ledger_postings (id, transaction_id, account_key, amount_atoms, currency) VALUES (?, ?, ?, ?, 'TC')",
-    ).bind(crypto.randomUUID(), transactionId, p.account, p.amount));
+    ).bind(crypto.randomUUID(), transactionId, accountKeys[p.account], p.amount));
     const quantityAtoms = Number(position.quantity_atoms);
     try {
       await env.DB.batch([
