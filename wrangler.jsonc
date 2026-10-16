@@ -6,7 +6,9 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": [
+      "/api/*"
+    ]
   },
   "d1_databases": [
     {
@@ -16,9 +18,16 @@
       "migrations_dir": "migrations"
     }
   ],
-  "send_email": [{ "name": "EMAIL" }],
+  "send_email": [
+    {
+      "name": "EMAIL"
+    }
+  ],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
+  },
+  "ai": {
+    "binding": "AI"
   }
 }
