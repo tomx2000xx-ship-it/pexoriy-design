@@ -3,6 +3,7 @@ import {
   AI_CREDIT_PACKAGES,
   SOLANA_NETWORK,
   encodeBase58,
+  decodeBase58,
   makeSolanaPayUrl,
   validateSolPaymentTransaction,
   formatLamports,
@@ -368,7 +369,7 @@ async function handleApi(request, env) {
       ).run();
       await appendAudit(env, {
         actorUserId: user.id, eventType: "payment.solana_order_created", entityType: "payment_order",
-        entityId: orderId, requestId, details: { packageId: pack.id, asset: "USDC", network: SOLANA_NETWORK },
+        entityId: orderId, requestId, details: { packageId: pack.id, asset: "SOL", network: SOLANA_NETWORK },
       });
     } catch (error) {
       const priorAfterRace = await env.DB.prepare(
@@ -377,7 +378,7 @@ async function handleApi(request, env) {
       if (!priorAfterRace) throw error;
       const racedPack = AI_CREDIT_PACKAGES[priorAfterRace.package_id] || pack;
       return json({ order: {
-        id: priorAfterRace.id, status: priorAfterRace.status, asset: "USDC", network: SOLANA_NETWORK,
+        id: priorAfterRace.id, status: priorAfterRace.status, asset: "SOL", network: SOLANA_NETWORK,
         expectedAmountAtoms: Number(priorAfterRace.expected_amount_atoms), amountSol: formatLamports(Number(priorAfterRace.expected_amount_atoms)), aiCredits: racedPack.aiCredits,
         expiresAt: priorAfterRace.expires_at,
         paymentUrl: makeSolanaPayUrl({ recipient: priorAfterRace.recipient_address || recipient,
@@ -388,7 +389,7 @@ async function handleApi(request, env) {
 
     return json({
       order: {
-        id: orderId, status: "created", asset: "USDC", network: SOLANA_NETWORK,
+        id: orderId, status: "created", asset: "SOL", network: SOLANA_NETWORK,
         expectedAmountAtoms: expectedLamports, amountSol: formatLamports(expectedLamports), amountUsd: (pack.usdCents / 100).toFixed(2), quotedSolUsd: solUsdPrice,
         aiCredits: pack.aiCredits, expiresAt, paymentUrl: payUrl,
       },
@@ -535,7 +536,7 @@ async function handleApi(request, env) {
       await env.DB.prepare(
         "UPDATE payment_orders SET status = 'credited', credited_transaction_id = ? WHERE id = ? AND status <> 'credited'",
       ).bind(
-        (await env.DB.prepare("SELECT id FROM ledger_transactions WHERE idempotency_key = ?").bind(`solana-usdc-payment:${order.id}:ai-credits`).first())?.id,
+        (await env.DB.prepare("SELECT id FROM ledger_transactions WHERE idempotency_key = ?").bind(`solana-sol-payment:${order.id}:ai-credits`).first())?.id,
         order.id,
       ).run();
     } catch {
