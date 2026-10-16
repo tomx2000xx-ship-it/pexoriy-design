@@ -510,9 +510,11 @@ async function handleApi(request, env) {
       "SELECT status, tx_hash FROM payment_orders WHERE id = ?",
     ).bind(order.id).first();
     if (latestConfirmation?.tx_hash !== match.signature) {
-      if (latestConfirmation && latestConfirmation.status !== "credited") {
+      // A different signature cannot claim this order, but must not interrupt the first
+      // verifier that already bound a valid finalized transaction to it.
+      if (latestConfirmation && !latestConfirmation.tx_hash && latestConfirmation.status !== "credited") {
         await env.DB.prepare(
-          "UPDATE payment_orders SET status = 'review' WHERE id = ? AND status <> 'credited'",
+          "UPDATE payment_orders SET status = 'review' WHERE id = ? AND tx_hash IS NULL AND status <> 'credited'",
         ).bind(order.id).run();
       }
       return json({ status: "review", message: "This transaction is already associated with another payment or needs review." }, 409);
@@ -529,15 +531,17 @@ async function handleApi(request, env) {
       processingStatus: "processed", slot: match.slot,
     });
     const ledgerTransactionId = crypto.randomUUID();
+    const idempotencyKey = "solana-sol-payment:" + order.id + ":ai-credits";
+    let ledgerResult;
     try {
-      await postLedgerTransaction(env.DB, {
+      ledgerResult = await postLedgerTransaction(env.DB, {
         id: ledgerTransactionId,
-        idempotencyKey: `solana-sol-payment:${order.id}:ai-credits`,
+        idempotencyKey,
         userId: user.id,
         eventType: "payment.ai_credits_purchased",
         metadata: { paymentOrderId: order.id, chain: SOLANA_NETWORK, signature: match.signature, packageId: order.package_id },
         postings: [
-          { accountKey: `user:${user.id}:AC`, currency: "AC", amountAtoms: Number(order.credited_ac) },
+          { accountKey: "user:" + user.id + ":AC", currency: "AC", amountAtoms: Number(order.credited_ac) },
           { accountKey: "system:issuance:AC", currency: "AC", amountAtoms: -Number(order.credited_ac) },
         ],
       });
@@ -546,14 +550,33 @@ async function handleApi(request, env) {
       return json({ status: "confirmed", message: "Payment verified. Account credit is retrying safely; check again shortly." }, 202);
     }
 
+    const postedLedger = await env.DB.prepare(
+      "SELECT id, status FROM ledger_transactions WHERE idempotency_key = ?",
+    ).bind(idempotencyKey).first();
+    if (!postedLedger || postedLedger.status !== "posted" || postedLedger.id !== ledgerResult.transactionId) {
+      return json({ status: "confirmed", message: "Payment verified. Account credit is reconciling; check again shortly." }, 202);
+    }
+
     try {
-      await env.DB.prepare(
-        "UPDATE payment_orders SET status = 'credited', credited_transaction_id = ? WHERE id = ? AND status <> 'credited'",
-      ).bind(
-        (await env.DB.prepare("SELECT id FROM ledger_transactions WHERE idempotency_key = ?").bind(`solana-sol-payment:${order.id}:ai-credits`).first())?.id,
-        order.id,
-      ).run();
+      const creditUpdate = await env.DB.prepare(
+        "UPDATE payment_orders SET status = 'credited', credited_transaction_id = ? WHERE id = ? AND status = 'confirmed' AND tx_hash = ? AND chain_finality = 'finalized'",
+      ).bind(postedLedger.id, order.id, match.signature).run();
+      if (Number(creditUpdate.meta?.changes || 0) !== 1) {
+        const latestOrder = await env.DB.prepare(
+          "SELECT status, credited_ac FROM payment_orders WHERE id = ?",
+        ).bind(order.id).first();
+        if (latestOrder?.status === "credited") {
+          return json({ status: "credited", aiCredits: Number(latestOrder.credited_ac), duplicate: true });
+        }
+        return json({ status: "review", message: "Payment is verified but its order state changed during crediting. Please contact support." }, 409);
+      }
     } catch {
+      const latestOrder = await env.DB.prepare(
+        "SELECT status, credited_ac FROM payment_orders WHERE id = ?",
+      ).bind(order.id).first();
+      if (latestOrder?.status === "credited") {
+        return json({ status: "credited", aiCredits: Number(latestOrder.credited_ac), duplicate: true });
+      }
       // If the credit status write failed, the immutable ledger transaction makes the next retry safe.
       return json({ status: "confirmed", message: "Payment verified. Account credit is reconciling; check again shortly." }, 202);
     }
