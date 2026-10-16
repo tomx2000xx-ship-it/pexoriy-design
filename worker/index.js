@@ -1,4 +1,4 @@
-import { postLedgerTransaction } from "./ledger.js";
+import { postLedgerTransaction, getLedgerBalance } from "./ledger.js";
 import { TON_NETWORK, TON_RECEIVE_ADDRESS, normalizeTonAddress, formatNanoTon, makeTonComment, validateTonIncomingTransaction } from "./ton-payments.js";
 import { calculateRealizedSettlement, calculateUnrealizedPnlTc, isFreshValidatedQuote, calculateSimulatedFillPrice, calculateTakerFeeTc, SIMULATION_MODEL_VERSION, MAX_OPEN_POSITIONS, MAX_POSITION_EQUITY_BPS, MAX_TOTAL_EXPOSURE_EQUITY_BPS } from "./trading.js";
 import { normalizeMarketQuote } from "./market-feed.js";
@@ -147,6 +147,65 @@ async function recordSolanaPaymentEvent(env, { orderId, signature, eventType, pr
   await env.DB.prepare(
     "INSERT OR IGNORE INTO payment_events (id, payment_order_id, provider_event_id, event_type, payload_hash, processing_status, processed_at) VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
   ).bind(crypto.randomUUID(), orderId, `solana:${signature}`, eventType, payloadHash, processingStatus).run();
+}
+
+const AI_MODEL_NAME = "@cf/meta/llama-3.1-8b-instruct";
+const AI_TRADE_RESERVATION_ATOMS = 3; // 1.5 displayed AC; migration 0007 defines 2 ledger atoms per displayed AC.
+const AI_ALLOWED_SYMBOLS = new Set(["BTC/USDT", "ETH/USDT", "SOL/USDT", "DOGE/USDT", "GRAM/USDT"]);
+const AI_ALLOWED_RISKS = new Set(["Cautious", "Balanced", "Aggressive"]);
+
+async function releaseAIReservation(env, userId, operation, finalStatus, requestId) {
+  const amount = Number(operation?.reserved_credits || 0);
+  if (!operation?.id || amount <= 0) throw new Error("AI_RESERVATION_INVALID");
+  const result = await postLedgerTransaction(env.DB, {
+    id: crypto.randomUUID(),
+    idempotencyKey: "ai-reservation-release:" + operation.id,
+    userId,
+    eventType: "ai.credits_released",
+    metadata: { operationId: operation.id, reason: finalStatus },
+    postings: [
+      { accountKey: "user:" + userId + ":AC", currency: "AC", amountAtoms: amount },
+      { accountKey: "system:reserve:AC", currency: "AC", amountAtoms: -amount },
+    ],
+  });
+  const posted = await env.DB.prepare("SELECT id, status FROM ledger_transactions WHERE idempotency_key = ?")
+    .bind("ai-reservation-release:" + operation.id).first();
+  if (!posted || posted.status !== "posted" || posted.id !== result.transactionId) throw new Error("AI_RELEASE_NOT_POSTED");
+  await env.DB.prepare(
+    "UPDATE ai_operations SET status = ?, completed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND status = 'reserved'",
+  ).bind(finalStatus, operation.id).run();
+  await appendAudit(env, {
+    actorUserId: userId, eventType: "ai.reservation_released", entityType: "ai_operation",
+    entityId: operation.id, requestId, details: { releasedAtoms: amount, finalStatus },
+  });
+  return result.transactionId;
+}
+
+async function chargeAIReservation(env, userId, operation, requestId) {
+  const amount = Number(operation?.reserved_credits || 0);
+  if (!operation?.id || amount <= 0) throw new Error("AI_RESERVATION_INVALID");
+  const result = await postLedgerTransaction(env.DB, {
+    id: crypto.randomUUID(),
+    idempotencyKey: "ai-reservation-charge:" + operation.id,
+    userId,
+    eventType: "ai.trade_fee_charged",
+    metadata: { operationId: operation.id, chargedAtoms: amount },
+    postings: [
+      { accountKey: "system:reserve:AC", currency: "AC", amountAtoms: -amount },
+      { accountKey: "system:fees:AC", currency: "AC", amountAtoms: amount },
+    ],
+  });
+  const posted = await env.DB.prepare("SELECT id, status FROM ledger_transactions WHERE idempotency_key = ?")
+    .bind("ai-reservation-charge:" + operation.id).first();
+  if (!posted || posted.status !== "posted" || posted.id !== result.transactionId) throw new Error("AI_CHARGE_NOT_POSTED");
+  await env.DB.prepare(
+    "UPDATE ai_operations SET status = 'succeeded', charged_credits = reserved_credits, ledger_transaction_id = ?, completed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND status = 'reserved'",
+  ).bind(posted.id, operation.id).run();
+  await appendAudit(env, {
+    actorUserId: userId, eventType: "ai.trade_fee_charged", entityType: "ai_operation",
+    entityId: operation.id, requestId, details: { chargedAtoms: amount, chargedAC: amount / 2 },
+  });
+  return posted.id;
 }
 
 async function currentUser(request, env) {
@@ -739,6 +798,220 @@ async function handleApi(request, env) {
     } });
   }
 
+
+  if (path === "/api/ai/session" && request.method === "GET") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const session = await env.DB.prepare("SELECT id, state, risk_profile, market_symbol, started_at, ended_at, created_at, updated_at FROM ai_sessions WHERE user_id = ?")
+      .bind(user.id).first();
+    return json({ session: session || { state: "idle", risk_profile: "Balanced", market_symbol: "BTC/USDT", started_at: null, ended_at: null } });
+  }
+
+  if (path === "/api/ai/session" && request.method === "POST") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const body = await readJson(request);
+    const action = typeof body?.action === "string" ? body.action : "";
+    const riskProfile = typeof body?.riskProfile === "string" ? body.riskProfile : "Balanced";
+    const marketSymbol = typeof body?.marketSymbol === "string" ? body.marketSymbol.trim().toUpperCase() : "BTC/USDT";
+    if (!["start", "pause", "resume", "stop"].includes(action)) return json({ error: "Choose a valid AI session action." }, 400);
+    if (!AI_ALLOWED_RISKS.has(riskProfile) || !AI_ALLOWED_SYMBOLS.has(marketSymbol)) return json({ error: "Choose a supported risk profile and market." }, 400);
+    let session = await env.DB.prepare("SELECT * FROM ai_sessions WHERE user_id = ?").bind(user.id).first();
+    const now = new Date().toISOString();
+    if (action === "start") {
+      if (session?.state === "active") return json({ session, duplicate: true });
+      if (session?.state === "paused") return json({ error: "Resume the paused session instead of starting another." }, 409);
+      if (session) {
+        await env.DB.prepare("UPDATE ai_sessions SET state='active', risk_profile=?, market_symbol=?, started_at=?, ended_at=NULL, updated_at=? WHERE user_id=?")
+          .bind(riskProfile, marketSymbol, now, now, user.id).run();
+      } else {
+        await env.DB.prepare("INSERT INTO ai_sessions (id,user_id,state,risk_profile,market_symbol,started_at,updated_at) VALUES (?,?,'active',?,?,?,?)")
+          .bind(crypto.randomUUID(), user.id, riskProfile, marketSymbol, now, now).run();
+      }
+    } else {
+      if (!session) return json({ error: "Start an AI session before using this action." }, 409);
+      const expected = action === "pause" ? "active" : action === "resume" ? "paused" : ["active", "paused"].includes(session.state) ? session.state : "";
+      const next = action === "pause" ? "paused" : action === "resume" ? "active" : "stopped";
+      if (!expected || session.state !== expected) return json({ error: action === "pause" ? "Only an active session can be paused." : action === "resume" ? "Only a paused session can be resumed." : "This session is already stopped." }, 409);
+      await env.DB.prepare("UPDATE ai_sessions SET state=?, ended_at=?, updated_at=? WHERE user_id=? AND state=?")
+        .bind(next, action === "stop" ? now : null, now, user.id, expected).run();
+    }
+    session = await env.DB.prepare("SELECT id, state, risk_profile, market_symbol, started_at, ended_at, created_at, updated_at FROM ai_sessions WHERE user_id = ?")
+      .bind(user.id).first();
+    await appendAudit(env, { actorUserId: user.id, eventType: "ai.session_" + action, entityType: "ai_session", entityId: session?.id || null, requestId, details: { state: session?.state, riskProfile, marketSymbol } });
+    return json({ session });
+  }
+
+  if (path === "/api/ai/proposals" && request.method === "GET") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const result = await env.DB.prepare(
+      "SELECT id, symbol, side, risk_profile, quote_price_micros, quote_timestamp_ms, rationale, confidence_bps, status, expires_at, trade_order_id, created_at, executed_at FROM ai_trade_proposals WHERE user_id = ? ORDER BY created_at DESC LIMIT 20",
+    ).bind(user.id).all();
+    return json({ proposals: (result.results || []).map(row => ({ ...row, quotePrice: Number(row.quote_price_micros) / 1000000, confidence: Number(row.confidence_bps) / 100 })) });
+  }
+
+  if (path === "/api/ai/proposals" && request.method === "POST") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    if (!env.AI || typeof env.AI.run !== "function") return json({ error: "The server-side AI provider is not configured yet. No AI Credits were reserved." }, 503);
+    const body = await readJson(request);
+    const symbol = typeof body?.symbol === "string" ? body.symbol.trim().toUpperCase() : "";
+    const clientKey = typeof body?.idempotencyKey === "string" ? body.idempotencyKey.trim() : "";
+    if (!AI_ALLOWED_SYMBOLS.has(symbol)) return json({ error: "Choose a supported crypto market." }, 400);
+    if (!/^[a-zA-Z0-9:_-]{8,160}$/.test(clientKey)) return json({ error: "A valid idempotency key is required." }, 400);
+    const idempotencyKey = "ai-proposal:" + user.id + ":" + clientKey;
+    const priorOperation = await env.DB.prepare("SELECT * FROM ai_operations WHERE idempotency_key = ? AND user_id = ?")
+      .bind(idempotencyKey, user.id).first();
+    if (priorOperation) {
+      const priorProposal = await env.DB.prepare("SELECT * FROM ai_trade_proposals WHERE operation_id = ?").bind(priorOperation.id).first();
+      if (priorProposal) return json({ proposal: { ...priorProposal, quotePrice: Number(priorProposal.quote_price_micros) / 1000000, confidence: Number(priorProposal.confidence_bps) / 100 }, reused: true });
+      if (priorOperation.status === "reserved") return json({ status: "pending", message: "This AI operation is already being processed. Retry shortly." }, 202);
+      return json({ error: "This AI operation has already completed or failed. Create a new request." }, 409);
+    }
+    const session = await env.DB.prepare("SELECT * FROM ai_sessions WHERE user_id = ?").bind(user.id).first();
+    if (!session || session.state !== "active") return json({ error: "Start or resume your AI session before requesting a trade setup." }, 409);
+    const pending = await env.DB.prepare("SELECT id FROM ai_trade_proposals WHERE user_id = ? AND status IN ('pending','executing','review') LIMIT 1")
+      .bind(user.id).first();
+    if (pending) return json({ error: "Finish, execute, or cancel your existing AI proposal before requesting another." }, 409);
+    const quote = await env.DB.prepare("SELECT price_micros, provider_timestamp_ms, validation_status, provider FROM market_snapshots WHERE symbol = ? ORDER BY provider_timestamp_ms DESC, received_at DESC LIMIT 1")
+      .bind(symbol).first();
+    if (!isFreshValidatedQuote(quote, Date.now())) return json({ error: "A fresh validated market quote is required before AI can prepare a setup." }, 503);
+
+    const operationId = crypto.randomUUID();
+    try {
+      await env.DB.prepare("INSERT INTO ai_operations (id,user_id,idempotency_key,operation_type,reserved_credits,charged_credits,status) VALUES (?,?,?,'trade_proposal',?,0,'reserved')")
+        .bind(operationId, user.id, idempotencyKey, AI_TRADE_RESERVATION_ATOMS).run();
+    } catch {
+      return json({ error: "The AI operation could not be started. Retry with a new request key." }, 409);
+    }
+    const operation = { id: operationId, reserved_credits: AI_TRADE_RESERVATION_ATOMS };
+    try {
+      await postLedgerTransaction(env.DB, {
+        id: crypto.randomUUID(), idempotencyKey: "ai-reservation:" + operationId, userId: user.id,
+        eventType: "ai.credits_reserved", metadata: { operationId, purpose: "trade_proposal" },
+        postings: [
+          { accountKey: "user:" + user.id + ":AC", currency: "AC", amountAtoms: -AI_TRADE_RESERVATION_ATOMS },
+          { accountKey: "system:reserve:AC", currency: "AC", amountAtoms: AI_TRADE_RESERVATION_ATOMS },
+        ],
+      });
+    } catch {
+      await env.DB.prepare("UPDATE ai_operations SET status='failed', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND status='reserved'")
+        .bind(operationId).run();
+      return json({ error: "Not enough AI Credits to reserve 1.5 AC for this setup. No trade was opened." }, 409);
+    }
+
+    let aiResult;
+    try {
+      aiResult = await env.AI.run(AI_MODEL_NAME, {
+        messages: [
+          { role: "system", content: "You are Pexoriy's simulated crypto trading setup analyst. This is educational simulated trading, not financial advice. Use only the supplied market snapshot and risk profile. Do not invent prices, news, or indicators. Return ONLY valid JSON with keys side (long or short), rationale (plain text under 350 characters), and confidence (integer 0 to 100). Be conservative and explicitly acknowledge uncertainty." },
+          { role: "user", content: JSON.stringify({ market: symbol, referencePrice: Number(quote.price_micros) / 1000000, quoteProvider: quote.provider, quoteTimestamp: new Date(Number(quote.provider_timestamp_ms)).toISOString(), riskProfile: session.risk_profile, task: "Suggest one direction for a simulated practice setup. Do not claim certainty." }) },
+        ],
+        max_tokens: 280,
+        temperature: 0.2,
+      });
+      const responseText = typeof aiResult?.response === "string" ? aiResult.response : typeof aiResult?.result === "string" ? aiResult.result : "";
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("AI_OUTPUT_NOT_JSON");
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (!["long", "short"].includes(parsed.side) || typeof parsed.rationale !== "string" || !parsed.rationale.trim() || parsed.rationale.length > 350) throw new Error("AI_OUTPUT_INVALID");
+      const confidence = Number(parsed.confidence);
+      if (!Number.isFinite(confidence) || confidence < 0 || confidence > 100) throw new Error("AI_CONFIDENCE_INVALID");
+      aiResult = { side: parsed.side, rationale: parsed.rationale.trim(), confidence };
+    } catch {
+      try { await releaseAIReservation(env, user.id, operation, "failed", requestId); } catch {
+        return json({ status: "review", message: "The AI provider failed and the AC reservation is being reconciled. No trade was opened." }, 202);
+      }
+      return json({ error: "The AI provider could not produce a valid setup. The 1.5 AC reservation was released; no trade was opened." }, 503);
+    }
+
+    const proposalId = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    try {
+      await env.DB.prepare(
+        "INSERT INTO ai_trade_proposals (id,user_id,operation_id,idempotency_key,symbol,side,risk_profile,quote_price_micros,quote_timestamp_ms,model_name,rationale,confidence_bps,status,expires_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'pending',?)",
+      ).bind(proposalId, user.id, operationId, idempotencyKey, symbol, aiResult.side, session.risk_profile,
+        Number(quote.price_micros), Number(quote.provider_timestamp_ms), AI_MODEL_NAME, aiResult.rationale,
+        Math.round(aiResult.confidence * 100), expiresAt).run();
+    } catch {
+      try { await releaseAIReservation(env, user.id, operation, "failed", requestId); } catch {}
+      return json({ error: "The AI setup could not be saved. Any AC reservation is being reconciled; no trade was opened." }, 503);
+    }
+    await appendAudit(env, { actorUserId: user.id, eventType: "ai.trade_proposal_created", entityType: "ai_trade_proposal", entityId: proposalId, requestId, details: { symbol, side: aiResult.side, confidence: aiResult.confidence, model: AI_MODEL_NAME } });
+    return json({ proposal: {
+      id: proposalId, symbol, side: aiResult.side, risk_profile: session.risk_profile,
+      quote_price_micros: Number(quote.price_micros), quotePrice: Number(quote.price_micros) / 1000000,
+      quote_timestamp_ms: Number(quote.provider_timestamp_ms), rationale: aiResult.rationale,
+      confidence_bps: Math.round(aiResult.confidence * 100), confidence: aiResult.confidence,
+      status: "pending", expires_at: expiresAt, chargedAC: 0, reservedAC: 1.5,
+    } }, 201);
+  }
+
+  if (path === "/api/ai/proposals/cancel" && request.method === "POST") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const body = await readJson(request);
+    const proposalId = typeof body?.proposalId === "string" ? body.proposalId : "";
+    const proposal = await env.DB.prepare("SELECT * FROM ai_trade_proposals WHERE id = ? AND user_id = ?")
+      .bind(proposalId, user.id).first();
+    if (!proposal) return json({ error: "AI proposal not found." }, 404);
+    if (proposal.status === "cancelled") return json({ status: "cancelled", duplicate: true });
+    if (proposal.status === "executed") return json({ error: "An executed AI trade cannot be cancelled here." }, 409);
+    const operation = await env.DB.prepare("SELECT * FROM ai_operations WHERE id = ? AND user_id = ?").bind(proposal.operation_id, user.id).first();
+    if (!operation) return json({ error: "AI operation not found. Contact support." }, 409);
+    try { await releaseAIReservation(env, user.id, operation, "cancelled", requestId); }
+    catch { return json({ status: "review", message: "The AC reservation release is being reconciled. Please retry shortly." }, 202); }
+    await env.DB.prepare("UPDATE ai_trade_proposals SET status='cancelled' WHERE id=? AND status IN ('pending','review','executing')").bind(proposal.id).run();
+    return json({ status: "cancelled", releasedAC: 1.5 });
+  }
+
+  if (path === "/api/ai/proposals/execute" && request.method === "POST") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const body = await readJson(request);
+    const proposalId = typeof body?.proposalId === "string" ? body.proposalId : "";
+    const allocationTc = Number(body?.allocationTc);
+    if (!Number.isSafeInteger(allocationTc) || allocationTc < 1 || allocationTc > 100000000) return json({ error: "Choose a whole-number TC allocation." }, 400);
+    const proposal = await env.DB.prepare("SELECT * FROM ai_trade_proposals WHERE id = ? AND user_id = ?")
+      .bind(proposalId, user.id).first();
+    if (!proposal) return json({ error: "AI proposal not found." }, 404);
+    if (proposal.status === "executed") return json({ status: "executed", duplicate: true, tradeOrderId: proposal.trade_order_id });
+    if (!["pending", "executing", "review"].includes(proposal.status)) return json({ error: "This AI proposal is no longer executable." }, 409);
+    const session = await env.DB.prepare("SELECT state FROM ai_sessions WHERE user_id = ?").bind(user.id).first();
+    if (session?.state !== "active") return json({ error: "Resume your AI session before executing this proposal." }, 409);
+    if (Date.parse(proposal.expires_at) <= Date.now() && proposal.status === "pending") {
+      const operation = await env.DB.prepare("SELECT * FROM ai_operations WHERE id = ? AND user_id = ?").bind(proposal.operation_id, user.id).first();
+      try { await releaseAIReservation(env, user.id, operation, "cancelled", requestId); } catch { return json({ status: "review", message: "Expired proposal AC is being reconciled." }, 202); }
+      await env.DB.prepare("UPDATE ai_trade_proposals SET status='expired' WHERE id=? AND status='pending'").bind(proposal.id).run();
+      return json({ error: "This AI setup expired. Its 1.5 AC reservation has been released; request a fresh setup." }, 410);
+    }
+    await env.DB.prepare("UPDATE ai_trade_proposals SET status='executing' WHERE id=? AND status='pending'").bind(proposal.id).run();
+    const innerHeaders = new Headers(request.headers);
+    innerHeaders.delete("content-length");
+    innerHeaders.set("content-type", "application/json");
+    const innerRequest = new Request(new URL("/api/trading/positions", request.url), {
+      method: "POST", headers: innerHeaders,
+      body: JSON.stringify({ symbol: proposal.symbol, side: proposal.side, allocationTc, idempotencyKey: "ai-trade:" + proposal.id }),
+    });
+    const tradeResponse = await handleApi(innerRequest, env);
+    const tradeData = await tradeResponse.json().catch(() => ({}));
+    if (!tradeResponse.ok) {
+      await env.DB.prepare("UPDATE ai_trade_proposals SET status='pending' WHERE id=? AND status='executing'").bind(proposal.id).run();
+      return json({ error: tradeData.error || "The simulated trade was rejected. No TC position was opened and no AC was charged." }, tradeResponse.status);
+    }
+    const operation = await env.DB.prepare("SELECT * FROM ai_operations WHERE id = ? AND user_id = ?").bind(proposal.operation_id, user.id).first();
+    try {
+      await chargeAIReservation(env, user.id, operation, requestId);
+    } catch {
+      await env.DB.prepare("UPDATE ai_trade_proposals SET status='review', trade_order_id=? WHERE id=?").bind(tradeData?.order?.id || null, proposal.id).run();
+      return json({ status: "review", message: "The simulated trade was opened, but AC fee settlement is being reconciled. Do not retry with a different allocation.", order: tradeData.order, position: tradeData.position }, 202);
+    }
+    await env.DB.prepare("UPDATE ai_trade_proposals SET status='executed', trade_order_id=?, executed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?")
+      .bind(tradeData?.order?.id || null, proposal.id).run();
+    await appendAudit(env, { actorUserId: user.id, eventType: "ai.trade_executed", entityType: "ai_trade_proposal", entityId: proposal.id, requestId, details: { symbol: proposal.symbol, side: proposal.side, allocationTc, tradeOrderId: tradeData?.order?.id } });
+    return json({ status: "executed", chargedAC: 1.5, order: tradeData.order, position: { ...tradeData.position, aiManaged: true } }, tradeResponse.status);
+  }
 
   if (path === "/api/payments/ton/config" && request.method === "GET") {
     const recipient = (env.TON_RECEIVE_ADDRESS || TON_RECEIVE_ADDRESS).trim();
