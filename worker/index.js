@@ -555,7 +555,7 @@ async function handleApi(request, env) {
         env.DB.prepare("UPDATE ledger_transactions SET status = 'posted', posted_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND status = 'pending'")
           .bind(transactionId),
         env.DB.prepare("INSERT INTO trading_positions (id, user_id, symbol, side, status, leverage, quantity_atoms, entry_price_micros, mark_price_micros, reserved_tc, realized_pnl_tc, open_fee_tc, entry_quote_price_micros, open_transaction_id, model_version) VALUES (?, ?, ?, ?, 'open', 1, ?, ?, ?, ?, 0, ?, ?, ?, 'simulation-v3')")
-          .bind(positionId, user.id, symbol, side, quantityAtoms, priceMicros, priceMicros, allocationTc, openFeeTc, quotePriceMicros, transactionId),
+          .bind(positionId, user.id, symbol, side, quantityAtoms, priceMicros, quotePriceMicros, allocationTc, openFeeTc, quotePriceMicros, transactionId),
         env.DB.prepare("INSERT INTO trade_orders (id, user_id, position_id, idempotency_key, symbol, side, order_type, status, quantity_atoms, requested_price_micros, fill_price_micros, created_at, settled_at) VALUES (?, ?, ?, ?, ?, ?, 'market', 'filled', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))")
           .bind(orderId, user.id, positionId, idempotencyKey, symbol, side, quantityAtoms, quotePriceMicros, priceMicros),
         env.DB.prepare("INSERT INTO audit_events (id, actor_user_id, event_type, entity_type, entity_id, request_id, details_json) VALUES (?, ?, 'practice.trade_opened', 'trading_position', ?, ?, ?)")
@@ -571,8 +571,8 @@ async function handleApi(request, env) {
     return json({ order: { id: orderId, duplicate: false }, position: {
       id: positionId, symbol, market: symbol, side, direction: side === "long" ? "Long" : "Short",
       status: "open", leverage: 1, quantity_atoms: quantityAtoms, quantityAtoms,
-      entry_price_micros: priceMicros, mark_price_micros: priceMicros, entry: priceMicros / 1000000,
-      markPrice: priceMicros / 1000000, reserved_tc: allocationTc, amount: allocationTc, realized_pnl_tc: 0,
+      entry_price_micros: priceMicros, mark_price_micros: quotePriceMicros, entry: priceMicros / 1000000,
+      markPrice: quotePriceMicros / 1000000, reserved_tc: allocationTc, amount: allocationTc, realized_pnl_tc: 0,
       unrealizedPnlTc: calculateUnrealizedPnlTc({ allocationTc, side, entryPriceMicros: priceMicros, markQuotePriceMicros: quotePriceMicros, openFeeTc }),
       quoteStatus: "live", open_fee_tc: openFeeTc, entry_quote_price_micros: quotePriceMicros, modelVersion: SIMULATION_MODEL_VERSION,
       opened_at: new Date().toISOString(), openedAt: new Date().toISOString(),
