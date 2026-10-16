@@ -1,5 +1,5 @@
 import { postLedgerTransaction } from "./ledger.js";
-import { calculateRealizedSettlement, isFreshValidatedQuote, calculateSimulatedFillPrice, calculateTakerFeeTc, SIMULATION_MODEL_VERSION, MAX_OPEN_POSITIONS, MAX_POSITION_EQUITY_BPS, MAX_TOTAL_EXPOSURE_EQUITY_BPS } from "./trading.js";
+import { calculateRealizedSettlement, calculateUnrealizedPnlTc, isFreshValidatedQuote, calculateSimulatedFillPrice, calculateTakerFeeTc, SIMULATION_MODEL_VERSION, MAX_OPEN_POSITIONS, MAX_POSITION_EQUITY_BPS, MAX_TOTAL_EXPOSURE_EQUITY_BPS } from "./trading.js";
 import { normalizeMarketQuote } from "./market-feed.js";
 import {
   AI_CREDIT_PACKAGES,
@@ -451,16 +451,10 @@ async function handleApi(request, env) {
       let pnl = null;
       if (hasFreshQuote) {
         try {
-          const simulatedExit = calculateSimulatedFillPrice({
-            quotePriceMicros: markPriceMicros, action: row.side === "long" ? "sell" : "buy",
+          pnl = calculateUnrealizedPnlTc({
+            allocationTc: allocation, side: row.side, entryPriceMicros,
+            markQuotePriceMicros: markPriceMicros, openFeeTc: Number(row.open_fee_tc || 0),
           });
-          const beforeFee = calculateRealizedSettlement({
-            allocationTc: allocation, side: row.side, entryPriceMicros, exitPriceMicros: simulatedExit,
-          });
-          pnl = calculateRealizedSettlement({
-            allocationTc: allocation, side: row.side, entryPriceMicros, exitPriceMicros: simulatedExit,
-            openFeeTc: Number(row.open_fee_tc || 0), closeFeeTc: calculateTakerFeeTc(beforeFee.grossReturnedTc),
-          }).realizedPnlTc;
         } catch {
           pnl = null;
         }
@@ -579,7 +573,8 @@ async function handleApi(request, env) {
       status: "open", leverage: 1, quantity_atoms: quantityAtoms, quantityAtoms,
       entry_price_micros: priceMicros, mark_price_micros: priceMicros, entry: priceMicros / 1000000,
       markPrice: priceMicros / 1000000, reserved_tc: allocationTc, amount: allocationTc, realized_pnl_tc: 0,
-      open_fee_tc: openFeeTc, entry_quote_price_micros: quotePriceMicros, modelVersion: SIMULATION_MODEL_VERSION,
+      unrealizedPnlTc: calculateUnrealizedPnlTc({ allocationTc, side, entryPriceMicros: priceMicros, markQuotePriceMicros: quotePriceMicros, openFeeTc }),
+      quoteStatus: "live", open_fee_tc: openFeeTc, entry_quote_price_micros: quotePriceMicros, modelVersion: SIMULATION_MODEL_VERSION,
       opened_at: new Date().toISOString(), openedAt: new Date().toISOString(),
       time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }), aiManaged: false,
     } }, 201);
