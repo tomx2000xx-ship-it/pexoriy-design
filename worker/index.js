@@ -250,9 +250,12 @@ async function handleApi(request, env) {
         isUsableTimestamp(Number(cachedRow.provider_timestamp_ms)) &&
         Number.isFinite(cachedAt) && now - cachedAt >= -1000 && now - cachedAt <= 10000;
       if (cacheUsable) return { market, quote: null, cachedRow };
-      const primary = await fetchBinanceQuote(market);
+      // Live smoke checks showed OKX returning fresh quotes while Binance
+      // did not validate reliably from the deployed Worker. Prefer OKX and
+      // retain Binance as a per-market fallback.
+      const primary = await fetchOkxQuote(market);
       if (primary) return { market, quote: primary, cachedRow: null };
-      const secondary = await fetchOkxQuote(market);
+      const secondary = await fetchBinanceQuote(market);
       return { market, quote: secondary, cachedRow: null };
     }));
     const statements = [];
