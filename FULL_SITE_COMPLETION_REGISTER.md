@@ -282,6 +282,16 @@ Proceed next with the AI execution service rather than polishing more UI. Requir
 - [x] Added a CI step that executes the ordered SQL migrations against an in-memory SQLite database and checks the expected tables, five learning lessons, and active referral team quests.
 - [x] The first staged implementation commit passed Worker syntax validation, ordered migration validation, unit tests, production bundle build, and the existing desktop/mobile Playwright flow. The follow-up UX-safety patch has been pushed to the scope branch and requires its own fresh CI result.
 
+
+
+### Isolated preview environment
+
+- [x] Created a separate Cloudflare D1 database named `pexoriy-preview` (UUID `c70a09f0-8d61-45ed-b207-c6418e42998b`) for preview testing; it is not the production database.
+- [x] Configured Wrangler preview bindings to use the preview D1 database, so preview traffic cannot accidentally read or mutate production account data.
+- [x] Configured the dedicated scope-branch preview build to apply the ordered migrations to the preview database before creating the preview Worker. The first preview attempt exposed a Wrangler requirement for `--remote --preview`; the trigger command has been corrected and awaits a fresh build result.
+- [ ] Verify the corrected preview build, confirm the preview migration ledger contains 0001–0009, and smoke-test the preview Worker.
+- [ ] Production build trigger remains unchanged until the latest branch CI and preview checks are green. Production migration 0009 has not been applied.
+
 ### Still required before production activation
 
 - [ ] Review the latest CI run after the follow-up UX-safety and team-quest patch; do not rely on an earlier successful run as evidence for the latest commit.
