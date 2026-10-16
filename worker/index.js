@@ -189,24 +189,32 @@ async function handleApi(request, env) {
     }
 
     try {
-      const ids = marketCatalogue.map((market) => market.id).join(",");
-      const response = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=" + encodeURIComponent(ids) + "&vs_currencies=usd&include_24hr_change=true&include_last_updated_at=true", {
-        headers: { "accept": "application/json" },
-        signal: AbortSignal.timeout(7000),
-      });
-      if (!response.ok) throw new Error("Market provider returned " + response.status);
-      const data = await response.json();
+      // Binance's public 24h ticker supplies both the latest traded price and
+      // closeTime, allowing us to reject quotes whose last trade is too old.
+      // GRAM is the product's display name for the TON network asset.
+      const providerSymbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "DOGEUSDT", "TONUSDT"];
+      const response = await fetch(
+        "https://api.binance.com/api/v3/ticker/24hr?symbols=" + encodeURIComponent(JSON.stringify(providerSymbols)),
+        { headers: { "accept": "application/json" }, signal: AbortSignal.timeout(7000) },
+      );
+      if (!response.ok) throw new Error("Primary market provider returned " + response.status);
+      const rows = await response.json();
+      const bySymbol = new Map((Array.isArray(rows) ? rows : []).map((row) => [row.symbol, row]));
+      const providerByMarket = new Map([
+        ["BTC/USDT", "BTCUSDT"], ["ETH/USDT", "ETHUSDT"], ["SOL/USDT", "SOLUSDT"],
+        ["DOGE/USDT", "DOGEUSDT"], ["GRAM/USDT", "TONUSDT"],
+      ]);
       const freshMarkets = [];
       const statements = [];
       for (const market of marketCatalogue) {
-        const quote = data?.[market.id];
-        const price = Number(quote?.usd);
-        const providerTimestamp = Number(quote?.last_updated_at) * 1000;
+        const quote = bySymbol.get(providerByMarket.get(market.symbol));
+        const price = Number(quote?.lastPrice);
+        const providerTimestamp = Number(quote?.closeTime);
         const age = now - providerTimestamp;
-        const valid = Number.isFinite(price) && price > 0 && Number.isSafeInteger(Math.round(price * 1000000)) &&
+        const valid = Number.isFinite(price) && price > 0 &&
+          Number.isSafeInteger(Math.round(price * 1000000)) &&
           Number.isFinite(providerTimestamp) && age >= -15000 && age <= 90000;
         const prior = latest.get(market.symbol);
-        const status = valid ? "valid" : "stale";
         if (!valid) {
           freshMarkets.push({
             symbol: market.symbol, name: market.name,
@@ -218,17 +226,17 @@ async function handleApi(request, env) {
         }
         const priceMicros = Math.round(price * 1000000);
         statements.push(env.DB.prepare(
-          "INSERT INTO market_snapshots (id, provider, symbol, price_micros, provider_timestamp_ms, validation_status, model_version) VALUES (?, 'coingecko-public', ?, ?, ?, ?, 'market-feed-v1')",
-        ).bind(crypto.randomUUID(), market.symbol, priceMicros, providerTimestamp, status));
+          "INSERT INTO market_snapshots (id, provider, symbol, price_micros, provider_timestamp_ms, validation_status, model_version) VALUES (?, 'binance-public', ?, ?, ?, 'valid', 'market-feed-v2')",
+        ).bind(crypto.randomUUID(), market.symbol, priceMicros, providerTimestamp));
         freshMarkets.push({
           symbol: market.symbol, name: market.name, price,
-          change24h: Number.isFinite(Number(quote.usd_24h_change)) ? Number(quote.usd_24h_change) : null,
+          change24h: Number.isFinite(Number(quote.priceChangePercent)) ? Number(quote.priceChangePercent) : null,
           updatedAt: new Date(providerTimestamp).toISOString(), status: "live",
         });
       }
       if (statements.length) await env.DB.batch(statements);
       const hasTradableMarket = freshMarkets.some((market) => market.status === "live" && market.price > 0);
-      return json({ provider: "coingecko", quoteCurrency: "USD", fetchedAt: new Date(now).toISOString(), staleAfterMs: 90000, markets: freshMarkets }, hasTradableMarket ? 200 : 503);
+      return json({ provider: "binance-public", quoteCurrency: "USDT", fetchedAt: new Date(now).toISOString(), staleAfterMs: 90000, markets: freshMarkets }, hasTradableMarket ? 200 : 503);
     } catch {
       const fallback = marketCatalogue.map((market) => {
         const row = latest.get(market.symbol);
