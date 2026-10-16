@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-async function enterApp(page, path = '/', marketMode = 'live') {
+async function enterApp(page, path = '/', marketMode = 'live', workspaceMode = 'demo') {
   await page.route('**/api/markets', async route => {
     const stale = marketMode === 'stale';
     const markets = [
@@ -12,10 +12,11 @@ async function enterApp(page, path = '/', marketMode = 'live') {
     ];
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ provider: 'test-fixture', quoteCurrency: 'USD', markets }) });
   });
-  await page.addInitScript(() => {
+  await page.addInitScript((mode) => {
     localStorage.setItem('pexoriy-demo-entered', '1');
+    localStorage.setItem('pexoriy-workspace-mode', mode);
     localStorage.setItem('pexoriy-onboarding-complete', '1');
-  });
+  }, workspaceMode);
   await page.goto(path);
 }
 
@@ -179,7 +180,7 @@ test('AI Credit Store restores an existing pending Solana order after navigation
     body: JSON.stringify({ status: 'pending', message: 'No matching finalized payment was found yet. You can safely check again.' })
   }));
 
-  await enterApp(page);
+  await enterApp(page, '/', 'live', 'account');
   await goTo(page, 'AI Trading');
   await page.getByRole('button', { name: /Buy more AI Credits/ }).click();
 
@@ -232,7 +233,7 @@ test('authenticated practice orders persist through the server API and settle th
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ closed: true, position: closed }) });
   });
 
-  await enterApp(page);
+  await enterApp(page, '/', 'live', 'account');
   await goTo(page, 'Practice Trading');
   await expect(page.getByRole('heading', { name: 'Practice Trading' })).toBeVisible();
   await page.getByRole('button', { name: /Review Buy \/ Long order/ }).click();
