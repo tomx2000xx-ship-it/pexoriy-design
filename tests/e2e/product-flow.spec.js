@@ -1,6 +1,17 @@
 import { test, expect } from '@playwright/test';
 
-async function enterApp(page, path = '/') {
+async function enterApp(page, path = '/', marketMode = 'live') {
+  await page.route('**/api/markets', async route => {
+    const stale = marketMode === 'stale';
+    const markets = [
+      { symbol: 'BTC/USDT', name: 'Bitcoin', price: stale ? null : 67482.2, change24h: stale ? null : 2.84, updatedAt: stale ? null : new Date().toISOString(), status: stale ? 'stale' : 'live' },
+      { symbol: 'ETH/USDT', name: 'Ethereum', price: stale ? null : 3521.84, change24h: stale ? null : 1.26, updatedAt: stale ? null : new Date().toISOString(), status: stale ? 'stale' : 'live' },
+      { symbol: 'SOL/USDT', name: 'Solana', price: stale ? null : 182.67, change24h: stale ? null : -0.48, updatedAt: stale ? null : new Date().toISOString(), status: stale ? 'stale' : 'live' },
+      { symbol: 'DOGE/USDT', name: 'Dogecoin', price: stale ? null : 0.1642, change24h: stale ? null : 4.12, updatedAt: stale ? null : new Date().toISOString(), status: stale ? 'stale' : 'live' },
+      { symbol: 'GRAM/USDT', name: 'Gram', price: stale ? null : 5.42, change24h: stale ? null : -1.18, updatedAt: stale ? null : new Date().toISOString(), status: stale ? 'stale' : 'live' },
+    ];
+    await route.fulfill({ status: stale ? 503 : 200, contentType: 'application/json', body: JSON.stringify({ provider: 'test-fixture', quoteCurrency: 'USD', markets }) });
+  });
   await page.addInitScript(() => {
     localStorage.setItem('pexoriy-demo-entered', '1');
     localStorage.setItem('pexoriy-onboarding-complete', '1');
@@ -35,6 +46,14 @@ test('Practice visibly connects to AI Trading and blocks over-balance orders', a
   await expect(page.getByRole('button', { name: /Review Buy \/ Long order/ })).toBeDisabled();
   await bridge.getByRole('button', { name: /Explore AI Trading/ }).click();
   await expect(page.getByRole('heading', { name: /AI-assisted practice/ })).toBeVisible();
+});
+
+test('stale market data disables new practice orders', async ({ page }) => {
+  await enterApp(page, '/', 'stale');
+  await goTo(page, 'Practice Trading');
+  await expect(page.getByRole('heading', { name: 'Practice Trading' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Review Buy \/ Long order/ })).toBeDisabled();
+  await expect(page.getByText(/Live market data is unavailable/).first()).toBeVisible();
 });
 
 test('AI session lifecycle, trade open/close, and Activity Centre ledger work', async ({ page }) => {
