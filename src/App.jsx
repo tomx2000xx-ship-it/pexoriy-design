@@ -18,7 +18,6 @@ const initialMissions=[
  {id:'learning',title:'Complete a learning lesson',detail:'Pass a short lesson quiz in Learning Center.',reward:100,icon:Layers3,done:false},
  {id:'trade',title:'Make a practice trade',detail:'Open your first simulated position.',reward:250,icon:TrendingUp,done:false},
  {id:'risk',title:'Review an AI trading setup',detail:'Open the AI Trading workspace.',reward:150,icon:BrainCircuit,done:false},
- {id:'community',title:'Save a community challenge',detail:'Add an available challenge to your list.',reward:200,icon:Users,done:false}
 ];
 const challenges=[
  {id:'daily',name:'24h Sprint',type:'24-hour challenge',length:'24 hours',prize:5000,detail:'Complete the published practice objectives and show up consistently during this 24-hour community sprint.'},

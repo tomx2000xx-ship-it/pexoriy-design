@@ -45,7 +45,10 @@ jobs:
           quests = db.execute("SELECT COUNT(*) FROM referral_team_quests WHERE active=1").fetchone()[0]
           if quests < 2:
               raise SystemExit(f"Expected at least two active referral team quests, found {quests}")
-          print(f"Validated {len(migrations)} ordered migrations, {lessons} learning lessons, and {quests} team quests.")
+          community_mission = db.execute("SELECT active FROM mission_definitions WHERE id='community-challenge'").fetchone()
+          if community_mission and community_mission[0] != 0:
+              raise SystemExit("The community challenge mission must stay inactive until verified challenge entry exists")
+          print(f"Validated {len(migrations)} ordered migrations, {lessons} learning lessons, {quests} team quests, and safe mission activation.")
           PY
       - name: Run deterministic simulation and payment unit tests
         run: bun run test:unit
