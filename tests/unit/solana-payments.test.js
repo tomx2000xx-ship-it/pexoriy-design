@@ -50,7 +50,7 @@ test("native SOL verification requires matching reference, recipient and exact a
   assert.deepEqual(validateSolPaymentTransaction(makeTransaction({ reference, recipient, lamports: 5_010_000_000 }), {
     recipient, reference, expectedLamports: 5_000_000_000,
   }), { valid: false, receivedLamports: 5_010_000_000, reason: "overpaid" });
-  assert.throws(() => validateSolPaymentTransaction(makeTransaction({ reference, recipient, err: { InstructionError: [0, "Custom"] }), {
+  assert.throws(() => validateSolPaymentTransaction(makeTransaction({ reference, recipient, err: { InstructionError: [0, "Custom"] } }), {
     recipient, reference, expectedLamports: 5_000_000_000,
   }), /FAILED_OR_MISSING/);
 });
