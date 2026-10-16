@@ -54,9 +54,9 @@ function makeFakeD1() {
         for (const statement of statements) {
           const { sql, args } = statement;
           if (sql.startsWith("INSERT INTO ledger_transactions")) {
-            const [id, key, userId, eventType, status, metadata] = args;
+            const [id, key, userId, eventType, metadata] = args;
             if (txCopy.has(key)) throw new Error("UNIQUE constraint failed: ledger_transactions.idempotency_key");
-            txCopy.set(key, { id, userId, eventType, status, metadata });
+            txCopy.set(key, { id, userId, eventType, status: "pending", metadata });
           } else if (sql.startsWith("INSERT INTO ledger_postings")) {
             const [postingId, transactionId, accountKey, amountAtoms, currency] = args;
             postingCopy.push({ id: postingId, transactionId, accountKey, amountAtoms, currency });
