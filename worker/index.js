@@ -860,7 +860,7 @@ async function handleApi(request, env) {
       const isRelease = row.event_type === "ai.reservation_released";
       const isReserve = row.event_type === "ai.credits_reserved";
       const isCharge = row.event_type === "ai.trade_fee_charged";
-      const acDelta = isRelease ? released : isReserve ? -reserved : isCharge ? -charged : 0;
+      const acDelta = isRelease ? released : isReserve ? -reserved : 0;
       const detail = row.event_type === "ai.trade_executed"
         ? String(details.side || "AI setup") + " · " + String(details.symbol || "") + " · " + Number(details.allocationTc || 0) + " TC"
         : row.event_type === "ai.trade_proposal_created"
