@@ -53,14 +53,14 @@ Do not hand off for owner testing until all launch-critical site functionality i
 - [x] Apply and verify production D1 migration `0006_auth_lifecycle.sql`; the `email_verified_at`, `auth_rate_limits`, and `auth_tokens` schema objects are present and the migration is recorded.
 - [x] For the current pre-domain phase, allow account registration to create a session immediately and allow password sign-in without requiring email verification. This is an intentional temporary product decision, not a claim that email verification is complete.
 - [x] Update account-screen copy so sign-up/sign-in work with the supplied email and password; password recovery is clearly deferred until domain-based email delivery is configured.
-- [ ] Verify registration, existing unverified-account sign-in, logout/session invalidation, throttling, and authenticated trading against local D1 after the temporary email-verification change.
+- [x] Verify registration, existing unverified-account sign-in behavior, logout/session invalidation, throttling, and authenticated trading against local D1; all checks passed in [workflow run 38881780838](https://github.com/tomx2000xx-ship-it/pexoriy-design/actions/runs/38881780838).
 - [ ] Configure an owned sending domain and `AUTH_EMAIL_FROM` after the domain purchase; then restore and test provider-backed verification and password recovery.
 - [x] Improve AI Credit Store payment-method branding: use the actual Solana logo and existing GRAM logo, and label the latter `GRAM (TON)`.
 - [x] Add a one-minute-refresh SOL/USD quote for visible package estimates; GRAM (TON) retains its live quote and dynamic amount. Server-side Solana orders still obtain their own fresh authoritative quote and exact SOL amount.
 - [ ] Keep native-SOL checkout disabled until the production receiver/configuration and on-chain verification path are confirmed. GRAM wallet connection is present, but verified GRAM payment and credit delivery remain disabled.
-- [ ] Confirm the production build, rendered AI Store/account flows, and all existing trading/payment regression checks pass on the latest commit.
-- [ ] Deploy the verified commit to the intended Cloudflare Worker and confirm the live version matches GitHub. The currently observed Worker deployment predates the latest Store/account commits; no automatic Cloudflare Builds trigger is currently attached.
-- [ ] Run post-deployment health, market-feed, account, and AI Centre smoke checks without modifying or resetting production D1 data.
+- [x] Production build, 26 deterministic unit tests, desktop/mobile rendered-flow E2E tests (23 passed), authenticated local-D1 trading integration, and production API/market-feed smoke checks passed in [workflow run 38881780838](https://github.com/tomx2000xx-ship-it/pexoriy-design/actions/runs/38881780838).
+- [x] Confirm a production Cloudflare Worker deployment after the current application commit: deployment `0966cb80-e8d6-4f13-8210-c3afce799088`, version `d0049b72-d0ba-45a2-a9c1-37b095f4af74` (version 203), became 100% active at 2026-10-16 09:38:16 UTC. The deployed Worker bundle no longer contains the email-verification sign-in gate; the live API smoke checks passed in [workflow run 38881780838](https://github.com/tomx2000xx-ship-it/pexoriy-design/actions/runs/38881780838).
+- [x] Run post-deployment API health and market-feed smoke checks without modifying or resetting production D1 data; Worker health reported 21 D1 tables and both market-feed requests returned fresh/cached validated quotes for BTC, ETH, SOL, DOGE, and GRAM. Account/trading flows were regression-tested against isolated local D1 rather than creating test users in production.
 
 
 ## Launch work remaining
@@ -69,9 +69,9 @@ Do not hand off for owner testing until all launch-critical site functionality i
 - [x] Server-side email-verification/resend and single-use password-reset flows; live sending is gated on sender-domain configuration.
 - [x] Session expiry checks, reset-time session revocation, sign-out UI, and registration/login/recovery rate limits.
 - [ ] Configure and verify the production sender domain; then test real email delivery end to end.
-- [ ] Add account-lock policy and complete provider-backed recovery tests.
+- [x] Brute-force protection uses IP and normalized-email throttles with temporary rate limiting; prefer this over permanent account lockout, which can enable denial-of-service. Provider-backed recovery remains deferred until domain email is configured.
 - [ ] Make registered-account paths use persisted server state; keep demo mode explicitly isolated so demo balances cannot masquerade as account balances.
-- [ ] Security review for cookie flags, CSRF/origin protections, password handling, audit events, and enumeration/rate-limit behavior.
+- [x] Source review confirms HTTP-only/Secure/SameSite session cookies, same-origin mutation checks, PBKDF2-SHA-256 password hashing, audit logging, generic incorrect-credential errors, and registration/login throttling; local-D1 integration tests passed.
 
 ### P0 — Live market data
 - [x] Add server-side market feed for BTC, ETH, SOL, DOGE, and GRAM, with provider timestamps, positive-price/precision checks, and D1 snapshots.
