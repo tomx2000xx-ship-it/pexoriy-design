@@ -483,7 +483,7 @@ async function handleApi(request, env) {
       });
       return json({
         status,
-        message: "A USDC transfer was found, but its amount does not exactly match this order. No credits were added. You may send the exact requested amount or contact support.",
+        message: "A SOL transfer was found, but its amount does not exactly match this order. No credits were added. Create a new order if the quote has expired, or contact support.",
       }, 409);
     }
     if (!match) {
