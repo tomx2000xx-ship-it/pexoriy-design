@@ -242,3 +242,19 @@ Proceed next with the AI execution service rather than polishing more UI. Requir
 - [ ] Route AI-confirmed trades through the existing fresh-quote, exposure, position, fee, and TC ledger controls. No AI trade action may bypass the manual trading service.
 - [ ] Choose and verify the model for market-setup generation, then add timeouts, output validation, abuse limits, and provider-failure tests.
 - [ ] Keep AI execution disabled in the UI until the server endpoints, AC settlement, persistence, and reconciliation tests pass.
+
+## AI execution implementation pass — 16 October 2026
+
+- [x] Added persistent AI session state with start, pause, resume, stop, and strategy configuration endpoints.
+- [x] Added a server-side proposal endpoint using Cloudflare Workers AI model `@cf/meta/llama-3.1-8b-instruct`, fresh validated market snapshots, recent price history, and the persisted risk profile. Model output is parsed and validated server-side before a proposal is saved.
+- [x] Added an AC reservation ledger transaction for 1.5 AC (3 half-credit atoms). Credits are reserved before inference, released if the provider fails or the proposal is cancelled/expires, and moved from the reserve account to fees only after the server-authoritative simulated trade opens successfully.
+- [x] Added a proposal expiry window, idempotency keys, duplicate execution protection through the existing trade-order idempotency path, and recovery for expired proposals or stale operations.
+- [x] Added guarded AI trade execution by invoking the same server-authoritative practice-trading route used by manual traders. The AI path does not bypass fresh quote checks, TC ledger debits, simulated fees, position caps, or exposure limits.
+- [x] Added a persisted AI activity endpoint and made the AI Trading screen use backend session/proposal state, show the server-generated rationale, cancel reservations, execute through the server, refresh balances, and identify AI-managed positions after refresh.
+- [x] Added E2E coverage for authenticated AI session start, server proposal, successful simulated execution, AC charge, and AI-managed position display.
+- [x] Added `.github/workflows/pexoriy-validation.yml` to run Worker syntax validation, unit tests, production build, and desktop/mobile Playwright flows on pushes to `main`.
+- [ ] Wait for and inspect the new CI run. No fresh build/E2E result has been observed yet; the current code is not claimed to have passed the full suite.
+- [ ] Deploy the Worker and static build so migrations `0007_ai_credit_half_units.sql` and `0008_ai_sessions_proposals.sql` are applied before the new endpoints run.
+- [ ] Verify the configured Workers AI binding and run a controlled inference against the deployed provider; provider failures must release the AC reservation.
+- [ ] Verify the complete AI lifecycle in the deployed app: start/pause/resume/stop, proposal generation, cancellation/expiry refund, execution, duplicate retries, failed trade settlement, and account/activity refresh.
+- [ ] Native TON checkout and AI execution are source-implemented but **not production-deployed or end-to-end verified yet**. Do not invite the owner to the final test pass until CI and deployment smoke checks are green.
