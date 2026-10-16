@@ -47,7 +47,7 @@ function EntryExperience({mode,onModeChange,onEnter}) {
   },[activePanel,recoveryToken]);
   const chooseMode=next=>{setActivePanel(next);setNotice("");setPassword("");setConfirmPassword("");if(["landing","login","register"].includes(next))onModeChange(next)};
   const submit=async event=>{
-    event.preventDefault();if(activePanel==="reset"&&password!==confirmPassword){setNotice("The passwords do not match.");return;}
+    event.preventDefault();if(activePanel==="forgot"){setNotice("Password recovery will be available after domain-based email delivery is configured.");return;}if(activePanel==="reset"&&password!==confirmPassword){setNotice("The passwords do not match.");return;}
     setBusy(true);setNotice("Please wait while we process your request securely.");
     const endpoint={"register":"/api/auth/register","login":"/api/auth/login","forgot":"/api/auth/forgot-password","reset":"/api/auth/reset-password"}[activePanel];
     const body=activePanel==="register"?{email,displayName:name,password}:activePanel==="login"?{email,password}:activePanel==="forgot"?{email}:{token:recoveryToken,password};
@@ -55,12 +55,10 @@ function EntryExperience({mode,onModeChange,onEnter}) {
       const response=await fetch(endpoint,{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
       const data=await response.json().catch(()=>({}));
       if(!response.ok){
-        if(activePanel==="register"&&data.accountCreated){setActivePanel("check-email");setNotice(data.error||"Your account was created. Try resending the verification email.");return;}
-        if(activePanel==="login"&&data.emailUnverified){setActivePanel("check-email");setNotice(data.error||"Verify your email before signing in.");return;}
-        throw new Error(data.error||"Your request could not be completed.");
+                throw new Error(data.error||"Your request could not be completed.");
       }
       if(activePanel==="login"){onEnter();return;}
-      if(activePanel==="register"){setActivePanel("check-email");setNotice(data.message||"Check your inbox for a verification link before signing in.");return;}
+      if(activePanel==="register"){if(data.user){onEnter();return;}setActivePanel("login");setNotice("If this email is already registered, sign in with your password. Otherwise, try creating the account again.");return;}
       if(activePanel==="forgot"){setActivePanel("forgot-sent");setNotice(data.message||"If a verified account matches that address, password reset instructions will be sent.");return;}
       if(activePanel==="reset"){setActivePanel("login");setNotice(data.message||"Password updated. Sign in with your new password.");return;}
     }catch(error){setNotice(error?.message||"The account service is temporarily unavailable.");}
@@ -76,7 +74,7 @@ function EntryExperience({mode,onModeChange,onEnter}) {
   if(activePanel==="landing")return <EntryExperienceLegacy mode="landing" onModeChange={chooseMode} onEnter={onEnter}/>;
   const isForm=["login","register","forgot","reset"].includes(activePanel);
   const title=activePanel==="register"?"Create your account":activePanel==="login"?"Log in to Pexoriy":activePanel==="forgot"?"Recover your account":activePanel==="reset"?"Choose a new password":activePanel==="verify"?"Verify your email":activePanel==="check-email"?"Check your inbox":"Check your email";
-  const description=activePanel==="register"?"Create an account. We'll send a verification link before account access is enabled.":activePanel==="login"?"Sign in with your verified email and password.":activePanel==="forgot"?"We'll send a secure, single-use password reset link if a verified account matches your email.":activePanel==="reset"?"Choose a new password of at least 12 characters.":activePanel==="verify"?"We're checking your secure verification link.":activePanel==="check-email"?"Your account needs email verification before you can sign in.":"If a verified account matches your email, reset instructions will be sent.";
+  const description=activePanel==="register"?"Create an account with your email and password. Email verification will be added after domain email is configured.":activePanel==="login"?"Sign in with the email address and password you used to create your account.":activePanel==="forgot"?"Password recovery will be available after domain-based email delivery is configured.":activePanel==="reset"?"Password recovery will be available after domain-based email delivery is configured.":activePanel==="verify"?"Email verification is paused until domain email is configured.":activePanel==="check-email"?"Email verification is paused until domain email is configured.":"Password recovery will be available after domain email is configured.";
   return <div className="entry-experience"><div className="entry-backdrop-grid"/>
     <header className="entry-topbar"><button className="entry-brand-button" onClick={()=>chooseMode("landing")} aria-label="Pexoriy home"><EntryBrand compact/></button><div className="entry-top-actions"><span className="entry-top-caption">Your next move starts here.</span><button className="entry-nav-button" onClick={()=>chooseMode("landing")}>Back to home</button></div></header>
     <main className="entry-auth-layout">
@@ -91,7 +89,7 @@ function EntryExperience({mode,onModeChange,onEnter}) {
           {activePanel==="reset"&&<label>Confirm new password<div className="entry-input-wrap"><LockKeyhole size={16}/><input type={showPassword?"text":"password"} autoComplete="new-password" required minLength={12} maxLength={128} value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Repeat your new password"/></div></label>}
           {activePanel==="register"&&<p className="entry-form-hint">Use at least 12 characters. Don't reuse a password from another service.</p>}
           {activePanel==="login"&&<button type="button" className="text-link" onClick={()=>chooseMode("forgot")}>Forgot password?</button>}
-          <button className="entry-primary-button entry-auth-submit" type="submit" disabled={busy}>{busy?"Please wait…":activePanel==="register"?"Create account":activePanel==="login"?"Log in":activePanel==="forgot"?"Send reset link":"Update password"} <ArrowRight size={16}/></button>
+          <button className="entry-primary-button entry-auth-submit" type="submit" disabled={busy}>{busy?"Please wait…":activePanel==="register"?"Create account":activePanel==="login"?"Log in":activePanel==="forgot"?"Email setup pending":"Update password"} <ArrowRight size={16}/></button>
         </form>}
         {activePanel==="check-email"&&<div className="entry-auth-form"><div className="entry-auth-notice" role="status"><CircleHelp size={17}/><span>{notice||"Check your inbox for a verification link."}</span></div><label>Email address<div className="entry-input-wrap"><span className="entry-input-at">@</span><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com"/></div></label><button className="entry-secondary-button entry-demo-button" onClick={resendVerification} disabled={busy}>Resend verification email</button><button className="entry-secondary-button entry-demo-button" onClick={()=>chooseMode("login")}>Back to sign in</button></div>}
         {activePanel==="forgot-sent"&&<div className="entry-auth-notice" role="status"><CircleHelp size={17}/><span>{notice||"If a verified account matches that address, reset instructions will be sent."}</span></div>}
