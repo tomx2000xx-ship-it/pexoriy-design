@@ -195,17 +195,7 @@ async function handleApi(request, env) {
         status: statusOverride || (fresh ? "cached" : "stale"),
       };
     };
-    const hasRecentCompleteCache = marketCatalogue.every((market) => {
-      const row = latest.get(market.symbol);
-      const receivedAt = Date.parse(row?.received_at || "");
-      return row && row.validation_status === "valid" &&
-        isUsableTimestamp(Number(row.provider_timestamp_ms)) &&
-        Number.isFinite(receivedAt) && now - receivedAt >= -1000 && now - receivedAt <= 10000;
-    });
-    if (hasRecentCompleteCache) {
-      const markets = marketCatalogue.map((market) => toMarket(market, latest.get(market.symbol), "cached"));
-      return json({ provider: "cached-snapshots", quoteCurrency: "USDT", fetchedAt: new Date(now).toISOString(), staleAfterMs: maxQuoteAgeMs, markets });
-    }
+
 
     const binanceHosts = [
       "https://data-api.binance.vision",
@@ -254,14 +244,24 @@ async function handleApi(request, env) {
     };
 
     const fetched = await Promise.all(marketCatalogue.map(async (market) => {
+      const cachedRow = latest.get(market.symbol);
+      const cachedAt = Date.parse(cachedRow?.received_at || "");
+      const cacheUsable = cachedRow && cachedRow.validation_status === "valid" &&
+        isUsableTimestamp(Number(cachedRow.provider_timestamp_ms)) &&
+        Number.isFinite(cachedAt) && now - cachedAt >= -1000 && now - cachedAt <= 10000;
+      if (cacheUsable) return { market, quote: null, cachedRow };
       const primary = await fetchBinanceQuote(market);
-      if (primary) return { market, quote: primary };
+      if (primary) return { market, quote: primary, cachedRow: null };
       const secondary = await fetchOkxQuote(market);
-      return { market, quote: secondary };
+      return { market, quote: secondary, cachedRow: null };
     }));
     const statements = [];
     const markets = [];
-    for (const { market, quote } of fetched) {
+    for (const { market, quote, cachedRow } of fetched) {
+      if (cachedRow) {
+        markets.push(toMarket(market, cachedRow, "cached"));
+        continue;
+      }
       if (quote) {
         const priceMicros = Math.round(quote.price * 1000000);
         statements.push(env.DB.prepare(
