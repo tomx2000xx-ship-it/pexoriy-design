@@ -204,3 +204,30 @@ A screen is finished only when its primary actions call an authenticated backend
 - [ ] Add replay-safe/idempotent AC ledger crediting, expired-order and under/overpayment handling, pending/recovery reconciliation, and payment audit events; test these cases against TON testnet and then perform a controlled mainnet transaction before treating the path as live.
 - [ ] Host a valid TON Connect manifest on the eventual owned domain; use the current Worker URL only as a temporary integration origin until the domain is configured. Official TON documentation identifies TON Connect as the wallet-to-dApp protocol and documents native TON transfer amounts in nanoTON (1 TON = 10^9 nanoTON).
 - [ ] Until server-side chain verification and reconciliation pass, never show a payment as successful or issue AI Credits from wallet UI state alone.
+
+## Native GRAM (TON) checkout implementation pass — 16 October 2026
+
+- [x] Added native TON mainnet address parsing/checksum validation and canonical address comparison. Testnet-formatted receiving addresses are rejected.
+- [x] Added authenticated TON payment-order creation using server-owned AI Credit packages and a fresh GRAM/TON USD quote; each order has a unique `PEXORIY:<order-uuid>` comment and a 20-minute quote window.
+- [x] Added TON Connect transaction submission from the AI Credit Store. The wallet request sends the exact nano-unit amount to the configured receiving address with the unique comment; the UI never treats wallet approval alone as payment success.
+- [x] Added server-side TONCenter transaction lookup and checks for the destination, order comment, amount, transaction time, aborted status, and transaction hash before crediting.
+- [x] Added idempotent AC ledger delivery and order-state recovery, duplicate-transaction protection through the payment-order transaction hash, audit events, and explicit pending/underpaid/overpaid/review outcomes.
+- [x] Added TON checkout UI for wallet connection, order restoration, payment request, verification, pending states, and balance refresh after server-confirmed crediting.
+- [x] Added unit coverage for the provided wallet address, checksum validation, amount formatting, exact order references, recipient mismatch, aborted/pre-order transactions, and under/overpayment. **Six focused helper tests passed in a local Node test run.**
+- [x] Added an E2E regression test for restoring and verifying a pending native GRAM order.
+- [ ] Run the full project unit/build/E2E regression against the current branch. The GitHub status endpoint has not reported a fresh check for this pass, so no full-suite pass is claimed.
+- [ ] Deploy the latest Worker and static build, then smoke-test the TON config/order/verify routes in the deployed environment. The latest observed Cloudflare deployment predates these commits.
+- [ ] Confirm the TON Connect manifest can be fetched successfully by wallet clients. The current manifest points to an SVG icon, while TON's current setup guide specifies PNG or ICO; replace this with a valid PNG/ICO icon and update the manifest when the domain/asset path is finalized.
+- [ ] Perform a controlled mainnet transaction and reconcile the confirmed on-chain transfer, payment order, ledger transaction, and user AC balance before describing the checkout as production-verified. Never use a real customer payment as a test.
+- [ ] Add operational reconciliation for payments that arrive after quote expiry, mismatched transfers, provider downtime, and confirmed payments whose ledger delivery needs retry.
+- [ ] The user-supplied receiving address is implemented as the public fallback address; the wallet owner must verify it is the intended receiving wallet before launch. No private keys or seed phrases are required or stored by Pexoriy.
+
+## Next implementation phase — server-authoritative AI execution
+
+Proceed next with the AI execution service rather than polishing more UI. Required order:
+1. Select/configure the server-side AI provider and verify its availability in the deployed Worker.
+2. Implement authenticated AI operation/session endpoints with explicit idempotency keys, credit reservation, and operation logs.
+3. Charge AC only for a successful, defined billable operation; release/refund reservations on provider errors, rejected actions, timeouts, or failed trade settlement.
+4. Route any AI-proposed trade through the same server-authoritative quote freshness, risk/exposure, position, and TC ledger rules as manual practice trades.
+5. Persist session state and activity history; ensure the UI can never create an AI trade or charge AC from client-side state alone.
+6. Add provider failure, timeout, duplicate-request, concurrent-session, insufficient-AC, insufficient-TC, and ledger-reconciliation tests before enabling AI execution.
