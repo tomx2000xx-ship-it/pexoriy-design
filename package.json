@@ -16,7 +16,8 @@
     "react-dom": "latest",
     "lucide-react": "latest",
     "@tonconnect/ui-react": "latest",
-    "@ton/core": "latest"
+    "@ton/core": "latest",
+    "buffer": "^6.0.3"
   },
   "devDependencies": {}
 }
