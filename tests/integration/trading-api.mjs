@@ -32,6 +32,18 @@ const setCookie = registered.response.headers.get("set-cookie") || "";
 cookie = setCookie.split(";")[0];
 assert.match(cookie, /^px_session=/, "registration must issue a session cookie");
 assert.equal(Number(registered.payload?.user?.balances?.TC), 12450, "new account starts with expected TC balance");
+assert.equal(registered.payload?.user?.emailVerified, false, "normal registration must not pretend the email was verified");
+
+const signedIn = await call("/api/auth/login", {
+  method: "POST",
+  authenticated: false,
+  body: { email, password: "Stage2-Test-Password-932!" },
+});
+assert.equal(signedIn.response.status, 200, JSON.stringify(signedIn.payload));
+assert.equal(signedIn.payload?.user?.emailVerified, false, "password sign-in must work while email verification is deferred");
+const loginCookie = signedIn.response.headers.get("set-cookie") || "";
+cookie = loginCookie.split(";")[0];
+assert.match(cookie, /^px_session=/, "password sign-in must issue a session cookie");
 
 const account = await call("/api/me");
 assert.equal(account.response.status, 200, JSON.stringify(account.payload));
