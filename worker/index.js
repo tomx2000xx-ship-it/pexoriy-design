@@ -222,7 +222,7 @@ async function reconcileStaleAIReservations(env, userId, requestId) {
     await env.DB.prepare("UPDATE ai_trade_proposals SET status='expired' WHERE id=? AND status='pending'").bind(proposal.id).run();
   }
   const orphaned = await env.DB.prepare(
-    "SELECT o.* FROM ai_operations o LEFT JOIN ai_trade_proposals p ON p.operation_id = o.id WHERE o.user_id = ? AND o.status = 'reserved' AND p.id IS NULL AND o.created_at < datetime('now','-15 minutes')",
+    "SELECT o.* FROM ai_operations o LEFT JOIN ai_trade_proposals p ON p.operation_id = o.id WHERE o.user_id = ? AND o.status = 'reserved' AND p.id IS NULL AND datetime(o.created_at) < datetime('now','-15 minutes')",
   ).bind(userId).all();
   for (const operation of orphaned.results || []) {
     const reservation = await env.DB.prepare("SELECT status FROM ledger_transactions WHERE idempotency_key = ?")
@@ -838,6 +838,42 @@ async function handleApi(request, env) {
     });
   }
 
+  if (path === "/api/ai/activity" && request.method === "GET") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const result = await env.DB.prepare(
+      "SELECT id, event_type, entity_type, entity_id, details_json, created_at FROM audit_events WHERE actor_user_id = ? AND event_type LIKE 'ai.%' ORDER BY created_at DESC LIMIT 50",
+    ).bind(user.id).all();
+    const titles = {
+      "ai.session_start": "AI session started", "ai.session_pause": "AI session paused",
+      "ai.session_resume": "AI session resumed", "ai.session_stop": "AI session stopped",
+      "ai.session_configure": "AI strategy updated", "ai.trade_proposal_created": "AI setup generated",
+      "ai.credits_reserved": "AI Credits reserved", "ai.reservation_released": "AI Credit reservation released",
+      "ai.trade_fee_charged": "AI trade fee charged", "ai.trade_executed": "AI-assisted position opened",
+    };
+    const events = (result.results || []).map(row => {
+      let details = {};
+      try { details = JSON.parse(row.details_json || "{}"); } catch {}
+      const reserved = Number(details.reservedAC ?? (Number(details.reservedAtoms || 0) / 2));
+      const released = Number(details.releasedAtoms || 0) / 2;
+      const charged = Number(details.chargedAC || 0);
+      const isRelease = row.event_type === "ai.reservation_released";
+      const isReserve = row.event_type === "ai.credits_reserved";
+      const isCharge = row.event_type === "ai.trade_fee_charged";
+      const acDelta = isRelease ? released : isReserve ? -reserved : isCharge ? -charged : 0;
+      const detail = row.event_type === "ai.trade_executed"
+        ? String(details.side || "AI setup") + " · " + String(details.symbol || "") + " · " + Number(details.allocationTc || 0) + " TC"
+        : row.event_type === "ai.trade_proposal_created"
+          ? String(details.side || "Setup") + " · " + String(details.symbol || "") + " · " + Number(details.confidence || 0) + "% model confidence"
+          : isReserve ? "1.5 AC held until trade execution or cancellation."
+          : isRelease ? "Reservation released: " + String(details.finalStatus || "complete") + "."
+          : isCharge ? "1.5 AC charged after successful simulated trade execution."
+          : "Server-backed AI session event.";
+      return { id: row.id, type: row.event_type, title: titles[row.event_type] || "AI activity", detail, time: row.created_at, acDelta, tcDelta: 0, market: details.symbol, direction: details.side };
+    });
+    return json({ events });
+  }
+
   if (path === "/api/ai/session" && request.method === "GET") {
     const user = await currentUser(request, env);
     if (!user) return json({ error: "Authentication required." }, 401);
@@ -947,6 +983,7 @@ async function handleApi(request, env) {
       return json({ error: "Not enough AI Credits to reserve 1.5 AC for this setup. No trade was opened." }, 409);
     }
 
+    await appendAudit(env, { actorUserId: user.id, eventType: "ai.credits_reserved", entityType: "ai_operation", entityId: operationId, requestId, details: { reservedAtoms: AI_TRADE_RESERVATION_ATOMS, reservedAC: 1.5 } });
     let aiResult;
     try {
       aiResult = await env.AI.run(AI_MODEL_NAME, {
