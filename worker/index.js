@@ -1255,7 +1255,7 @@ async function handleApi(request, env) {
 
     try {
       await env.DB.prepare(
-        "UPDATE payment_orders SET status = 'confirmed', tx_hash = ?, received_amount_atoms = ?, confirmed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'), chain_finality = 'confirmed' WHERE id = ? AND tx_hash IS NULL AND status IN ('created','pending','confirmed')",
+        "UPDATE payment_orders SET status = 'confirmed', tx_hash = ?, received_amount_atoms = ?, confirmed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'), chain_finality = 'finalized' WHERE id = ? AND tx_hash IS NULL AND status IN ('created','pending','confirmed')",
       ).bind(match.hash, match.receivedNanoTon, order.id).run();
     } catch {
       // A concurrent verifier may already have bound this transaction to the order.
