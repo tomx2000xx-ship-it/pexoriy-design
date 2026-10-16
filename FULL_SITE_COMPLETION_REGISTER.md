@@ -27,8 +27,9 @@ Do not hand off for owner testing until all launch-critical site functionality i
 - [x] Server-side Solana payment-order and transaction-verification foundation.
 - [x] Native-SOL package quote shown separately from USD package price.
 - [x] Duplicate-credit/concurrent-verification safeguards and resumable pending-order lookup.
-- [x] Automated CI: production build, deterministic unit tests, Playwright desktop/mobile flows, authenticated local-D1 trading integration, and repeated deployed market-feed smoke checks passed on commit `2acc22725d6187e8fab5b5fe3c4a18f8078dd87c` (run [38848110241](https://github.com/tomx2000xx-ship-it/pexoriy-design/actions/runs/38848110241)).
+- [x] Automated CI: production build, deterministic unit tests, Playwright desktop/mobile flows, authenticated local-D1 trading integration, simultaneous distinct-order exposure stress test, and repeated deployed market-feed smoke checks passed on commit `be2de7cf4a8534350a5d2a8ce5f2fc33168cccd9` (run [38849769237](https://github.com/tomx2000xx-ship-it/pexoriy-design/actions/runs/38849769237)).
 - [x] Production Worker health and D1 connection verified; all five supported markets returned fresh quotes on the first request and valid cached quotes on the second request five seconds later.
+- [x] Applied and verified production D1 migration `0005_trade_execution_risk.sql`; `open_fee_tc`, `entry_quote_price_micros`, and `close_return_tc` columns plus the database-enforced position/exposure trigger are present in the live database.
 - [ ] Passing automated checks are not a substitute for provider-term review and final production configuration evidence.
 
 ## Launch work remaining
