@@ -138,6 +138,72 @@ test('AI execution remains disabled regardless of the displayed AI Credit balanc
   await expect(page.locator('.ai-balance-purchase strong')).toContainText('0');
 });
 
+test('authenticated AI session creates a server proposal and charges AC only after a simulated trade opens', async ({ page }) => {
+  let session = { id: 'ai-session-1', state: 'idle', risk_profile: 'Balanced', market_symbol: 'BTC/USDT' };
+  let proposal = null;
+  let openedPosition = null;
+  let acBalance = 840;
+  let tcBalance = 12450;
+  await page.route('**/api/me', async route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ user: { id: 'test-user', email: 'tester@example.com', displayName: 'Tester', balances: { TC: tcBalance, AC: acBalance, PXY: 0 } } })
+  }));
+  await page.route('**/api/trading/positions', async route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ positions: openedPosition ? [openedPosition] : [] })
+  }));
+  await page.route('**/api/trading/history', async route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ history: [] }) }));
+  await page.route('**/api/ai/config', async route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ provider: 'cloudflare-workers-ai', providerConfigured: true, executionEnabled: true, model: '@cf/meta/llama-3.1-8b-instruct', operationCostAC: 1.5 })
+  }));
+  await page.route('**/api/ai/session', async route => {
+    if (route.request().method() === 'GET') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ session }) });
+    const body = route.request().postDataJSON();
+    if (body.action === 'start') session = { ...session, state: 'active', risk_profile: body.riskProfile, market_symbol: body.marketSymbol };
+    if (body.action === 'pause') session = { ...session, state: 'paused' };
+    if (body.action === 'resume') session = { ...session, state: 'active' };
+    if (body.action === 'stop') session = { ...session, state: 'stopped' };
+    if (body.action === 'configure') session = { ...session, risk_profile: body.riskProfile, market_symbol: body.marketSymbol };
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ session }) });
+  });
+  await page.route('**/api/ai/activity', async route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ events: [] }) }));
+  await page.route('**/api/ai/proposals', async route => {
+    if (route.request().method() === 'GET') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ proposals: proposal ? [proposal] : [] }) });
+    proposal = {
+      id: 'proposal-1', symbol: 'DOGE/USDT', side: 'short', risk_profile: 'Balanced',
+      quotePrice: 0.1642, rationale: 'Short-term momentum is elevated; keep the simulation risk controlled.',
+      confidence: 64, status: 'pending', expires_at: new Date(Date.now() + 4 * 60 * 1000).toISOString()
+    };
+    acBalance = 838.5;
+    return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ proposal: { ...proposal, reservedAC: 1.5, chargedAC: 0 } }) });
+  });
+  await page.route('**/api/ai/proposals/execute', async route => {
+    openedPosition = {
+      id: 'position-1', symbol: 'DOGE/USDT', market: 'DOGE/USDT', side: 'short', direction: 'Short',
+      status: 'open', reserved_tc: 2490, amount: 2490, entry: 0.1642, markPrice: 0.1642,
+      time: '10:00 AM', opened_at: new Date().toISOString(), aiManaged: true, aiCreditCost: 1.5
+    };
+    acBalance = 838.5;
+    tcBalance = 9958;
+    return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ status: 'executed', chargedAC: 1.5, order: { id: 'order-1' }, position: openedPosition }) });
+  });
+  await enterApp(page, '/', 'live', 'account');
+  await goTo(page, 'AI Trading');
+  await expect(page.getByRole('heading', { name: /AI-assisted practice/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Start AI session/ })).toBeEnabled();
+  await page.getByRole('button', { name: /Start AI session/ }).click();
+  await expect(page.locator('.ai-status-pill')).toContainText('ACTIVE');
+  await page.getByRole('button', { name: /Review AI trade/ }).click();
+  await expect(page.locator('.ai-action-review')).toBeVisible();
+  await expect(page.locator('.ai-proposal-rationale')).toContainText('Short-term momentum');
+  await expect(page.locator('.ai-action-review')).toContainText('1.5 AC');
+  await page.getByRole('button', { name: /Confirm trade/ }).click();
+  await expect(page.getByText(/Simulated AI position opened through the server/)).toBeVisible();
+  await expect(page.locator('.ai-managed-list')).toContainText('DOGE/USDT');
+  await expect(page.locator('.ai-managed-list')).toContainText('1.5 AC charged');
+});
+
 test('AI Credit Store shows real network logos and live SOL and GRAM token equivalents', async ({ page }) => {
   await page.route('**/api/payments/solana/config', route => route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({enabled:false})}));
   await page.route('**/api/payments/ton/config', route => route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({enabled:false,network:'ton-mainnet',asset:'GRAM'})}));
