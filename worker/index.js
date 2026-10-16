@@ -422,6 +422,7 @@ async function handleApi(request, env) {
         "SELECT id, symbol, side, status, leverage, quantity_atoms, entry_price_micros, mark_price_micros, reserved_tc, realized_pnl_tc, opened_at, closed_at FROM trading_positions WHERE id = ? AND user_id = ?",
       ).bind(existing.position_id, user.id).first();
       if (!position) return json({ error: "The original order could not be recovered. Contact support." }, 409);
+      if (position.status !== "open") return json({ error: "This idempotency key belongs to a position that is no longer open. Refresh your trade history." }, 409);
       return json({ order: { id: existing.order_id, duplicate: true }, position: {
         ...position, amount: Number(position.reserved_tc), market: position.symbol,
         direction: position.side === "long" ? "Long" : "Short",
