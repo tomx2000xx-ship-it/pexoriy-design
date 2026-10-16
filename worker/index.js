@@ -256,6 +256,13 @@ async function handleApi(request, env) {
       const primary = await fetchOkxQuote(market);
       if (primary) return { market, quote: primary, cachedRow: null };
       const secondary = await fetchBinanceQuote(market);
+      const previous = latest.get(market.symbol);
+      if (secondary && previous && isFreshValidatedQuote(previous, now) &&
+          Number(previous.provider_timestamp_ms) >= Number(secondary.timestamp)) {
+        // Do not let a fallback provider with an older exchange timestamp
+        // roll a market backwards after a newer valid quote was already seen.
+        return { market, quote: null, cachedRow: previous };
+      }
       return { market, quote: secondary, cachedRow: null };
     }));
     const statements = [];
