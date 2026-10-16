@@ -194,3 +194,13 @@ A screen is finished only when its primary actions call an authenticated backend
 - Keep implementing the complete backend and persistence paths. Where an external service, wallet/recipient, domain, or provider credential is required, make the dependency explicit and finish everything that can be verified without inventing credentials or falsely reporting a payment as complete.
 - Native SOL order/verification routes and the receiver secret binding are present in the deployed Worker. A controlled real-transaction test and revenue reconciliation remain required evidence; configured binding alone does not prove a payment has settled correctly.
 - The GRAM panel is currently presentation/quote only and needs a real server-side payment integration. AI-assisted execution also still requires a server-side AI provider, billable-operation rules, and idempotent AC settlement.
+
+## GRAM (TON) native-coin payment decision — 16 October 2026
+
+- [x] Owner confirmed the GRAM-branded checkout is paid in the **native TON coin on The Open Network mainnet**, not a GRAM Jetton/token contract and not USDT.
+- [x] Owner supplied the intended receiving wallet address: `UQDONKXS7co5fixO6FDnicHEcdCtBRF_arFw0dgvFyjgQqoW`.
+- [ ] Validate the address against TON's address format and confirm it resolves on TON mainnet before enabling customer orders.
+- [ ] Implement TON Connect payment requests with a unique, order-bound comment/reference; verify on-chain inbound native TON value, recipient, amount, order association, and confirmation state on the server before credit delivery.
+- [ ] Add replay-safe/idempotent AC ledger crediting, expired-order and under/overpayment handling, pending/recovery reconciliation, and payment audit events; test these cases against TON testnet and then perform a controlled mainnet transaction before treating the path as live.
+- [ ] Host a valid TON Connect manifest on the eventual owned domain; use the current Worker URL only as a temporary integration origin until the domain is configured. Official TON documentation identifies TON Connect as the wallet-to-dApp protocol and documents native TON transfer amounts in nanoTON (1 TON = 10^9 nanoTON).
+- [ ] Until server-side chain verification and reconciliation pass, never show a payment as successful or issue AI Credits from wallet UI state alone.
