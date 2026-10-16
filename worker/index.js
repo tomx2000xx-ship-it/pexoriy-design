@@ -306,7 +306,7 @@ async function handleApi(request, env) {
     }
 
     const prior = await env.DB.prepare(
-      "SELECT id, status, reference_key, expected_amount_atoms, credited_ac, expires_at, recipient_address FROM payment_orders WHERE idempotency_key = ? AND user_id = ?",
+      "SELECT id, status, reference_key, expected_amount_atoms, credited_ac, expires_at, recipient_address, package_id FROM payment_orders WHERE idempotency_key = ? AND user_id = ?",
     ).bind(idempotencyKey, user.id).first();
     if (prior) {
       const priorPack = AI_CREDIT_PACKAGES[prior.package_id || packageId] || pack;
