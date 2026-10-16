@@ -2,10 +2,10 @@ import { postLedgerTransaction } from "./ledger.js";
 import {
   AI_CREDIT_PACKAGES,
   SOLANA_NETWORK,
-  SOLANA_USDC_MINT,
   encodeBase58,
   makeSolanaPayUrl,
-  validateUsdcPaymentTransaction,
+  validateSolPaymentTransaction,
+  formatLamports,
 } from "./solana-payments.js";
 
 const SESSION_COOKIE = "px_session";
@@ -292,7 +292,7 @@ async function handleApi(request, env) {
     return json({
       enabled: Boolean(env.SOLANA_RECEIVE_ADDRESS),
       network: SOLANA_NETWORK,
-      asset: "USDC",
+      asset: "SOL", quoteCurrency: "USD",
     });
   }
 
@@ -309,23 +309,22 @@ async function handleApi(request, env) {
     }
     const recipient = env.SOLANA_RECEIVE_ADDRESS;
     if (!recipient) return json({ error: "Solana payments are not configured yet." }, 503);
-
-    let payUrl;
-    let reference;
+    let payUrl, reference, expectedLamports, solUsdPrice;
     try {
-      // Address validation happens before any payment order is stored.
+      decodeBase58(recipient);
+      const quoteResponse = await fetch("https://api.coinbase.com/v2/prices/SOL-USD/spot", { headers: { accept: "application/json" } });
+      if (!quoteResponse.ok) throw new Error("SOL_PRICE_UNAVAILABLE");
+      const quote = await quoteResponse.json();
+      solUsdPrice = Number(quote?.data?.amount);
+      if (!Number.isFinite(solUsdPrice) || solUsdPrice <= 0) throw new Error("SOL_PRICE_INVALID");
+      expectedLamports = Math.round((pack.usdCents / 100 / solUsdPrice) * 1_000_000_000);
+      if (!Number.isSafeInteger(expectedLamports) || expectedLamports <= 0) throw new Error("SOL_AMOUNT_INVALID");
       const referenceBytes = new Uint8Array(32);
       crypto.getRandomValues(referenceBytes);
       reference = encodeBase58(referenceBytes);
-      payUrl = makeSolanaPayUrl({
-        recipient,
-        amountAtoms: pack.usdCents * 10_000,
-        reference,
-        label: "Pexoriy",
-        message: `${pack.aiCredits} AI Credits · ${pack.id}`,
-      });
+      payUrl = makeSolanaPayUrl({ recipient, amountLamports: expectedLamports, reference, label: "Pexoriy", message: `${pack.aiCredits} AI Credits · ${pack.id}` });
     } catch {
-      return json({ error: "The configured Solana receiving address is invalid." }, 503);
+      return json({ error: "A live SOL quote is unavailable or the receiving address is invalid. Please retry shortly." }, 503);
     }
 
     const prior = await env.DB.prepare(
@@ -337,7 +336,7 @@ async function handleApi(request, env) {
       try {
         priorUrl = makeSolanaPayUrl({
           recipient: prior.recipient_address || recipient,
-          amountAtoms: Number(prior.expected_amount_atoms),
+          amountLamports: Number(prior.expected_amount_atoms),
           reference: prior.reference_key,
           label: "Pexoriy",
           message: `${priorPack.aiCredits} AI Credits · ${priorPack.id}`,
@@ -346,8 +345,8 @@ async function handleApi(request, env) {
         return json({ error: "This payment order needs support review." }, 409);
       }
       return json({
-        order: { id: prior.id, status: prior.status, asset: "USDC", network: SOLANA_NETWORK,
-          expectedAmountAtoms: Number(prior.expected_amount_atoms), aiCredits: Number(prior.credited_ac || priorPack.aiCredits),
+        order: { id: prior.id, status: prior.status, asset: "SOL", network: SOLANA_NETWORK,
+          expectedAmountAtoms: Number(prior.expected_amount_atoms), amountSol: formatLamports(Number(prior.expected_amount_atoms)), aiCredits: Number(prior.credited_ac || priorPack.aiCredits),
           expiresAt: prior.expires_at, paymentUrl: priorUrl },
         reused: true,
       });
@@ -361,10 +360,10 @@ async function handleApi(request, env) {
           (id, user_id, idempotency_key, provider, network, asset, expected_amount_atoms,
            usd_equivalent_micros, status, reference_key, token_mint, package_id, credited_ac,
            expires_at, recipient_address)
-         VALUES (?, ?, ?, 'solana-rpc', ?, 'USDC', ?, ?, 'created', ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, 'solana-rpc', ?, 'SOL', ?, ?, 'created', ?, NULL, ?, ?, ?, ?)`,
       ).bind(
-        orderId, user.id, idempotencyKey, SOLANA_NETWORK, pack.usdCents * 10_000,
-        pack.usdCents * 10_000, reference, SOLANA_USDC_MINT, pack.id, pack.aiCredits,
+        orderId, user.id, idempotencyKey, SOLANA_NETWORK, expectedLamports,
+        pack.usdCents * 10_000, reference, pack.id, pack.aiCredits,
         expiresAt, recipient,
       ).run();
       await appendAudit(env, {
@@ -379,10 +378,10 @@ async function handleApi(request, env) {
       const racedPack = AI_CREDIT_PACKAGES[priorAfterRace.package_id] || pack;
       return json({ order: {
         id: priorAfterRace.id, status: priorAfterRace.status, asset: "USDC", network: SOLANA_NETWORK,
-        expectedAmountAtoms: Number(priorAfterRace.expected_amount_atoms), aiCredits: racedPack.aiCredits,
+        expectedAmountAtoms: Number(priorAfterRace.expected_amount_atoms), amountSol: formatLamports(Number(priorAfterRace.expected_amount_atoms)), aiCredits: racedPack.aiCredits,
         expiresAt: priorAfterRace.expires_at,
         paymentUrl: makeSolanaPayUrl({ recipient: priorAfterRace.recipient_address || recipient,
-          amountAtoms: Number(priorAfterRace.expected_amount_atoms), reference: priorAfterRace.reference_key,
+          amountLamports: Number(priorAfterRace.expected_amount_atoms), reference: priorAfterRace.reference_key,
           label: "Pexoriy", message: `${racedPack.aiCredits} AI Credits · ${racedPack.id}` }),
       }, reused: true });
     }
@@ -390,7 +389,7 @@ async function handleApi(request, env) {
     return json({
       order: {
         id: orderId, status: "created", asset: "USDC", network: SOLANA_NETWORK,
-        expectedAmountAtoms: pack.usdCents * 10_000, amount: (pack.usdCents / 100).toFixed(2),
+        expectedAmountAtoms: expectedLamports, amountSol: formatLamports(expectedLamports), amountUsd: (pack.usdCents / 100).toFixed(2), quotedSolUsd: solUsdPrice,
         aiCredits: pack.aiCredits, expiresAt, paymentUrl: payUrl,
       },
       instructions: "Open the payment link in a compatible Solana wallet. Credits are added only after server-side verification.",
@@ -451,17 +450,17 @@ async function handleApi(request, env) {
       }
       if (!transaction || transaction.meta?.err) continue;
       try {
-        const validation = validateUsdcPaymentTransaction(transaction, {
+        const validation = validateSolPaymentTransaction(transaction, {
           recipient: order.recipient_address,
           reference: order.reference_key,
-          expectedAmountAtoms: Number(order.expected_amount_atoms),
+          expectedLamports: Number(order.expected_amount_atoms),
         });
         if (validation.valid) {
           match = { signature: item.signature, slot: Number(transaction.slot) };
           break;
         }
-        if (BigInt(validation.receivedAtoms) > 0n) {
-          mismatch = { signature: item.signature, slot: Number(transaction.slot), reason: validation.reason, receivedAtoms: validation.receivedAtoms };
+        if (Number(validation.receivedLamports) > 0) {
+          mismatch = { signature: item.signature, slot: Number(transaction.slot), reason: validation.reason, receivedLamports: validation.receivedLamports };
         }
       } catch {
         // A transaction with a matching reference but wrong mint/recipient is never credited.
@@ -472,14 +471,14 @@ async function handleApi(request, env) {
       const status = mismatch.reason === "underpaid" ? "underpaid" : "overpaid";
       await env.DB.prepare(
         "UPDATE payment_orders SET received_amount_atoms = ?, status = 'pending' WHERE id = ? AND status IN ('created','pending')",
-      ).bind(Number(mismatch.receivedAtoms), order.id).run();
+      ).bind(Number(mismatch.receivedLamports), order.id).run();
       await recordSolanaPaymentEvent(env, {
         orderId: order.id, signature: mismatch.signature, eventType: "transaction.amount_mismatch",
         processingStatus: "review", slot: mismatch.slot,
       });
       await appendAudit(env, {
         actorUserId: user.id, eventType: `payment.solana_${status}`, entityType: "payment_order",
-        entityId: order.id, requestId, details: { signature: mismatch.signature, slot: mismatch.slot, receivedAtoms: mismatch.receivedAtoms },
+        entityId: order.id, requestId, details: { signature: mismatch.signature, slot: mismatch.slot, receivedLamports: mismatch.receivedLamports },
       });
       return json({
         status,
@@ -518,7 +517,7 @@ async function handleApi(request, env) {
     try {
       await postLedgerTransaction(env.DB, {
         id: ledgerTransactionId,
-        idempotencyKey: `solana-usdc-payment:${order.id}:ai-credits`,
+        idempotencyKey: `solana-sol-payment:${order.id}:ai-credits`,
         userId: user.id,
         eventType: "payment.ai_credits_purchased",
         metadata: { paymentOrderId: order.id, chain: SOLANA_NETWORK, signature: match.signature, packageId: order.package_id },
