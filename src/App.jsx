@@ -116,6 +116,7 @@ function AIStore({navigate,setAC,onRequireAuth}){
 }
 
 function AITrading({ac,setAC,tc,setTC,positions,setPositions,aiEvents,setAIEvents,sessionState,setSessionState,selected,choose,markMission,navigate,marketList=markets}){
+ const aiExecutionReady=false; // Keep AI execution disabled until the server provider and AC settlement are verified.
  const [asset,setAsset]=useState('ALL'),[risk,setRisk]=useState('Balanced'),[allocation,setAllocation]=useState('Auto'),[notice,setNotice]=useState(''),[lastRun,setLastRun]=useState(null),[opportunityFilter,setOpportunityFilter]=useState('All'),[reviewAction,setReviewAction]=useState(null);
  const sessionActive=sessionState==='active',sessionPaused=sessionState==='paused';
  const logEvent=event=>setAIEvents(prev=>[{id:Date.now()+Math.random(),time:new Date().toISOString(),...event},...prev].slice(0,100));
