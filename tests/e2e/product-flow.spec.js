@@ -10,6 +10,10 @@ async function enterApp(page, path = '/') {
 
 async function goTo(page, label) {
   const mobile = (page.viewportSize()?.width || 1200) <= 600;
+  if (mobile && label === 'Activity') {
+    await page.locator('.topbar').getByRole('button', { name: 'Activity', exact: true }).click();
+    return;
+  }
   const mobileLabels = { 'Practice Trading': 'Practice', 'AI Trading': 'AI Centre' };
   const visibleLabel = mobile ? (mobileLabels[label] || label) : label;
   const nav = mobile
