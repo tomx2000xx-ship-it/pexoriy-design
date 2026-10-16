@@ -49,10 +49,11 @@ const account = await call("/api/me");
 assert.equal(account.response.status, 200, JSON.stringify(account.payload));
 assert.equal(Number(account.payload?.user?.balances?.TC), 12450);
 
+const throttleEmail = `throttle-${Date.now()}@example.test`;
 const loginAttempts = await Promise.all(Array.from({ length: 6 }, () => call("/api/auth/login", {
   method: "POST",
   authenticated: false,
-  body: { email, password: "Definitely-Wrong-Password-932!" },
+  body: { email: throttleEmail, password: "Definitely-Wrong-Password-932!" },
 })));
 assert.ok(loginAttempts.slice(0, 5).every((item) => item.response.status === 401),
   "incorrect credentials should receive a generic sign-in failure before the email rate limit");
