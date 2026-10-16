@@ -146,6 +146,10 @@ test('AI Credit Store shows real network logos and live SOL and GRAM token equiv
   await page.getByRole('button', { name: /Buy more AI Credits/ }).click();
 
   await expect(page.getByRole('heading', { name: 'Power your next AI session.' })).toBeVisible();
+  await expect(page.locator('.ai-store-page-mark .ai-credit-mark')).toBeVisible();
+  await expect(page.locator('.ai-package-card.ai-package-popular')).toHaveCount(1);
+  await expect(page.locator('.ai-package-card.ai-package-popular')).toContainText('MOST POPULAR');
+  await expect(page.locator('.ai-store-selected-summary button')).toContainText('Purchases temporarily unavailable');
   const entryPackage = page.locator('.ai-package-card').first();
   await expect(entryPackage.locator('.ai-package-payment strong')).toContainText('0.0500');
   await expect(entryPackage.locator('.ai-package-payment strong')).toContainText('SOL');
@@ -156,7 +160,8 @@ test('AI Credit Store shows real network logos and live SOL and GRAM token equiv
   await page.getByRole('tab', { name: /GRAM \(TON\)/ }).click();
   await expect(page.locator('.ai-package-card').first().locator('.ai-package-payment strong')).toContainText('1 GRAM');
   await expect(page.locator('.ai-package-card').first().locator('.ai-package-payment strong')).toContainText('GRAM');
-  await expect(page.locator('.ai-store-selected-summary button')).toContainText('Connect GRAM Wallet');
+  await expect(page.locator('.ai-store-selected-summary button')).toContainText('GRAM checkout unavailable');
+  await expect(page.locator('.ai-store-gram-panel')).toContainText('CHECKOUT NOT ENABLED');
 });
 
 test('AI Credit Store restores an existing pending Solana order after navigation', async ({ page }) => {
