@@ -424,15 +424,34 @@ async function handleApi(request, env) {
       "SELECT id, symbol, side, status, leverage, quantity_atoms, entry_price_micros, mark_price_micros, reserved_tc, realized_pnl_tc, opened_at, closed_at FROM trading_positions WHERE user_id = ? AND status = 'open' ORDER BY opened_at DESC LIMIT 100",
     ).bind(user.id).all();
     const now = Date.now();
+    const quoteRows = await env.DB.prepare(
+      "SELECT symbol, price_micros, provider_timestamp_ms, validation_status, provider FROM market_snapshots WHERE id IN (SELECT id FROM market_snapshots s2 WHERE s2.symbol = market_snapshots.symbol ORDER BY provider_timestamp_ms DESC, received_at DESC LIMIT 1)",
+    ).all().catch(() => ({ results: [] }));
+    const quotes = new Map((quoteRows.results || []).map((quote) => [quote.symbol, quote]));
     const positions = (result.results || []).map((row) => {
-      const entry = Number(row.entry_price_micros) / 1000000;
-      const mark = Number(row.mark_price_micros) / 1000000;
+      const entryPriceMicros = Number(row.entry_price_micros);
+      const entry = entryPriceMicros / 1000000;
       const allocation = Number(row.reserved_tc);
-      const signed = row.side === "short" ? -1 : 1;
-      const pnl = Number.isFinite(entry) && entry > 0 && Number.isFinite(mark)
-        ? Math.round(allocation * ((mark - entry) / entry) * signed) : 0;
-      return { ...row, amount: allocation, market: row.symbol, direction: row.side === "long" ? "Long" : "Short",
-        entry, markPrice: mark, unrealizedPnlTc: pnl, time: new Date(row.opened_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+      const quote = quotes.get(row.symbol);
+      const hasFreshQuote = isFreshValidatedQuote(quote, now);
+      const markPriceMicros = hasFreshQuote ? Number(quote.price_micros) : Number(row.mark_price_micros);
+      const mark = markPriceMicros / 1000000;
+      let pnl = null;
+      if (hasFreshQuote) {
+        try {
+          pnl = calculateRealizedSettlement({
+            allocationTc: allocation, side: row.side,
+            entryPriceMicros, exitPriceMicros: markPriceMicros,
+          }).realizedPnlTc;
+        } catch {
+          pnl = null;
+        }
+      }
+      return { ...row, mark_price_micros: markPriceMicros, amount: allocation, market: row.symbol,
+        direction: row.side === "long" ? "Long" : "Short",
+        entry, markPrice: mark, unrealizedPnlTc: pnl, quoteStatus: hasFreshQuote ? "live" : "stale",
+        quoteProvider: hasFreshQuote ? quote.provider : null,
+        time: new Date(row.opened_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
         openedAt: row.opened_at, aiManaged: false };
     });
     return json({ positions, serverTime: new Date(now).toISOString() });
