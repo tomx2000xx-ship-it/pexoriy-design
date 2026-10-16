@@ -153,12 +153,12 @@ test('authenticated practice orders persist through the server API and settle th
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ positions: openPosition ? [openPosition] : [] }) });
     }
     const body = route.request().postDataJSON();
-    tc -= body.allocationTc;
+    tc -= body.allocationTc + 1;
     openPosition = {
       id: 'position-server-001', symbol: body.symbol, market: body.symbol, side: body.side, direction: body.side === 'long' ? 'Long' : 'Short',
       status: 'open', leverage: 1, quantity_atoms: body.allocationTc * 1000000, entry_price_micros: 67482200000,
       mark_price_micros: 67482200000, reserved_tc: body.allocationTc, amount: body.allocationTc, entry: 67482.2,
-      markPrice: 67482.2, realized_pnl_tc: 0, opened_at: openedAt, openedAt, time: '04:20 AM', aiManaged: false
+      markPrice: 67482.2, realized_pnl_tc: 0, open_fee_tc: 1, unrealizedPnlTc: -3, quoteStatus: 'live', opened_at: openedAt, openedAt, time: '04:20 AM', aiManaged: false
     };
     return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ order: { id: 'order-server-001' }, position: openPosition }) });
   });
@@ -166,15 +166,15 @@ test('authenticated practice orders persist through the server API and settle th
     status: 200, contentType: 'application/json', body: JSON.stringify({ history: closedHistory })
   }));
   await page.route('**/api/trading/positions/close', async route => {
-    const returned = Number(openPosition?.reserved_tc || 0) + 4;
+    const returned = Number(openPosition?.reserved_tc || 0) + 3;
     tc += returned;
     const closed = {
       ...openPosition, status: 'closed', exit: 68000, mark_price_micros: 68000000000,
-      realizedPnl: 4, realized_pnl_tc: 4, tcReturned: returned, closedAtIso: new Date().toISOString()
+      realizedPnl: 2, realized_pnl_tc: 2, tcReturned: returned, closedAtIso: new Date().toISOString()
     };
     closedHistory = [{
       id: closed.id, market: closed.market, direction: closed.direction, amount: closed.amount,
-      entry: closed.entry, exit: closed.exit, realizedPnl: 4, tcReturned: returned,
+      entry: closed.entry, exit: closed.exit, realizedPnl: 2, tcReturned: returned,
       time: '04:20 AM', closedAt: '04:21 AM', closedAtIso: closed.closedAtIso
     }];
     openPosition = null;
@@ -187,12 +187,13 @@ test('authenticated practice orders persist through the server API and settle th
   await page.getByRole('button', { name: /Review Buy \/ Long order/ }).click();
   await page.getByRole('button', { name: /Confirm simulated entry/ }).click();
   await expect(page.getByText('Practice position', { exact: false }).first()).toBeVisible();
-  await expect(page.getByText('11,950', { exact: false }).first()).toBeVisible();
+  await expect(page.getByText('11,949', { exact: false }).first()).toBeVisible();
+  await expect(page.locator('.position-card').first()).toContainText('-3 TC');
   await page.getByRole('button', { name: 'Review close' }).click();
   await page.getByRole('button', { name: 'Confirm close' }).click();
   await expect(page.getByText('Position closed and settlement recorded.')).toBeVisible();
-  await expect(page.getByText('+4 TC', { exact: true }).first()).toBeVisible();
-  await expect(page.getByText('12,454', { exact: false }).first()).toBeVisible();
+  await expect(page.getByText('+2 TC', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('12,452', { exact: false }).first()).toBeVisible();
 });
 
 test('mobile layout stays within the viewport on Practice and AI Trading', async ({ page, isMobile }) => {
