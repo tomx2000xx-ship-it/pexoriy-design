@@ -155,7 +155,7 @@ test('authenticated AI session creates a server proposal and charges AC only aft
   await page.route('**/api/trading/history', async route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ history: [] }) }));
   await page.route('**/api/ai/config', async route => route.fulfill({
     status: 200, contentType: 'application/json',
-    body: JSON.stringify({ provider: 'cloudflare-workers-ai', providerConfigured: true, executionEnabled: true, model: '@cf/meta/llama-3.1-8b-instruct', operationCostAC: 1.5 })
+    body: JSON.stringify({ provider: 'cloudflare-workers-ai', providerConfigured: true, executionEnabled: true, model: '@cf/google/gemma-4-26b-a4b-it', operationCostAC: 1.5 })
   }));
   await page.route('**/api/ai/session', async route => {
     if (route.request().method() === 'GET') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ session }) });
