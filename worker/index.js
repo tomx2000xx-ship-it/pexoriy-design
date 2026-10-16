@@ -173,7 +173,7 @@ async function handleApi(request, env) {
       { symbol: "ETH/USDT", name: "Ethereum", binance: "ETHUSDT", okx: "ETH-USDT" },
       { symbol: "SOL/USDT", name: "Solana", binance: "SOLUSDT", okx: "SOL-USDT" },
       { symbol: "DOGE/USDT", name: "Dogecoin", binance: "DOGEUSDT", okx: "DOGE-USDT" },
-      { symbol: "GRAM/USDT", name: "Gram", binance: "GRAMUSDT", okx: null },
+      { symbol: "GRAM/USDT", name: "Gram", binance: "GRAMUSDT", okx: "GRAM-USDT" },
     ];
     const now = Date.now();
     const maxQuoteAgeMs = 90000;
