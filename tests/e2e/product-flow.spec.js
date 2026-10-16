@@ -44,7 +44,7 @@ test('registration requires email verification and provides password recovery sc
   await page.getByRole('button',{name:'Create an account'}).click();
   await page.getByLabel('Display name').fill('Verified User');
   await page.getByLabel('Email address').fill('verified@example.test');
-  await page.getByLabel('Password').fill('Verified-Test-Password-932!');
+  await page.getByLabel('Password',{exact:true}).fill('Verified-Test-Password-932!');
   await page.getByRole('button',{name:'Create account'}).click();
   await expect(page.getByRole('heading',{name:'Check your inbox'})).toBeVisible();
   await expect(page.getByRole('button',{name:'Resend verification email'})).toBeVisible();
@@ -61,8 +61,8 @@ test('password reset requires matching new passwords', async ({ page }) => {
   await page.route('**/api/auth/reset-password', route => route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,message:'Password updated. Sign in with your new password.'})}));
   await page.goto('/?auth=reset&token='+'b'.repeat(64));
   await expect(page.getByRole('heading',{name:'Choose a new password'})).toBeVisible();
-  await page.getByLabel('Password').fill('New-Verified-Password-932!');
-  await page.getByLabel('Confirm new password').fill('New-Verified-Password-932!');
+  await page.getByLabel('New password',{exact:true}).fill('New-Verified-Password-932!');
+  await page.getByLabel('Confirm new password',{exact:true}).fill('New-Verified-Password-932!');
   await page.getByRole('button',{name:'Update password'}).click();
   await expect(page.getByRole('heading',{name:'Log in to Pexoriy'})).toBeVisible();
 });
