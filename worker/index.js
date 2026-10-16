@@ -1,5 +1,6 @@
 import { postLedgerTransaction } from "./ledger.js";
 import { calculateRealizedSettlement, isFreshValidatedQuote } from "./trading.js";
+import { normalizeMarketQuote } from "./market-feed.js";
 import {
   AI_CREDIT_PACKAGES,
   SOLANA_NETWORK,
@@ -180,8 +181,9 @@ async function handleApi(request, env) {
       "SELECT symbol, price_micros, provider_timestamp_ms, validation_status, provider FROM market_snapshots WHERE id IN (SELECT id FROM market_snapshots s2 WHERE s2.symbol = market_snapshots.symbol ORDER BY provider_timestamp_ms DESC, received_at DESC LIMIT 1)",
     ).all().catch(() => ({ results: [] }));
     const latest = new Map((latestRows.results || []).map((row) => [row.symbol, row]));
-    const isUsableTimestamp = (timestamp) => Number.isFinite(timestamp) &&
-      timestamp <= now + 15000 && now - timestamp >= -15000 && now - timestamp <= maxQuoteAgeMs;
+    const isUsableTimestamp = (timestamp) => Boolean(normalizeMarketQuote({
+      price: 1, timestamp, provider: "timestamp-check",
+    }, now, maxQuoteAgeMs));
     const toMarket = (market, row, statusOverride) => {
       const timestamp = Number(row?.provider_timestamp_ms || 0);
       const fresh = Boolean(row && row.validation_status === "valid" && isUsableTimestamp(timestamp));
@@ -222,14 +224,12 @@ async function handleApi(request, env) {
       for (const host of binanceHosts) {
         try {
           const quote = await fetchJson(host + "/api/v3/avgPrice?symbol=" + encodeURIComponent(market.binance));
-          const price = Number(quote?.price);
           // Binance avgPrice.closeTime is the timestamp of the last trade, not
           // the time our Worker fetched the response.
-          const timestamp = Number(quote?.closeTime);
-          if (Number.isFinite(price) && price > 0 &&
-              Number.isSafeInteger(Math.round(price * 1000000)) && isUsableTimestamp(timestamp)) {
-            return { price, timestamp, provider: "binance-spot-public", change24h: null };
-          }
+          const normalized = normalizeMarketQuote({
+            price: quote?.price, timestamp: quote?.closeTime, provider: "binance-spot-public",
+          }, now, maxQuoteAgeMs);
+          if (normalized) return { ...normalized, change24h: null };
         } catch {
           // Try the next official public-data hostname before changing provider.
         }
@@ -241,12 +241,10 @@ async function handleApi(request, env) {
       try {
         const payload = await fetchJson("https://www.okx.com/api/v5/market/ticker?instId=" + encodeURIComponent(market.okx));
         const quote = payload?.code === "0" ? payload?.data?.[0] : null;
-        const price = Number(quote?.last);
-        const timestamp = Number(quote?.ts);
-        if (Number.isFinite(price) && price > 0 &&
-            Number.isSafeInteger(Math.round(price * 1000000)) && isUsableTimestamp(timestamp)) {
-          return { price, timestamp, provider: "okx-spot-public", change24h: null };
-        }
+        const normalized = normalizeMarketQuote({
+          price: quote?.last, timestamp: quote?.ts, provider: "okx-spot-public",
+        }, now, maxQuoteAgeMs);
+        if (normalized) return { ...normalized, change24h: null };
       } catch {
         // Keep this optional fallback isolated; stale data is never promoted to live.
       }
