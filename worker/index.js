@@ -163,6 +163,88 @@ async function handleApi(request, env) {
     }
   }
 
+  if (path === "/api/markets" && request.method === "GET") {
+    const marketCatalogue = [
+      { id: "bitcoin", symbol: "BTC/USDT", name: "Bitcoin" },
+      { id: "ethereum", symbol: "ETH/USDT", name: "Ethereum" },
+      { id: "solana", symbol: "SOL/USDT", name: "Solana" },
+      { id: "dogecoin", symbol: "DOGE/USDT", name: "Dogecoin" },
+      { id: "the-open-network", symbol: "GRAM/USDT", name: "Gram" },
+    ];
+    const now = Date.now();
+    const latestRows = await env.DB.prepare(
+      "SELECT symbol, price_micros, provider_timestamp_ms, validation_status, provider FROM market_snapshots WHERE id IN (SELECT id FROM market_snapshots s2 WHERE s2.symbol = market_snapshots.symbol ORDER BY provider_timestamp_ms DESC, received_at DESC LIMIT 1)",
+    ).all().catch(() => ({ results: [] }));
+    const latest = new Map((latestRows.results || []).map((row) => [row.symbol, row]));
+    const hasRecentCompleteCache = marketCatalogue.every((market) => {
+      const row = latest.get(market.symbol);
+      return row && Number(row.provider_timestamp_ms) <= now + 15000 && now - Number(row.provider_timestamp_ms) <= 15000 && row.validation_status === "valid";
+    });
+    if (hasRecentCompleteCache) {
+      return json({ provider: "coingecko", quoteCurrency: "USD", fetchedAt: new Date(now).toISOString(), markets: marketCatalogue.map((market) => {
+        const row = latest.get(market.symbol);
+        return { symbol: market.symbol, name: market.name, price: Number(row.price_micros) / 1000000, updatedAt: new Date(Number(row.provider_timestamp_ms)).toISOString(), status: "live" };
+      }) });
+    }
+
+    try {
+      const ids = marketCatalogue.map((market) => market.id).join(",");
+      const response = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=" + encodeURIComponent(ids) + "&vs_currencies=usd&include_24hr_change=true&include_last_updated_at=true", {
+        headers: { "accept": "application/json" },
+        signal: AbortSignal.timeout(7000),
+      });
+      if (!response.ok) throw new Error("Market provider returned " + response.status);
+      const data = await response.json();
+      const freshMarkets = [];
+      const statements = [];
+      for (const market of marketCatalogue) {
+        const quote = data?.[market.id];
+        const price = Number(quote?.usd);
+        const providerTimestamp = Number(quote?.last_updated_at) * 1000;
+        const age = now - providerTimestamp;
+        const valid = Number.isFinite(price) && price > 0 && Number.isSafeInteger(Math.round(price * 1000000)) &&
+          Number.isFinite(providerTimestamp) && age >= -15000 && age <= 90000;
+        const prior = latest.get(market.symbol);
+        const status = valid ? "valid" : "stale";
+        if (!valid) {
+          freshMarkets.push({
+            symbol: market.symbol, name: market.name,
+            price: prior ? Number(prior.price_micros) / 1000000 : null,
+            updatedAt: prior ? new Date(Number(prior.provider_timestamp_ms)).toISOString() : null,
+            status: "stale",
+          });
+          continue;
+        }
+        const priceMicros = Math.round(price * 1000000);
+        statements.push(env.DB.prepare(
+          "INSERT INTO market_snapshots (id, provider, symbol, price_micros, provider_timestamp_ms, validation_status, model_version) VALUES (?, 'coingecko-public', ?, ?, ?, ?, 'market-feed-v1')",
+        ).bind(crypto.randomUUID(), market.symbol, priceMicros, providerTimestamp, status));
+        freshMarkets.push({
+          symbol: market.symbol, name: market.name, price,
+          change24h: Number.isFinite(Number(quote.usd_24h_change)) ? Number(quote.usd_24h_change) : null,
+          updatedAt: new Date(providerTimestamp).toISOString(), status: "live",
+        });
+      }
+      if (statements.length) await env.DB.batch(statements);
+      const hasTradableMarket = freshMarkets.some((market) => market.status === "live" && market.price > 0);
+      return json({ provider: "coingecko", quoteCurrency: "USD", fetchedAt: new Date(now).toISOString(), staleAfterMs: 90000, markets: freshMarkets }, hasTradableMarket ? 200 : 503);
+    } catch {
+      const fallback = marketCatalogue.map((market) => {
+        const row = latest.get(market.symbol);
+        const timestamp = Number(row?.provider_timestamp_ms || 0);
+        const isFresh = Boolean(row && now - timestamp >= -15000 && now - timestamp <= 90000 && row.validation_status === "valid");
+        return {
+          symbol: market.symbol, name: market.name,
+          price: row ? Number(row.price_micros) / 1000000 : null,
+          updatedAt: row ? new Date(timestamp).toISOString() : null,
+          status: isFresh ? "cached" : "stale",
+        };
+      });
+      const hasFreshFallback = fallback.some((market) => market.status === "cached");
+      return json({ provider: "coingecko", quoteCurrency: "USD", fetchedAt: new Date(now).toISOString(), staleAfterMs: 90000, markets: fallback, message: "Live market quotes are temporarily unavailable. Stale markets must not accept new simulated orders." }, hasFreshFallback ? 200 : 503);
+    }
+  }
+
   if (request.method !== "GET" && !requireSameOrigin(request)) {
     return json({ error: "Cross-origin request rejected." }, 403);
   }
