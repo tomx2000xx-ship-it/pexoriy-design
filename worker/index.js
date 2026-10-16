@@ -365,6 +365,198 @@ async function handleApi(request, env) {
     const user = await currentUser(request, env);
     if (!user) return json({ error: "Authentication required." }, 401);
     const result = await env.DB.prepare(
+      "SELECT id, symbol, side, status, leverage, quantity_atoms, entry_price_micros, mark_price_micros, reserved_tc, realized_pnl_tc, opened_at, closed_at FROM trading_positions WHERE user_id = ? AND status = 'open' ORDER BY opened_at DESC LIMIT 100",
+    ).bind(user.id).all();
+    const now = Date.now();
+    const positions = (result.results || []).map((row) => {
+      const entry = Number(row.entry_price_micros) / 1000000;
+      const mark = Number(row.mark_price_micros) / 1000000;
+      const allocation = Number(row.reserved_tc);
+      const signed = row.side === "short" ? -1 : 1;
+      const pnl = Number.isFinite(entry) && entry > 0 && Number.isFinite(mark)
+        ? Math.round(allocation * ((mark - entry) / entry) * signed) : 0;
+      return { ...row, amount: allocation, market: row.symbol, direction: row.side === "long" ? "Long" : "Short",
+        entry, markPrice: mark, unrealizedPnlTc: pnl, time: new Date(row.opened_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+        openedAt: row.opened_at, aiManaged: false };
+    });
+    return json({ positions, serverTime: new Date(now).toISOString() });
+  }
+
+  if (path === "/api/trading/history" && request.method === "GET") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const result = await env.DB.prepare(
+      "SELECT id, symbol, side, reserved_tc, entry_price_micros, mark_price_micros, realized_pnl_tc, opened_at, closed_at FROM trading_positions WHERE user_id = ? AND status = 'closed' ORDER BY closed_at DESC LIMIT 100",
+    ).bind(user.id).all();
+    return json({ history: (result.results || []).map((row) => ({
+      id: row.id, market: row.symbol, direction: row.side === "long" ? "Long" : "Short",
+      amount: Number(row.reserved_tc), entry: Number(row.entry_price_micros) / 1000000,
+      exit: Number(row.mark_price_micros) / 1000000, realizedPnl: Number(row.realized_pnl_tc || 0),
+      tcReturned: Number(row.reserved_tc) + Number(row.realized_pnl_tc || 0),
+      openedAt: row.opened_at, closedAtIso: row.closed_at,
+      time: new Date(row.opened_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+      closedAt: row.closed_at ? new Date(row.closed_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "",
+    })) });
+  }
+
+  if (path === "/api/trading/positions" && request.method === "POST") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const body = await readJson(request);
+    const symbol = typeof body?.symbol === "string" ? body.symbol.trim().toUpperCase() : "";
+    const side = typeof body?.side === "string" ? body.side.trim().toLowerCase() : "";
+    const allocationTc = Number(body?.allocationTc);
+    const idempotencyKey = typeof body?.idempotencyKey === "string" ? body.idempotencyKey.trim() : "";
+    const allowedSymbols = new Set(["BTC/USDT", "ETH/USDT", "SOL/USDT", "DOGE/USDT", "GRAM/USDT"]);
+    if (!allowedSymbols.has(symbol) || !["long", "short"].includes(side)) return json({ error: "Choose a supported market and direction." }, 400);
+    if (!Number.isSafeInteger(allocationTc) || allocationTc < 1 || allocationTc > 100000000) return json({ error: "Trade Credit allocation must be a whole number between 1 and 100,000,000 TC." }, 400);
+    if (!/^[a-zA-Z0-9:_-]{8,160}$/.test(idempotencyKey)) return json({ error: "A valid idempotency key is required." }, 400);
+
+    const existing = await env.DB.prepare(
+      "SELECT o.id AS order_id, o.position_id, o.symbol, o.side, p.status AS position_status FROM trade_orders o LEFT JOIN trading_positions p ON p.id = o.position_id WHERE o.idempotency_key = ? AND o.user_id = ?",
+    ).bind(idempotencyKey, user.id).first();
+    if (existing) {
+      if (existing.symbol !== symbol || existing.side !== side) return json({ error: "This idempotency key was already used for a different order." }, 409);
+      const position = await env.DB.prepare(
+        "SELECT id, symbol, side, status, leverage, quantity_atoms, entry_price_micros, mark_price_micros, reserved_tc, realized_pnl_tc, opened_at, closed_at FROM trading_positions WHERE id = ? AND user_id = ?",
+      ).bind(existing.position_id, user.id).first();
+      if (!position) return json({ error: "The original order could not be recovered. Contact support." }, 409);
+      return json({ order: { id: existing.order_id, duplicate: true }, position: {
+        ...position, amount: Number(position.reserved_tc), market: position.symbol,
+        direction: position.side === "long" ? "Long" : "Short",
+        entry: Number(position.entry_price_micros) / 1000000,
+        markPrice: Number(position.mark_price_micros) / 1000000,
+        time: new Date(position.opened_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+        openedAt: position.opened_at, aiManaged: false,
+      } });
+    }
+
+    const quote = await env.DB.prepare(
+      "SELECT price_micros, provider_timestamp_ms, validation_status FROM market_snapshots WHERE symbol = ? ORDER BY provider_timestamp_ms DESC, received_at DESC LIMIT 1",
+    ).bind(symbol).first();
+    const quoteAge = Date.now() - Number(quote?.provider_timestamp_ms || 0);
+    if (!quote || quote.validation_status !== "valid" || !Number.isFinite(Number(quote.price_micros)) ||
+        Number(quote.price_micros) <= 0 || quoteAge < -15000 || quoteAge > 90000) {
+      return json({ error: "A fresh, validated market quote is required. Refresh the market and try again." }, 503);
+    }
+    const balances = await balancesForUser(env, user.id);
+    if (balances.TC < allocationTc) return json({ error: "Not enough Trade Credits. Refresh your balance and reduce the allocation." }, 409);
+
+    const positionId = crypto.randomUUID();
+    const orderId = crypto.randomUUID();
+    const transactionId = crypto.randomUUID();
+    const priceMicros = Number(quote.price_micros);
+    const quantityAtoms = allocationTc * 1000000;
+    try {
+      await env.DB.batch([
+        env.DB.prepare("INSERT INTO ledger_transactions (id, idempotency_key, user_id, event_type, status, metadata_json) VALUES (?, ?, ?, 'practice.trade_opened', 'pending', ?)")
+          .bind(transactionId, "trade-open:" + idempotencyKey, user.id, JSON.stringify({ symbol, side, allocationTc, priceMicros, leverage: 1 })),
+        env.DB.prepare("INSERT INTO ledger_postings (id, transaction_id, account_key, amount_atoms, currency) VALUES (?, ?, ?, ?, 'TC'), (?, ?, 'system:reserve:TC', ?, 'TC')")
+          .bind(crypto.randomUUID(), transactionId, "user:" + user.id + ":TC", -allocationTc, crypto.randomUUID(), transactionId, allocationTc),
+        env.DB.prepare("UPDATE ledger_transactions SET status = 'posted', posted_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND status = 'pending'")
+          .bind(transactionId),
+        env.DB.prepare("INSERT INTO trading_positions (id, user_id, symbol, side, status, leverage, quantity_atoms, entry_price_micros, mark_price_micros, reserved_tc, realized_pnl_tc, open_transaction_id, model_version) VALUES (?, ?, ?, ?, 'open', 1, ?, ?, ?, ?, 0, ?, 'simulation-v2')")
+          .bind(positionId, user.id, symbol, side, quantityAtoms, priceMicros, priceMicros, allocationTc, transactionId),
+        env.DB.prepare("INSERT INTO trade_orders (id, user_id, position_id, idempotency_key, symbol, side, order_type, status, quantity_atoms, requested_price_micros, fill_price_micros, created_at, settled_at) VALUES (?, ?, ?, ?, ?, ?, 'market', 'filled', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))")
+          .bind(orderId, user.id, positionId, idempotencyKey, symbol, side, quantityAtoms, priceMicros, priceMicros),
+        env.DB.prepare("INSERT INTO audit_events (id, actor_user_id, event_type, entity_type, entity_id, request_id, details_json) VALUES (?, ?, 'practice.trade_opened', 'trading_position', ?, ?, ?)")
+          .bind(crypto.randomUUID(), user.id, positionId, requestId, JSON.stringify({ symbol, side, allocationTc, priceMicros })),
+      ]);
+    } catch (error) {
+      const winner = await env.DB.prepare("SELECT id, symbol, side, position_id FROM trade_orders WHERE idempotency_key = ? AND user_id = ?").bind(idempotencyKey, user.id).first().catch(() => null);
+      if (winner) return json({ error: "This order has already been processed. Refresh your positions before retrying.", orderId: winner.id }, 409);
+      if (/insufficient_ledger_balance/i.test(String(error?.message || ""))) return json({ error: "Not enough Trade Credits. Refresh your balance and reduce the allocation." }, 409);
+      return json({ error: "The simulated order could not be committed. No position was opened." }, 500);
+    }
+    return json({ order: { id: orderId, duplicate: false }, position: {
+      id: positionId, symbol, market: symbol, side, direction: side === "long" ? "Long" : "Short",
+      status: "open", leverage: 1, quantity_atoms: quantityAtoms, quantityAtoms,
+      entry_price_micros: priceMicros, mark_price_micros: priceMicros, entry: priceMicros / 1000000,
+      markPrice: priceMicros / 1000000, reserved_tc: allocationTc, amount: allocationTc, realized_pnl_tc: 0,
+      opened_at: new Date().toISOString(), openedAt: new Date().toISOString(),
+      time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }), aiManaged: false,
+    } }, 201);
+  }
+
+  if (path === "/api/trading/positions/close" && request.method === "POST") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const body = await readJson(request);
+    const positionId = typeof body?.positionId === "string" ? body.positionId : "";
+    const idempotencyKey = typeof body?.idempotencyKey === "string" ? body.idempotencyKey.trim() : "";
+    if (!positionId || positionId.length > 100 || !/^[a-zA-Z0-9:_-]{8,160}$/.test(idempotencyKey)) {
+      return json({ error: "A valid position and idempotency key are required." }, 400);
+    }
+    const existingOrder = await env.DB.prepare("SELECT id, position_id FROM trade_orders WHERE idempotency_key = ? AND user_id = ?")
+      .bind(idempotencyKey, user.id).first();
+    if (existingOrder) {
+      const position = await env.DB.prepare("SELECT id, symbol, side, status, reserved_tc, entry_price_micros, mark_price_micros, realized_pnl_tc, opened_at, closed_at FROM trading_positions WHERE id = ? AND user_id = ?")
+        .bind(existingOrder.position_id, user.id).first();
+      if (position?.status === "closed") return json({ closed: true, duplicate: true, position });
+      return json({ error: "This close request was already received. Refresh your positions before retrying." }, 409);
+    }
+    const position = await env.DB.prepare("SELECT * FROM trading_positions WHERE id = ? AND user_id = ?")
+      .bind(positionId, user.id).first();
+    if (!position) return json({ error: "Position not found." }, 404);
+    if (position.status !== "open") return json({ error: "This position is no longer open." }, 409);
+    const quote = await env.DB.prepare("SELECT price_micros, provider_timestamp_ms, validation_status FROM market_snapshots WHERE symbol = ? ORDER BY provider_timestamp_ms DESC, received_at DESC LIMIT 1")
+      .bind(position.symbol).first();
+    const quoteAge = Date.now() - Number(quote?.provider_timestamp_ms || 0);
+    if (!quote || quote.validation_status !== "valid" || !Number.isFinite(Number(quote.price_micros)) ||
+        Number(quote.price_micros) <= 0 || quoteAge < -15000 || quoteAge > 90000) {
+      return json({ error: "A fresh, validated market quote is required to close this position. Refresh the market and try again." }, 503);
+    }
+    const exitPriceMicros = Number(quote.price_micros);
+    const allocation = Number(position.reserved_tc);
+    const entryPriceMicros = Number(position.entry_price_micros);
+    const sign = position.side === "short" ? -1 : 1;
+    const rawPnl = Math.round(allocation * ((exitPriceMicros - entryPriceMicros) / entryPriceMicros) * sign);
+    const returnedTc = Math.max(0, allocation + rawPnl);
+    const realizedPnlTc = returnedTc - allocation;
+    const transactionId = crypto.randomUUID();
+    const orderId = crypto.randomUUID();
+    const postings = [];
+    if (returnedTc > 0) postings.push({ account: "user:" + user.id + ":TC", amount: returnedTc });
+    postings.push({ account: "system:reserve:TC", amount: -allocation });
+    if (realizedPnlTc > 0) postings.push({ account: "system:issuance:TC", amount: -realizedPnlTc });
+    else if (realizedPnlTc < 0) postings.push({ account: "system:fees:TC", amount: -realizedPnlTc });
+    if (postings.length < 2) return json({ error: "The close settlement could not be calculated safely." }, 500);
+    const sqlPostings = postings.map((p) => env.DB.prepare(
+      "INSERT INTO ledger_postings (id, transaction_id, account_key, amount_atoms, currency) VALUES (?, ?, ?, ?, 'TC')",
+    ).bind(crypto.randomUUID(), transactionId, p.account, p.amount));
+    const quantityAtoms = Number(position.quantity_atoms);
+    try {
+      await env.DB.batch([
+        env.DB.prepare("INSERT INTO ledger_transactions (id, idempotency_key, user_id, event_type, status, metadata_json) SELECT ?, ?, ?, 'practice.trade_closed', 'pending', ? WHERE EXISTS (SELECT 1 FROM trading_positions WHERE id = ? AND user_id = ? AND status = 'open')")
+          .bind(transactionId, "trade-close:" + idempotencyKey, user.id, JSON.stringify({ positionId, exitPriceMicros, realizedPnlTc, returnedTc }), positionId, user.id),
+        ...sqlPostings,
+        env.DB.prepare("UPDATE ledger_transactions SET status = 'posted', posted_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND status = 'pending'")
+          .bind(transactionId),
+        env.DB.prepare("UPDATE trading_positions SET status = 'closed', mark_price_micros = ?, realized_pnl_tc = ?, close_transaction_id = ?, closed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND user_id = ? AND status = 'open'")
+          .bind(exitPriceMicros, realizedPnlTc, transactionId, positionId, user.id),
+        env.DB.prepare("INSERT INTO trade_orders (id, user_id, position_id, idempotency_key, symbol, side, order_type, status, quantity_atoms, requested_price_micros, fill_price_micros, created_at, settled_at) VALUES (?, ?, ?, ?, ?, ?, 'market', 'filled', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))")
+          .bind(orderId, user.id, positionId, idempotencyKey, position.symbol, position.side, quantityAtoms, exitPriceMicros, exitPriceMicros),
+        env.DB.prepare("INSERT INTO audit_events (id, actor_user_id, event_type, entity_type, entity_id, request_id, details_json) VALUES (?, ?, 'practice.trade_closed', 'trading_position', ?, ?, ?)")
+          .bind(crypto.randomUUID(), user.id, positionId, requestId, JSON.stringify({ symbol: position.symbol, side: position.side, allocationTc: allocation, exitPriceMicros, realizedPnlTc, returnedTc })),
+      ]);
+    } catch (error) {
+      const current = await env.DB.prepare("SELECT status FROM trading_positions WHERE id = ? AND user_id = ?").bind(positionId, user.id).first().catch(() => null);
+      if (current?.status === "closed") return json({ error: "This position has already been closed. Refresh your trade history." }, 409);
+      return json({ error: "The position could not be closed. No settlement was applied." }, 500);
+    }
+    return json({ closed: true, duplicate: false, position: { id: positionId, symbol: position.symbol, market: position.symbol,
+      side: position.side, direction: position.side === "long" ? "Long" : "Short", status: "closed",
+      reserved_tc: allocation, amount: allocation, entry_price_micros: entryPriceMicros,
+      mark_price_micros: exitPriceMicros, entry: entryPriceMicros / 1000000, exit: exitPriceMicros / 1000000,
+      realized_pnl_tc: realizedPnlTc, realizedPnl: realizedPnlTc, tcReturned: returnedTc,
+      opened_at: position.opened_at, closedAtIso: new Date().toISOString(),
+    } });
+  }
+
+
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const result = await env.DB.prepare(
       "SELECT id, symbol, side, status, leverage, quantity_atoms, entry_price_micros, mark_price_micros, reserved_tc, realized_pnl_tc, opened_at, closed_at FROM trading_positions WHERE user_id = ? ORDER BY opened_at DESC LIMIT 100",
     ).bind(user.id).all();
     return json({ positions: result.results || [] });
