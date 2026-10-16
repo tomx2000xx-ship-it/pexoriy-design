@@ -554,15 +554,6 @@ async function handleApi(request, env) {
   }
 
 
-    const user = await currentUser(request, env);
-    if (!user) return json({ error: "Authentication required." }, 401);
-    const result = await env.DB.prepare(
-      "SELECT id, symbol, side, status, leverage, quantity_atoms, entry_price_micros, mark_price_micros, reserved_tc, realized_pnl_tc, opened_at, closed_at FROM trading_positions WHERE user_id = ? ORDER BY opened_at DESC LIMIT 100",
-    ).bind(user.id).all();
-    return json({ positions: result.results || [] });
-  }
-
-
   if (path === "/api/payments/solana/config" && request.method === "GET") {
     return json({
       enabled: Boolean(env.SOLANA_RECEIVE_ADDRESS),
