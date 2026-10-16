@@ -12,7 +12,6 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
-
 CREATE TABLE IF NOT EXISTS auth_sessions (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -44,7 +43,6 @@ CREATE TABLE IF NOT EXISTS ledger_transactions (
   posted_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_ledger_transactions_user ON ledger_transactions(user_id, created_at DESC);
-
 CREATE TABLE IF NOT EXISTS ledger_postings (
   id TEXT PRIMARY KEY,
   transaction_id TEXT NOT NULL REFERENCES ledger_transactions(id),
@@ -56,7 +54,21 @@ CREATE TABLE IF NOT EXISTS ledger_postings (
 CREATE INDEX IF NOT EXISTS idx_ledger_postings_transaction ON ledger_postings(transaction_id);
 CREATE INDEX IF NOT EXISTS idx_ledger_postings_account ON ledger_postings(account_key, created_at);
 
--- A transaction can be posted only when each currency balances to zero.
+-- Protected system accounts allow every issuance, fee and reserve movement to balance.
+INSERT OR IGNORE INTO ledger_accounts(account_key, owner_user_id, currency, account_type) VALUES
+ ('system:issuance:TC', NULL, 'TC', 'issuance'),
+ ('system:reserve:TC', NULL, 'TC', 'reserve'),
+ ('system:fees:TC', NULL, 'TC', 'fees'),
+ ('system:issuance:AC', NULL, 'AC', 'issuance'),
+ ('system:reserve:AC', NULL, 'AC', 'reserve'),
+ ('system:fees:AC', NULL, 'AC', 'fees'),
+ ('system:issuance:PXY', NULL, 'PXY', 'issuance'),
+ ('system:reserve:PXY', NULL, 'PXY', 'reserve'),
+ ('system:payments:GRAM', NULL, 'GRAM', 'payments'),
+ ('system:clearing:GRAM', NULL, 'GRAM', 'clearing'),
+ ('system:clearing:USD_EQ', NULL, 'USD_EQ', 'clearing'),
+ ('system:expense:USD_EQ', NULL, 'USD_EQ', 'expense');
+
 CREATE TRIGGER IF NOT EXISTS trg_ledger_balance_before_post
 BEFORE UPDATE OF status ON ledger_transactions
 WHEN OLD.status = 'pending' AND NEW.status = 'posted'
@@ -68,18 +80,12 @@ BEGIN
     WHERE transaction_id = NEW.id
     GROUP BY currency HAVING SUM(amount_atoms) <> 0
   ) THEN RAISE(ABORT, 'unbalanced_ledger_transaction') END;
-  SELECT CASE WHEN (SELECT COUNT(DISTINCT currency) FROM ledger_postings WHERE transaction_id = NEW.id)
-    <> (SELECT COUNT(*) FROM (SELECT currency FROM ledger_postings WHERE transaction_id = NEW.id GROUP BY currency))
-    THEN RAISE(ABORT, 'invalid_ledger_currency') END;
 END;
-
 CREATE TRIGGER IF NOT EXISTS trg_posted_transaction_immutable
-BEFORE UPDATE ON ledger_transactions
-WHEN OLD.status = 'posted'
+BEFORE UPDATE ON ledger_transactions WHEN OLD.status = 'posted'
 BEGIN SELECT RAISE(ABORT, 'posted_ledger_transaction_immutable'); END;
 CREATE TRIGGER IF NOT EXISTS trg_posted_transaction_no_delete
-BEFORE DELETE ON ledger_transactions
-WHEN OLD.status = 'posted'
+BEFORE DELETE ON ledger_transactions WHEN OLD.status = 'posted'
 BEGIN SELECT RAISE(ABORT, 'posted_ledger_transaction_immutable'); END;
 CREATE TRIGGER IF NOT EXISTS trg_posted_posting_no_update
 BEFORE UPDATE ON ledger_postings
@@ -113,7 +119,6 @@ CREATE TABLE IF NOT EXISTS trading_positions (
   model_version TEXT NOT NULL DEFAULT 'simulation-v1'
 );
 CREATE INDEX IF NOT EXISTS idx_positions_user_status ON trading_positions(user_id, status, opened_at DESC);
-
 CREATE TABLE IF NOT EXISTS trade_orders (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -131,7 +136,6 @@ CREATE TABLE IF NOT EXISTS trade_orders (
   settled_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_trade_orders_user ON trade_orders(user_id, created_at DESC);
-
 CREATE TABLE IF NOT EXISTS market_snapshots (
   id TEXT PRIMARY KEY,
   provider TEXT NOT NULL,
@@ -163,7 +167,6 @@ CREATE TABLE IF NOT EXISTS payment_orders (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 CREATE INDEX IF NOT EXISTS idx_payment_orders_user ON payment_orders(user_id, created_at DESC);
-
 CREATE TABLE IF NOT EXISTS payment_events (
   id TEXT PRIMARY KEY,
   payment_order_id TEXT REFERENCES payment_orders(id),
@@ -174,7 +177,6 @@ CREATE TABLE IF NOT EXISTS payment_events (
   processed_at TEXT,
   processing_status TEXT NOT NULL CHECK (processing_status IN ('received','processed','ignored','failed','review'))
 );
-
 CREATE TABLE IF NOT EXISTS ai_operations (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -198,7 +200,6 @@ CREATE TABLE IF NOT EXISTS mission_definitions (
   rules_json TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
-
 CREATE TABLE IF NOT EXISTS mission_claims (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -207,8 +208,7 @@ CREATE TABLE IF NOT EXISTS mission_claims (
   status TEXT NOT NULL CHECK (status IN ('pending','approved','rejected','paid')),
   ledger_transaction_id TEXT REFERENCES ledger_transactions(id),
   evidence_json TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-  UNIQUE(user_id, mission_id, id)
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 CREATE INDEX IF NOT EXISTS idx_mission_claims_user ON mission_claims(user_id, created_at DESC);
 
@@ -235,7 +235,6 @@ CREATE TABLE IF NOT EXISTS competition_entries (
   entered_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   UNIQUE(competition_id, user_id)
 );
-
 CREATE TABLE IF NOT EXISTS audit_events (
   id TEXT PRIMARY KEY,
   actor_user_id TEXT REFERENCES users(id),
