@@ -174,7 +174,7 @@ async function balancesForUser(env, userId) {
   ).bind(userId).all();
   const balances = { TC: 0, AC: 0, PXY: 0 };
   for (const row of result.results || []) {
-    if (Object.hasOwn(balances, row.currency)) balances[row.currency] = Number(row.balance);
+    if (Object.hasOwn(balances, row.currency)) balances[row.currency] = row.currency === "AC" ? Number(row.balance) / 2 : Number(row.balance);
   }
   return balances;
 }
@@ -373,7 +373,7 @@ async function handleApi(request, env) {
         env.DB.prepare("INSERT INTO auth_sessions (id,user_id,token_hash,expires_at) VALUES (?,?,?,?)").bind(sessionId,userId,tokenHash,expiresAt),
         env.DB.prepare("INSERT INTO audit_events (id,actor_user_id,event_type,entity_type,entity_id,request_id,details_json) VALUES (?,?,'account.registered','user',?,?,'{}')").bind(crypto.randomUUID(),userId,userId,requestId),
         env.DB.prepare("INSERT INTO ledger_transactions (id,idempotency_key,user_id,event_type,status,metadata_json) VALUES (?, ?, ?, 'account.welcome_tc_issued','pending','{}'),(?, ?, ?, 'account.welcome_ac_issued','pending','{}')").bind(tcTx,"welcome-tc:"+userId,userId,acTx,"welcome-ac:"+userId,userId),
-        env.DB.prepare("INSERT INTO ledger_postings (id,transaction_id,account_key,amount_atoms,currency) VALUES (?, ?, ?, 12450,'TC'),(?, ?, 'system:issuance:TC',-12450,'TC'),(?, ?, ?,840,'AC'),(?, ?, 'system:issuance:AC',-840,'AC')").bind(crypto.randomUUID(),tcTx,"user:"+userId+":TC",crypto.randomUUID(),tcTx,crypto.randomUUID(),acTx,"user:"+userId+":AC",crypto.randomUUID(),acTx),
+        env.DB.prepare("INSERT INTO ledger_postings (id,transaction_id,account_key,amount_atoms,currency) VALUES (?, ?, ?, 12450,'TC'),(?, ?, 'system:issuance:TC',-12450,'TC'),(?, ?, ?,1680,'AC'),(?, ?, 'system:issuance:AC',-1680,'AC')").bind(crypto.randomUUID(),tcTx,"user:"+userId+":TC",crypto.randomUUID(),tcTx,crypto.randomUUID(),acTx,"user:"+userId+":AC",crypto.randomUUID(),acTx),
         env.DB.prepare("UPDATE ledger_transactions SET status='posted',posted_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id IN (?,?)").bind(tcTx,acTx),
       ]);
     } catch(error) {
@@ -920,8 +920,8 @@ async function handleApi(request, env) {
         eventType: "payment.ai_credits_purchased",
         metadata: { paymentOrderId: order.id, chain: TON_NETWORK, txHash: match.hash, packageId: order.package_id },
         postings: [
-          { accountKey: "user:" + user.id + ":AC", currency: "AC", amountAtoms: Number(order.credited_ac) },
-          { accountKey: "system:issuance:AC", currency: "AC", amountAtoms: -Number(order.credited_ac) },
+          { accountKey: "user:" + user.id + ":AC", currency: "AC", amountAtoms: Number(order.credited_ac) * 2 },
+          { accountKey: "system:issuance:AC", currency: "AC", amountAtoms: -Number(order.credited_ac) * 2 },
         ],
       });
     } catch {
