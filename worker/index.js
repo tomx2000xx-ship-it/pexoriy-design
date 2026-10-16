@@ -1,4 +1,5 @@
 import { postLedgerTransaction } from "./ledger.js";
+import { TON_NETWORK, TON_RECEIVE_ADDRESS, normalizeTonAddress, formatNanoTon, makeTonComment, validateTonIncomingTransaction } from "./ton-payments.js";
 import { calculateRealizedSettlement, calculateUnrealizedPnlTc, isFreshValidatedQuote, calculateSimulatedFillPrice, calculateTakerFeeTc, SIMULATION_MODEL_VERSION, MAX_OPEN_POSITIONS, MAX_POSITION_EQUITY_BPS, MAX_TOTAL_EXPOSURE_EQUITY_BPS } from "./trading.js";
 import { normalizeMarketQuote } from "./market-feed.js";
 import {
@@ -738,6 +739,236 @@ async function handleApi(request, env) {
     } });
   }
 
+
+  if (path === "/api/payments/ton/config" && request.method === "GET") {
+    const recipient = env.TON_RECEIVE_ADDRESS || TON_RECEIVE_ADDRESS;
+    let enabled = false;
+    try { normalizeTonAddress(recipient); enabled = true; } catch {}
+    return json({ enabled, network: TON_NETWORK, asset: "GRAM", quoteCurrency: "USD", walletProtocol: "ton-connect" });
+  }
+
+  if (path === "/api/payments/ton/order" && request.method === "POST") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const body = await readJson(request);
+    const packageId = typeof body?.packageId === "string" ? body.packageId : "";
+    const clientKey = typeof body?.idempotencyKey === "string" ? body.idempotencyKey.trim() : "";
+    const pack = AI_CREDIT_PACKAGES[packageId];
+    if (!pack) return json({ error: "Choose an available AI Credit package." }, 400);
+    if (!/^[a-zA-Z0-9:_-]{8,160}$/.test(clientKey)) return json({ error: "A valid idempotency key is required." }, 400);
+    const idempotencyKey = "ton:" + user.id + ":" + clientKey;
+    const recipient = env.TON_RECEIVE_ADDRESS || TON_RECEIVE_ADDRESS;
+    try { normalizeTonAddress(recipient); } catch { return json({ error: "The TON receiving wallet is not valid. No payment order was created." }, 503); }
+
+    const prior = await env.DB.prepare(
+      "SELECT id, status, reference_key, expected_amount_atoms, credited_ac, expires_at, recipient_address, package_id, created_at FROM payment_orders WHERE idempotency_key = ? AND user_id = ?",
+    ).bind(idempotencyKey, user.id).first();
+    if (prior) {
+      const priorPack = AI_CREDIT_PACKAGES[prior.package_id] || pack;
+      return json({ order: {
+        id: prior.id, status: prior.status, asset: "GRAM", network: TON_NETWORK,
+        expectedAmountAtoms: Number(prior.expected_amount_atoms), amountGram: formatNanoTon(Number(prior.expected_amount_atoms)),
+        amountUsd: (priorPack.usdCents / 100).toFixed(2), aiCredits: Number(prior.credited_ac || priorPack.aiCredits),
+        expiresAt: prior.expires_at, recipientAddress: prior.recipient_address || recipient,
+        referenceKey: prior.reference_key, createdAt: prior.created_at,
+      }, reused: true });
+    }
+
+    let tonUsdPrice;
+    let expectedNanoTon;
+    try {
+      const quoteResponse = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd", { headers: { accept: "application/json" } });
+      if (!quoteResponse.ok) throw new Error("TON_PRICE_UNAVAILABLE");
+      const quote = await quoteResponse.json();
+      tonUsdPrice = Number(quote?.["the-open-network"]?.usd);
+      if (!Number.isFinite(tonUsdPrice) || tonUsdPrice <= 0) throw new Error("TON_PRICE_INVALID");
+      expectedNanoTon = Math.round((pack.usdCents / 100 / tonUsdPrice) * 1_000_000_000);
+      if (!Number.isSafeInteger(expectedNanoTon) || expectedNanoTon <= 0) throw new Error("TON_AMOUNT_INVALID");
+    } catch {
+      return json({ error: "A live GRAM (TON) quote is unavailable. Please retry shortly; no payment order was created." }, 503);
+    }
+
+    const orderId = crypto.randomUUID();
+    const reference = makeTonComment("PEXORIY:" + orderId);
+    const expiresAt = new Date(Date.now() + 20 * 60 * 1000).toISOString();
+    try {
+      await env.DB.prepare(
+        `INSERT INTO payment_orders
+          (id, user_id, idempotency_key, provider, network, asset, expected_amount_atoms,
+           usd_equivalent_micros, status, reference_key, token_mint, package_id, credited_ac,
+           expires_at, recipient_address)
+         VALUES (?, ?, ?, 'toncenter-rpc', ?, 'GRAM', ?, ?, 'created', ?, NULL, ?, ?, ?, ?)`,
+      ).bind(orderId, user.id, idempotencyKey, TON_NETWORK, expectedNanoTon, pack.usdCents * 10_000,
+        reference, pack.id, pack.aiCredits, expiresAt, recipient).run();
+      await appendAudit(env, {
+        actorUserId: user.id, eventType: "payment.ton_order_created", entityType: "payment_order",
+        entityId: orderId, requestId, details: { packageId: pack.id, asset: "GRAM", network: TON_NETWORK },
+      });
+    } catch (error) {
+      const raced = await env.DB.prepare(
+        "SELECT id, status, reference_key, expected_amount_atoms, credited_ac, expires_at, recipient_address, package_id, created_at FROM payment_orders WHERE idempotency_key = ? AND user_id = ?",
+      ).bind(idempotencyKey, user.id).first();
+      if (!raced) throw error;
+      const racedPack = AI_CREDIT_PACKAGES[raced.package_id] || pack;
+      return json({ order: {
+        id: raced.id, status: raced.status, asset: "GRAM", network: TON_NETWORK,
+        expectedAmountAtoms: Number(raced.expected_amount_atoms), amountGram: formatNanoTon(Number(raced.expected_amount_atoms)),
+        amountUsd: (racedPack.usdCents / 100).toFixed(2), aiCredits: Number(raced.credited_ac || racedPack.aiCredits),
+        expiresAt: raced.expires_at, recipientAddress: raced.recipient_address || recipient,
+        referenceKey: raced.reference_key, createdAt: raced.created_at,
+      }, reused: true });
+    }
+    return json({ order: {
+      id: orderId, status: "created", asset: "GRAM", network: TON_NETWORK,
+      expectedAmountAtoms: expectedNanoTon, amountGram: formatNanoTon(expectedNanoTon),
+      amountUsd: (pack.usdCents / 100).toFixed(2), quotedGramUsd: tonUsdPrice,
+      aiCredits: pack.aiCredits, expiresAt, recipientAddress: recipient, referenceKey: reference,
+      createdAt: new Date().toISOString(),
+    }, instructions: "Use the connected TON wallet to send the exact native GRAM amount with the order comment. Credits are added only after server-side chain verification." }, 201);
+  }
+
+  if (path === "/api/payments/ton/verify" && request.method === "POST") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const body = await readJson(request);
+    const orderId = typeof body?.orderId === "string" ? body.orderId : "";
+    if (!/^[0-9a-f-]{36}$/i.test(orderId)) return json({ error: "A valid payment order is required." }, 400);
+    const order = await env.DB.prepare("SELECT * FROM payment_orders WHERE id = ? AND user_id = ? AND network = ?")
+      .bind(orderId, user.id, TON_NETWORK).first();
+    if (!order) return json({ error: "TON payment order not found." }, 404);
+    if (order.status === "credited") return json({ status: "credited", aiCredits: Number(order.credited_ac), duplicate: true });
+    if (["underpaid", "overpaid", "review", "refunded", "reversed"].includes(order.status)) {
+      return json({ status: order.status, message: "This payment needs support review. No AI Credits were added." }, 409);
+    }
+
+    let transactions;
+    try {
+      const endpoint = new URL("https://toncenter.com/api/v2/getTransactions");
+      endpoint.searchParams.set("address", order.recipient_address || (env.TON_RECEIVE_ADDRESS || TON_RECEIVE_ADDRESS));
+      endpoint.searchParams.set("limit", "100");
+      endpoint.searchParams.set("archival", "true");
+      const response = await fetch(endpoint.toString(), { headers: { accept: "application/json" } });
+      if (!response.ok) throw new Error("TONCENTER_HTTP_ERROR");
+      const payload = await response.json();
+      if (payload?.ok !== true || !Array.isArray(payload.result)) throw new Error("TONCENTER_RESPONSE_INVALID");
+      transactions = payload.result;
+    } catch {
+      return json({ error: "The TON network could not be checked right now. Please retry shortly." }, 503);
+    }
+
+    let match = null;
+    let mismatch = null;
+    for (const transaction of transactions) {
+      const incoming = transaction?.in_msg;
+      const comment = typeof incoming?.message === "string" ? incoming.message : (typeof incoming?.msg_data?.text === "string" ? incoming.msg_data.text : "");
+      if (comment !== order.reference_key) continue;
+      try {
+        const validation = validateTonIncomingTransaction(transaction, {
+          recipient: order.recipient_address || (env.TON_RECEIVE_ADDRESS || TON_RECEIVE_ADDRESS),
+          reference: order.reference_key,
+          expectedNanoTon: Number(order.expected_amount_atoms),
+          createdAt: order.created_at,
+        });
+        if (validation.valid) { match = validation; break; }
+        mismatch = validation;
+      } catch (error) {
+        // A comment match with an invalid recipient, aborted transaction, or stale transaction is never credited.
+        if (String(error?.message || "").includes("TON_RECIPIENT_MISMATCH")) {
+          await appendAudit(env, { actorUserId: user.id, eventType: "payment.ton_recipient_mismatch", entityType: "payment_order", entityId: order.id, requestId, details: {} });
+        }
+      }
+    }
+
+    if (!match && mismatch) {
+      const status = mismatch.reason === "underpaid" ? "underpaid" : "overpaid";
+      await env.DB.prepare("UPDATE payment_orders SET received_amount_atoms = ?, status = ? WHERE id = ? AND status IN ('created','pending','confirmed')")
+        .bind(mismatch.receivedNanoTon, status, order.id).run();
+      await appendAudit(env, { actorUserId: user.id, eventType: "payment.ton_" + status, entityType: "payment_order", entityId: order.id, requestId, details: { txHash: mismatch.hash, receivedNanoTon: mismatch.receivedNanoTon } });
+      return json({ status, message: "A native GRAM transfer was found, but its amount does not exactly match this order. No credits were added; support review is required." }, 409);
+    }
+
+    if (!match) {
+      if (Date.parse(order.expires_at || 0) <= Date.now()) {
+        await env.DB.prepare("UPDATE payment_orders SET status = 'failed' WHERE id = ? AND status IN ('created','pending')")
+          .bind(order.id).run();
+        return json({ status: "expired", message: "No matching on-chain payment was found before this order expired. If you already sent funds, contact support before sending again." }, 410);
+      }
+      if (order.status === "created") await env.DB.prepare("UPDATE payment_orders SET status = 'pending' WHERE id = ? AND status = 'created'").bind(order.id).run();
+      return json({ status: "pending", message: "No matching confirmed GRAM payment is visible yet. You can safely check again." }, 202);
+    }
+
+    try {
+      await env.DB.prepare(
+        "UPDATE payment_orders SET status = 'confirmed', tx_hash = ?, received_amount_atoms = ?, confirmed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'), chain_finality = 'confirmed' WHERE id = ? AND tx_hash IS NULL AND status IN ('created','pending','confirmed')",
+      ).bind(match.hash, match.receivedNanoTon, order.id).run();
+    } catch {
+      // A concurrent verifier may already have bound this transaction to the order.
+    }
+    const confirmed = await env.DB.prepare("SELECT status, tx_hash FROM payment_orders WHERE id = ?").bind(order.id).first();
+    if (confirmed?.tx_hash !== match.hash) {
+      await env.DB.prepare("UPDATE payment_orders SET status = 'review' WHERE id = ? AND tx_hash IS NULL AND status <> 'credited'").bind(order.id).run();
+      return json({ status: "review", message: "This transaction is already associated with another order or requires support review." }, 409);
+    }
+    if (confirmed.status === "credited") return json({ status: "credited", aiCredits: Number(order.credited_ac), duplicate: true });
+    if (confirmed.status !== "confirmed") return json({ status: "review", message: "Payment is verified but needs support review before crediting." }, 409);
+
+    const ledgerIdempotencyKey = "ton-native-payment:" + order.id + ":ai-credits";
+    let ledgerResult;
+    try {
+      ledgerResult = await postLedgerTransaction(env.DB, {
+        id: crypto.randomUUID(), idempotencyKey: ledgerIdempotencyKey, userId: user.id,
+        eventType: "payment.ai_credits_purchased",
+        metadata: { paymentOrderId: order.id, chain: TON_NETWORK, txHash: match.hash, packageId: order.package_id },
+        postings: [
+          { accountKey: "user:" + user.id + ":AC", currency: "AC", amountAtoms: Number(order.credited_ac) },
+          { accountKey: "system:issuance:AC", currency: "AC", amountAtoms: -Number(order.credited_ac) },
+        ],
+      });
+    } catch {
+      return json({ status: "confirmed", message: "Payment verified. AI Credit delivery is retrying safely; check again shortly." }, 202);
+    }
+    const postedLedger = await env.DB.prepare("SELECT id, status FROM ledger_transactions WHERE idempotency_key = ?")
+      .bind(ledgerIdempotencyKey).first();
+    if (!postedLedger || postedLedger.status !== "posted" || postedLedger.id !== ledgerResult.transactionId) {
+      return json({ status: "confirmed", message: "Payment verified. AI Credit delivery is reconciling; check again shortly." }, 202);
+    }
+    try {
+      const update = await env.DB.prepare(
+        "UPDATE payment_orders SET status = 'credited', credited_transaction_id = ? WHERE id = ? AND status = 'confirmed' AND tx_hash = ?",
+      ).bind(postedLedger.id, order.id, match.hash).run();
+      if (Number(update.meta?.changes || 0) !== 1) {
+        const latest = await env.DB.prepare("SELECT status, credited_ac FROM payment_orders WHERE id = ?").bind(order.id).first();
+        if (latest?.status === "credited") return json({ status: "credited", aiCredits: Number(latest.credited_ac), duplicate: true });
+        return json({ status: "review", message: "Payment is verified but order state changed during crediting. Please contact support." }, 409);
+      }
+    } catch {
+      return json({ status: "confirmed", message: "Payment verified. AI Credit delivery is reconciling; check again shortly." }, 202);
+    }
+    const payloadHash = await sha256Hex(match.hash + ":payment.ton_credited");
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO payment_events (id, payment_order_id, provider_event_id, event_type, payload_hash, processing_status, processed_at) VALUES (?, ?, ?, ?, ?, 'processed', strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+    ).bind(crypto.randomUUID(), order.id, "ton:" + match.hash, "transaction.ton_credited", payloadHash).run();
+    await appendAudit(env, { actorUserId: user.id, eventType: "payment.ton_credited", entityType: "payment_order", entityId: order.id, requestId, details: { txHash: match.hash, aiCredits: Number(order.credited_ac) } });
+    return json({ status: "credited", aiCredits: Number(order.credited_ac), txHash: match.hash });
+  }
+
+  if (path === "/api/payments/ton/orders" && request.method === "GET") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const result = await env.DB.prepare(
+      "SELECT id, network, asset, expected_amount_atoms, credited_ac, status, expires_at, tx_hash, created_at, reference_key, recipient_address, package_id FROM payment_orders WHERE user_id = ? AND network = ? ORDER BY created_at DESC LIMIT 25",
+    ).bind(user.id, TON_NETWORK).all();
+    const orders = (result.results || []).map((row) => {
+      const pack = AI_CREDIT_PACKAGES[row.package_id];
+      return {
+        id: row.id, network: row.network, asset: row.asset, status: row.status,
+        expectedAmountAtoms: Number(row.expected_amount_atoms), amountGram: formatNanoTon(Number(row.expected_amount_atoms)),
+        aiCredits: Number(row.credited_ac || pack?.aiCredits || 0), expiresAt: row.expires_at, txHash: row.tx_hash,
+        createdAt: row.created_at, recipientAddress: row.recipient_address, referenceKey: row.reference_key,
+      };
+    });
+    return json({ orders });
+  }
 
   if (path === "/api/payments/solana/config" && request.method === "GET") {
     return json({
