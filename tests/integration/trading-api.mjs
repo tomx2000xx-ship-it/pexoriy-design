@@ -51,6 +51,7 @@ const opened = await call("/api/trading/positions", {
 assert.equal(opened.response.status, 201, JSON.stringify(opened.payload));
 assert.equal(opened.payload?.position?.status, "open");
 assert.equal(Number(opened.payload?.position?.reserved_tc), 500);
+assert.equal(Number(opened.payload?.position?.unrealizedPnlTc), -3, "open response must include fee-aware server P&L immediately");
 
 const duplicateOpen = await call("/api/trading/positions", {
   method: "POST",
