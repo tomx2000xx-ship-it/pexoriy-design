@@ -448,7 +448,9 @@ async function handleApi(request, env) {
     const body=await readJson(request),email=typeof body?.email==="string"?body.email.trim().toLowerCase():"",displayName=typeof body?.displayName==="string"?body.displayName.trim():"",password=typeof body?.password==="string"?body.password:"";
     const referralCode = typeof body?.referralCode === "string" ? body.referralCode.trim().toUpperCase() : "";
     if (referralCode && !/^[A-F0-9]{8,16}$/.test(referralCode)) return json({ error: "This referral code is invalid." }, 400);
-    const referralOwner = referralCode ? await env.DB.prepare("SELECT user_id FROM referral_codes WHERE code = ?").bind(referralCode).first() : null;
+    const referralSchema = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='referral_codes'").first().catch(() => null);
+    if (referralCode && !referralSchema) return json({ error: "Referral sign-up is temporarily unavailable. Please try again shortly." }, 503);
+    const referralOwner = referralCode && referralSchema ? await env.DB.prepare("SELECT user_id FROM referral_codes WHERE code = ?").bind(referralCode).first() : null;
     if (referralCode && !referralOwner) return json({ error: "This referral code is not recognised." }, 400);
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254) return json({error:"Enter a valid email address."},400);
     if (displayName.length<2||displayName.length>60) return json({error:"Display name must be between 2 and 60 characters."},400);
@@ -461,7 +463,7 @@ async function handleApi(request, env) {
       const tcTx=crypto.randomUUID(),acTx=crypto.randomUUID();
       await env.DB.batch([
         env.DB.prepare("INSERT INTO users (id,email,display_name,password_salt,password_hash,email_verified_at) VALUES (?,?,?,?,?,?)").bind(userId,email,displayName,salt,hash,testBypass?new Date().toISOString():null),
-        env.DB.prepare("INSERT INTO referral_codes (user_id, code) VALUES (?, ?)").bind(userId, randomHex(6).toUpperCase()),
+        ...(referralSchema ? [env.DB.prepare("INSERT INTO referral_codes (user_id, code) VALUES (?, ?)").bind(userId, randomHex(6).toUpperCase())] : []),
         ...(referralOwner && referralOwner.user_id !== userId ? [env.DB.prepare("INSERT INTO referral_attributions (id, referrer_user_id, referred_user_id, referral_code, status) VALUES (?, ?, ?, ?, 'pending')").bind(crypto.randomUUID(), referralOwner.user_id, userId, referralCode)] : []),
         env.DB.prepare("INSERT INTO ledger_accounts (account_key,owner_user_id,currency,account_type) VALUES (?,?,'TC','user'),(?,?,'AC','user'),(?,?,'PXY','user')").bind("user:"+userId+":TC",userId,"user:"+userId+":AC",userId,"user:"+userId+":PXY",userId),
         env.DB.prepare("INSERT INTO auth_sessions (id,user_id,token_hash,expires_at) VALUES (?,?,?,?)").bind(sessionId,userId,tokenHash,expiresAt),

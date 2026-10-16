@@ -70,6 +70,4 @@ INSERT OR IGNORE INTO learning_lessons (id,slug,title,category,summary,content_j
 INSERT OR IGNORE INTO mission_definitions (id,title,reward_currency,reward_amount,active,rules_json) VALUES
 ('first-practice-trade','Make a practice trade','TC',250,1,'{"prerequisite":"practice_trade"}'),
 ('review-ai-setup','Review an AI trading setup','TC',150,1,'{"prerequisite":"ai_setup"}'),
-('community-challenge','Join a community challenge','TC',200,1,'{"prerequisite":"community_challenge"}'),
-('learn-market-basics','Learn the market basics','TC',100,1,'{"prerequisite":"learning_complete","lessonId":"market-basics"}'),
-('learn-position-risk','Complete the risk lesson','TC',150,1,'{"prerequisite":"learning_complete","lessonId":"position-risk"}');
+('community-challenge','Join a community challenge','TC',200,1,'{"prerequisite":"community_challenge"}');
