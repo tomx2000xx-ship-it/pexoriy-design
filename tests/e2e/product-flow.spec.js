@@ -56,52 +56,27 @@ test('stale market data disables new practice orders', async ({ page }) => {
   await expect(page.getByText(/Live market data is unavailable/).first()).toBeVisible();
 });
 
-test('AI session lifecycle, trade open/close, and Activity Centre ledger work', async ({ page }) => {
+test('AI execution stays disabled until the server-side provider and credit settlement are ready', async ({ page }) => {
   await enterApp(page);
   await goTo(page, 'AI Trading');
-  await expect(page.getByText('READY TO START')).toBeVisible();
-
-  await page.getByRole('button', { name: /Start AI session/ }).click();
-  await expect(page.getByText('ACTIVE · AWAITING ACTION')).toBeVisible();
-  await page.getByRole('button', { name: 'Pause', exact: true }).click();
-  await expect(page.getByText('PAUSED', { exact: true })).toBeVisible();
-  await expect(page.getByText(/No new AI trade actions can be confirmed until you resume/).first()).toBeVisible();
-  await page.getByRole('button', { name: /Resume session/ }).click();
-  await expect(page.getByText('ACTIVE · AWAITING ACTION')).toBeVisible();
-
-  await page.getByRole('button', { name: /Review AI trade/ }).click();
-  await expect(page.locator('.ai-action-review')).toBeVisible();
-  await expect(page.getByText('1.5 AC', { exact: true }).first()).toBeVisible();
-  await page.getByRole('button', { name: 'Confirm trade' }).click();
-  await expect(page.getByText(/Simulated position opened/)).toBeVisible();
-
-  await page.getByRole('button', { name: 'Stop', exact: true }).click();
-  await expect(page.getByText('STOPPED', { exact: true })).toBeVisible();
+  await expect(page.getByText('AI-assisted execution is not enabled yet.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Start AI session/ })).toBeDisabled();
+  await expect(page.locator('.ai-action-review')).toHaveCount(0);
 
   await goTo(page, 'Practice Trading');
-  await expect(page.getByText('AI-assisted position', { exact: false })).toBeVisible();
-  await page.getByRole('button', { name: 'Review close' }).click();
-  await expect(page.getByRole('dialog', { name: 'Review your exit' })).toBeVisible();
-  await page.getByRole('button', { name: 'Confirm close' }).click();
-  await expect(page.getByText(/Position closed/)).toBeVisible();
+  await expect(page.getByText('No open positions')).toBeVisible();
 
   await goTo(page, 'Activity');
   await expect(page.getByRole('heading', { name: 'Your activity, in one place.' })).toBeVisible();
-  await expect(page.getByText('AI session started')).toBeVisible();
-  await expect(page.getByText('AI session paused')).toBeVisible();
-  await expect(page.getByText('AI session resumed')).toBeVisible();
-  await expect(page.getByText('AI-assisted position opened')).toBeVisible();
-  await expect(page.getByText('AI-assisted position closed')).toBeVisible();
-  await expect(page.getByText('AI session stopped')).toBeVisible();
+  await expect(page.getByText('AI-assisted position opened')).toHaveCount(0);
 });
 
-test('AI trading blocks a proposed action when AI Credit balance is insufficient', async ({ page }) => {
+test('AI execution remains disabled regardless of the displayed AI Credit balance', async ({ page }) => {
   await enterApp(page, '/?e2e=low-balance');
   await goTo(page, 'AI Trading');
   await expect(page.locator('.ai-balance-purchase strong')).toContainText('0');
-  await page.getByRole('button', { name: /Start AI session/ }).click();
-  await page.getByRole('button', { name: /Review AI trade/ }).click();
-  await expect(page.getByText(/Not enough AI Credits/)).toBeVisible();
+  await expect(page.getByText('AI-assisted execution is not enabled yet.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Start AI session/ })).toBeDisabled();
   await expect(page.locator('.ai-action-review')).toHaveCount(0);
   await expect(page.locator('.ai-balance-purchase strong')).toContainText('0');
 });
