@@ -27,6 +27,11 @@ async function goTo(page, label) {
     return;
   }
   const mobileLabels = { 'Practice Trading': 'Practice', 'AI Trading': 'AI Centre' };
+  if (mobile && ['Learning Center', 'PXY Presale Preview'].includes(label)) {
+    await page.locator('.menu-button').click();
+    await page.locator('.sidebar').getByRole('button', { name: label, exact: true }).click();
+    return;
+  }
   const visibleLabel = mobile ? (mobileLabels[label] || label) : label;
   const nav = mobile
     ? page.locator('.mobile-bottom-nav')
@@ -386,4 +391,25 @@ test('mobile layout stays within the viewport on Practice and AI Trading', async
     }));
     expect(sizes.page, `horizontal overflow on ${label}: ${JSON.stringify(sizes)}`).toBeLessThanOrEqual(sizes.viewport + 1);
   }
+});
+
+
+test('learning and presale preview are discoverable without enabling a sale', async ({ page }) => {
+  await enterApp(page);
+  await goTo(page, 'Learning Center');
+  await expect(page.getByRole('heading', { name: /Learn the market/ })).toBeVisible();
+  await expect(page.getByText(/Preview mode: sign in to take scored quizzes/)).toBeVisible();
+  await goTo(page, 'PXY Presale Preview');
+  await expect(page.getByRole('heading', { name: /Nothing is for sale yet/ })).toBeVisible();
+  await expect(page.getByText(/No purchase button, payment order, wallet transaction/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Buy PXY|Purchase tokens|Connect wallet/i })).toHaveCount(0);
+});
+
+test('learning and presale preview remain reachable on mobile', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await enterApp(page);
+  await goTo(page, 'Learning Center');
+  await expect(page.getByRole('heading', { name: /Learn the market/ })).toBeVisible();
+  await goTo(page, 'PXY Presale Preview');
+  await expect(page.getByRole('heading', { name: /Nothing is for sale yet/ })).toBeVisible();
 });

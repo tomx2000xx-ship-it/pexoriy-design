@@ -1263,3 +1263,16 @@ button:focus-visible,a:focus-visible,[role="button"]:focus-visible{outline:2px s
 .referral-inline-notice{overflow-wrap:anywhere}
 @media(max-width:900px){.learning-layout,.presale-preview-hero{grid-template-columns:1fr}.learning-list{padding:16px}.learning-choice{padding:11px}.presale-checklist{grid-template-columns:1fr}}
 @media(max-width:560px){.learning-lesson,.presale-preview-copy,.presale-preview-card{padding:18px}.learning-content article{padding:12px}.presale-preview-copy h2{font-size:27px}.presale-preview-actions{display:grid}.presale-preview-actions .btn{width:100%;justify-content:center}.presale-checklist article{padding:14px}}
+
+
+/* Consistent keyboard focus and touch-friendly navigation for the whole product. */
+:where(button,a,input,select,textarea,[role="button"]):focus-visible {
+  outline: 2px solid var(--lime, #b7f34a);
+  outline-offset: 3px;
+}
+button, a { -webkit-tap-highlight-color: transparent; }
+@media (pointer: coarse) {
+  .nav-item, .mobile-bottom-nav button, .entry-nav-button, .search-button {
+    min-height: 42px;
+  }
+}
