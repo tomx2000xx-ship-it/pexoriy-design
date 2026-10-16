@@ -17,7 +17,8 @@
     "lucide-react": "latest",
     "@tonconnect/ui-react": "latest",
     "@ton/core": "latest",
-    "buffer": "^6.0.3"
+    "buffer": "^6.0.3",
+    "vite-plugin-node-polyfills": "^0.24.0"
   },
   "devDependencies": {}
 }
