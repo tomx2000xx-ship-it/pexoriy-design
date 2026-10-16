@@ -277,10 +277,10 @@ Proceed next with the AI execution service rather than polishing more UI. Requir
 - [x] Added server-verified mission claim endpoints. The server checks the underlying trading/AI/challenge/learning records before a TC reward can be posted. Client-only mission completion no longer issues account-mode TC.
 - [x] Added unique referral links and registration attribution, plus verified activation based on email verification and a recorded simulated trade. TC referral rewards use idempotent ledger transactions; PXY is not issued through referrals.
 - [x] Added server-verified referral team quests (3 and 5 activated referrals) with TC-only milestone rewards, one-time claim records, ledger idempotency, and audit events. Demo mode shows no fabricated referral counts or milestone progress.
-- [x] Added the Learning Center page, persistent mission/reward UI, referral stats/milestones based on server counts, and a PXY Presale Preview page reachable from the sidebar and PXY Token page.
+- [x] Added the Learning Center page, persistent mission/reward UI, referral stats and team quests based on server counts, and a PXY Presale Preview page reachable from the public landing page, sidebar, and PXY Token page.
 - [x] Added mobile-responsive styles for the learning and presale preview pages.
 - [x] Added a CI step that executes the ordered SQL migrations against an in-memory SQLite database and checks the expected tables, five learning lessons, and active referral team quests.
-- [x] The first staged implementation commit passed Worker syntax validation, ordered migration validation, unit tests, production bundle build, and the existing desktop/mobile Playwright flow. The follow-up UX-safety patch has been pushed to the scope branch and requires its own fresh CI result.
+- [x] Latest scope-branch commit `6cb2b1f3e9e3a607e838bff8eef8e4fc55cc0d32` passed Worker syntax validation, ordered migration validation, unit tests, production bundle build, and desktop/mobile Playwright tests. E2E coverage includes the public presale CTA, mobile route access, verified team-quest claim flow, demo referral-state honesty, and the sale-activation guard.
 
 
 
@@ -288,14 +288,14 @@ Proceed next with the AI execution service rather than polishing more UI. Requir
 
 - [x] Created a separate Cloudflare D1 database named `pexoriy-preview` (UUID `c70a09f0-8d61-45ed-b207-c6418e42998b`) for preview testing; it is not the production database.
 - [x] Configured Wrangler preview bindings to use the preview D1 database, so preview traffic cannot accidentally read or mutate production account data.
-- [x] Configured the dedicated scope-branch preview build to apply the ordered migrations to the preview database before creating the preview Worker. The first preview attempt exposed a Wrangler requirement for `--remote --preview`; the trigger command has been corrected and awaits a fresh build result.
-- [ ] Verify the corrected preview build, confirm the preview migration ledger contains 0001–0009, and smoke-test the preview Worker.
-- [ ] Production build trigger remains unchanged until the latest branch CI and preview checks are green. Production migration 0009 has not been applied.
+- [x] Configured the dedicated scope-branch preview build to apply ordered migrations to the preview database before creating the preview Worker. The first preview attempt exposed a Wrangler requirement for `--remote --preview`; the trigger command was corrected and the latest preview build succeeded.
+- [x] Verified the preview migration ledger contains migrations 0001–0009, five active lessons, two active team quests, and a presale row with `sale_enabled=0`.
+- [x] Configured the production build trigger to run `npx wrangler d1 migrations apply pexoriy-core --remote` before `npx wrangler deploy`. This will apply only unapplied migrations, capture a Cloudflare backup, and halt deployment if the migration fails. The production trigger has not run for this feature branch.
 
 ### Still required before production activation
 
-- [ ] Review the latest CI run after the follow-up UX-safety and team-quest patch; do not rely on an earlier successful run as evidence for the latest commit.
-- [ ] Verify production D1's applied migration history and backup status, then apply migration 0009 through the controlled Wrangler migration process. No production migration has been applied by this implementation pass.
+- [x] Review the latest CI run after the UX-safety and team-quest patches; the latest scope-branch CI and preview build succeeded.
+- [ ] Promote the verified scope branch to `main`, verify the production Wrangler migration step and deployment, then confirm production D1 records migration 0009 and the Worker serves the new assets. Production migration 0009 has not yet been applied.
 - [ ] Review referral abuse monitoring and campaign economics before broad promotion. Current safeguards include verified email, a unique attribution per referred account, a first simulated trade requirement, request rate limits, self-referral rejection, and idempotent rewards; they are foundational, not a complete device/IP fraud-detection system.
 - [ ] Complete a full-site UX review for long pages, navigation consistency, keyboard focus, touch targets, and screen-size behavior beyond the newly added pages.
 - [ ] Review the presale with qualified legal/compliance advisers for applicable jurisdictions, offering terms, eligibility, token contract/allocation, payment/refund, and consumer disclosures before any sale is enabled.
