@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  calculateRealizedSettlement, isFreshValidatedQuote, calculateSimulatedFillPrice,
+  calculateRealizedSettlement, calculateUnrealizedPnlTc, isFreshValidatedQuote, calculateSimulatedFillPrice,
   calculateTakerFeeTc, MAX_OPEN_POSITIONS, MAX_POSITION_EQUITY_BPS, MAX_TOTAL_EXPOSURE_EQUITY_BPS,
 } from "../../worker/trading.js";
 
@@ -74,6 +74,15 @@ test("settlement rejects invalid allocation, side, prices and fees", () => {
   assert.throws(() => calculateRealizedSettlement({ allocationTc: 1, side: "sideways", entryPriceMicros: 1, exitPriceMicros: 1 }));
   assert.throws(() => calculateRealizedSettlement({ allocationTc: 1, side: "long", entryPriceMicros: 0, exitPriceMicros: 1 }));
   assert.throws(() => calculateRealizedSettlement({ allocationTc: 1, side: "long", entryPriceMicros: 1, exitPriceMicros: 1, openFeeTc: -1 }));
+});
+
+test("server unrealized P&L includes adverse exit pricing and both simulated fees", () => {
+  const quote = 67482200000;
+  const entryFill = calculateSimulatedFillPrice({ quotePriceMicros: quote, action: "buy" });
+  assert.equal(calculateUnrealizedPnlTc({
+    allocationTc: 500, side: "long", entryPriceMicros: entryFill,
+    markQuotePriceMicros: quote, openFeeTc: 1,
+  }), -3);
 });
 
 test("server only accepts valid quotes inside the age window", () => {
