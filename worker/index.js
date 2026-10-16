@@ -471,8 +471,8 @@ async function handleApi(request, env) {
     if (!match && mismatch) {
       const status = mismatch.reason === "underpaid" ? "underpaid" : "overpaid";
       await env.DB.prepare(
-        "UPDATE payment_orders SET received_amount_atoms = ?, status = 'pending' WHERE id = ? AND status IN ('created','pending')",
-      ).bind(Number(mismatch.receivedLamports), order.id).run();
+        "UPDATE payment_orders SET received_amount_atoms = ?, status = ? WHERE id = ? AND status IN ('created','pending')",
+      ).bind(Number(mismatch.receivedLamports), status, order.id).run();
       await recordSolanaPaymentEvent(env, {
         orderId: order.id, signature: mismatch.signature, eventType: "transaction.amount_mismatch",
         processingStatus: "review", slot: mismatch.slot,
