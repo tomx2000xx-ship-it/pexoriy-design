@@ -208,6 +208,34 @@ async function chargeAIReservation(env, userId, operation, requestId) {
   return posted.id;
 }
 
+async function reconcileStaleAIReservations(env, userId, requestId) {
+  const now = new Date().toISOString();
+  const expired = await env.DB.prepare(
+    "SELECT p.*, o.reserved_credits, o.status AS operation_status FROM ai_trade_proposals p JOIN ai_operations o ON o.id = p.operation_id WHERE p.user_id = ? AND p.status = 'pending' AND p.expires_at <= ?",
+  ).bind(userId, now).all();
+  for (const proposal of expired.results || []) {
+    const operation = await env.DB.prepare("SELECT * FROM ai_operations WHERE id = ?").bind(proposal.operation_id).first();
+    if (operation?.status === "reserved") {
+      try { await releaseAIReservation(env, userId, operation, "cancelled", requestId); }
+      catch { continue; }
+    }
+    await env.DB.prepare("UPDATE ai_trade_proposals SET status='expired' WHERE id=? AND status='pending'").bind(proposal.id).run();
+  }
+  const orphaned = await env.DB.prepare(
+    "SELECT o.* FROM ai_operations o LEFT JOIN ai_trade_proposals p ON p.operation_id = o.id WHERE o.user_id = ? AND o.status = 'reserved' AND p.id IS NULL AND o.created_at < datetime('now','-15 minutes')",
+  ).bind(userId).all();
+  for (const operation of orphaned.results || []) {
+    const reservation = await env.DB.prepare("SELECT status FROM ledger_transactions WHERE idempotency_key = ?")
+      .bind("ai-reservation:" + operation.id).first();
+    if (reservation?.status === "posted") {
+      try { await releaseAIReservation(env, userId, operation, "failed", requestId); } catch {}
+    } else {
+      await env.DB.prepare("UPDATE ai_operations SET status='failed', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND status='reserved'")
+        .bind(operation.id).run();
+    }
+  }
+}
+
 async function currentUser(request, env) {
   const token = cookieValue(request, SESSION_COOKIE);
   if (!token || token.length > 200) return null;
@@ -871,6 +899,7 @@ async function handleApi(request, env) {
     }
     const session = await env.DB.prepare("SELECT * FROM ai_sessions WHERE user_id = ?").bind(user.id).first();
     if (!session || session.state !== "active") return json({ error: "Start or resume your AI session before requesting a trade setup." }, 409);
+    await reconcileStaleAIReservations(env, user.id, requestId);
     const pending = await env.DB.prepare("SELECT id FROM ai_trade_proposals WHERE user_id = ? AND status IN ('pending','executing','review') LIMIT 1")
       .bind(user.id).first();
     if (pending) return json({ error: "Finish, execute, or cancel your existing AI proposal before requesting another." }, 409);
@@ -878,6 +907,8 @@ async function handleApi(request, env) {
       .bind(symbol).first();
     if (!isFreshValidatedQuote(quote, Date.now())) return json({ error: "A fresh validated market quote is required before AI can prepare a setup." }, 503);
 
+    const availableAcAtoms = await getLedgerBalance(env.DB, "user:" + user.id + ":AC");
+    if (availableAcAtoms < AI_TRADE_RESERVATION_ATOMS) return json({ error: "Not enough AI Credits to reserve 1.5 AC for this setup." }, 409);
     const operationId = crypto.randomUUID();
     try {
       await env.DB.prepare("INSERT INTO ai_operations (id,user_id,idempotency_key,operation_type,reserved_credits,charged_credits,status) VALUES (?,?,?,'trade_proposal',?,0,'reserved')")
