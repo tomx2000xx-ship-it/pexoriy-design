@@ -11,7 +11,7 @@ test("base58 address encoding preserves 32-byte Solana public keys", () => {
 
 test("payment URL requests native SOL with exact amount, recipient, and reference", () => {
   const recipient = "11111111111111111111111111111111";
-  const reference = "11111111111111111111111111111111";
+  const reference = encodeBase58(new Uint8Array(32).fill(1));
   const url = makeSolanaPayUrl({ recipient, reference, amountLamports: 5_000_000_000, message: "70 AI Credits" });
   assert.ok(url.startsWith(`solana:${recipient}?`));
   const params = new URLSearchParams(url.split("?")[1]);
@@ -41,7 +41,7 @@ test("native SOL verification requires matching reference, recipient and exact a
   const reference = "11111111111111111111111111111111";
   const tx = makeTransaction({ reference, recipient });
   assert.deepEqual(validateSolPaymentTransaction(tx, { recipient, reference, expectedLamports: 5_000_000_000 }), { valid: true, receivedLamports: 5_000_000_000 });
-  assert.throws(() => validateSolPaymentTransaction(makeTransaction({ reference: "OtherReference11111111111111111111111111", recipient }), {
+  assert.throws(() => validateSolPaymentTransaction(makeTransaction({ reference: encodeBase58(new Uint8Array(32).fill(2)), recipient }), {
     recipient, reference, expectedLamports: 5_000_000_000,
   }), /REFERENCE_MISMATCH/);
   assert.deepEqual(validateSolPaymentTransaction(makeTransaction({ reference, recipient, lamports: 4_990_000_000 }), {
