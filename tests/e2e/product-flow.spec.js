@@ -69,6 +69,19 @@ test('password reset requires matching new passwords', async ({ page }) => {
   await expect(page.getByRole('heading',{name:'Log in to Pexoriy'})).toBeVisible();
 });
 
+test('demo balances are explicitly labelled and remain separate from account data', async ({ page }) => {
+  await enterApp(page);
+  await expect(page.getByText('DEMO MODE', { exact: true })).toBeVisible();
+  await expect(page.getByText('Illustrative balances only — not saved to an account.')).toBeVisible();
+});
+
+test('an expired account session returns to sign-in instead of showing demo balances', async ({ page }) => {
+  await page.route('**/api/me', route => route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: 'Not signed in' }) }));
+  await enterApp(page, '/', 'live', 'account');
+  await expect(page.getByRole('heading', { name: 'Log in to Pexoriy' })).toBeVisible();
+  await expect(page.getByText('DEMO MODE', { exact: true })).toHaveCount(0);
+});
+
 test('Practice visibly connects to AI Trading and blocks over-balance orders', async ({ page }) => {
   await enterApp(page);
   await goTo(page, 'Practice Trading');
