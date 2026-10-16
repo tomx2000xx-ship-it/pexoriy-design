@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 
 const base = process.env.PEXORIY_LOCAL_API_BASE || "http://127.0.0.1:8787";
 const email = `stage2-${Date.now()}@example.test`;
@@ -67,6 +68,16 @@ assert.equal(positions.payload?.positions?.length, 1);
 assert.equal(positions.payload?.positions?.[0]?.quoteStatus, "live");
 assert.equal(Number(positions.payload?.positions?.[0]?.unrealizedPnlTc), 0);
 
+// Simulate a later exchange snapshot and confirm the API marks the open
+// position from the fresh server-side quote, not a browser-only price.
+const nextTimestamp = Date.now();
+const updatedPriceMicros = 68156022000; // +1% from the seeded BTC entry
+const quoteSql = "INSERT INTO market_snapshots (id, provider, symbol, price_micros, provider_timestamp_ms, validation_status, model_version) VALUES ('ci-market-btc-updated', 'ci-fixture', 'BTC/USDT', " + updatedPriceMicros + ", " + nextTimestamp + ", 'valid', 'ci-test')";
+execFileSync("npx", ["wrangler", "d1", "execute", "pexoriy-core", "--local", "--command", quoteSql], { stdio: "pipe" });
+const markedPositions = await call("/api/trading/positions");
+assert.equal(markedPositions.response.status, 200);
+assert.equal(Number(markedPositions.payload?.positions?.[0]?.unrealizedPnlTc), 5, "fresh mark should show +5 TC unrealized P&L");
+
 const tooLarge = await call("/api/trading/positions", {
   method: "POST",
   body: { symbol: "BTC/USDT", side: "long", allocationTc: 12000, idempotencyKey: `stage2-overdraw-${Date.now()}` },
@@ -80,7 +91,7 @@ const closed = await call("/api/trading/positions/close", {
 });
 assert.equal(closed.response.status, 200, JSON.stringify(closed.payload));
 assert.equal(closed.payload?.closed, true);
-assert.equal(Number(closed.payload?.realizedPnl ?? closed.payload?.position?.realized_pnl_tc ?? 0), 0);
+assert.equal(Number(closed.payload?.realizedPnl ?? closed.payload?.position?.realized_pnl_tc ?? 0), 5);
 
 const duplicateClose = await call("/api/trading/positions/close", {
   method: "POST",
@@ -90,10 +101,11 @@ assert.equal(duplicateClose.response.status, 200, JSON.stringify(duplicateClose.
 assert.equal(duplicateClose.payload?.duplicate, true);
 
 const afterClose = await call("/api/me");
-assert.equal(Number(afterClose.payload?.user?.balances?.TC), 12450, "flat close must return reserved TC exactly once");
+assert.equal(Number(afterClose.payload?.user?.balances?.TC), 12455, "close must return reserved TC plus realized gain exactly once");
 const history = await call("/api/trading/history");
 assert.equal(history.response.status, 200);
 assert.equal(history.payload?.history?.length, 1);
 assert.equal(history.payload?.history?.[0]?.id, opened.payload.position.id);
+assert.equal(Number(history.payload?.history?.[0]?.realizedPnl), 5);
 
-console.log("Local D1 trading integration passed: auth, fresh quote gate, open/idempotency, balance reservation, mark-to-market, overdraw protection, close/idempotency, and history.");
+console.log("Local D1 trading integration passed: auth, fresh quote gate, open/idempotency, balance reservation, live mark-to-market, overdraw protection, close settlement/idempotency, and history.");
