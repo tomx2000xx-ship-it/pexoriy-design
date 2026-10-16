@@ -23,6 +23,7 @@ export function normalizeTonAddress(value) {
   if (raw) return String(Number(raw[1])) + ":" + raw[2].toLowerCase();
   const bytes = decodeBase64Url(input);
   if (bytes.length !== 36) throw new TypeError("Invalid TON friendly address length.");
+  if ((bytes[0] & 0x80) !== 0) throw new TypeError("Testnet TON addresses are not accepted for mainnet payments.");
   const tag = bytes[0] & 0x7f;
   if (tag !== 0x11 && tag !== 0x51) throw new TypeError("Unsupported TON address tag.");
   const expected = crc16Xmodem(bytes.slice(0, 34));
