@@ -102,6 +102,13 @@ async function appendAudit(env, { actorUserId = null, eventType, entityType, ent
   ).bind(crypto.randomUUID(), actorUserId, eventType, entityType, entityId, requestId, JSON.stringify(details)).run();
 }
 
+async function recordSolanaPaymentEvent(env, { orderId, signature, eventType, processingStatus, slot }) {
+  const payloadHash = await sha256Hex(`${signature}:${eventType}:${slot}`);
+  await env.DB.prepare(
+    "INSERT OR IGNORE INTO payment_events (id, payment_order_id, provider_event_id, event_type, payload_hash, processing_status, processed_at) VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+  ).bind(crypto.randomUUID(), orderId, `solana:${signature}`, eventType, payloadHash, processingStatus).run();
+}
+
 async function currentUser(request, env) {
   const token = cookieValue(request, SESSION_COOKIE);
   if (!token || token.length > 200) return null;
@@ -446,7 +453,7 @@ async function handleApi(request, env) {
           break;
         }
         if (BigInt(validation.receivedAtoms) > 0n) {
-          mismatch = { signature: item.signature, slot: Number(transaction.slot), reason: validation.reason };
+          mismatch = { signature: item.signature, slot: Number(transaction.slot), reason: validation.reason, receivedAtoms: validation.receivedAtoms };
         }
       } catch {
         // A transaction with a matching reference but wrong mint/recipient is never credited.
@@ -455,9 +462,16 @@ async function handleApi(request, env) {
 
     if (!match && mismatch) {
       const status = mismatch.reason === "underpaid" ? "underpaid" : "overpaid";
+      await env.DB.prepare(
+        "UPDATE payment_orders SET received_amount_atoms = ?, status = 'pending' WHERE id = ? AND status IN ('created','pending')",
+      ).bind(Number(mismatch.receivedAtoms), order.id).run();
+      await recordSolanaPaymentEvent(env, {
+        orderId: order.id, signature: mismatch.signature, eventType: "transaction.amount_mismatch",
+        processingStatus: "review", slot: mismatch.slot,
+      });
       await appendAudit(env, {
         actorUserId: user.id, eventType: `payment.solana_${status}`, entityType: "payment_order",
-        entityId: order.id, requestId, details: { signature: mismatch.signature, slot: mismatch.slot },
+        entityId: order.id, requestId, details: { signature: mismatch.signature, slot: mismatch.slot, receivedAtoms: mismatch.receivedAtoms },
       });
       return json({
         status,
@@ -478,7 +492,7 @@ async function handleApi(request, env) {
 
     try {
       await env.DB.prepare(
-        "UPDATE payment_orders SET status = 'confirmed', tx_hash = ?, confirmed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'), confirmed_slot = ?, chain_finality = 'finalized' WHERE id = ? AND tx_hash IS NULL AND status IN ('created','pending','confirmed')",
+        "UPDATE payment_orders SET status = 'confirmed', tx_hash = ?, received_amount_atoms = expected_amount_atoms, confirmed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'), confirmed_slot = ?, chain_finality = 'finalized' WHERE id = ? AND tx_hash IS NULL AND status IN ('created','pending','confirmed')",
       ).bind(match.signature, match.slot, order.id).run();
     } catch {
       const latest = await env.DB.prepare("SELECT status, tx_hash FROM payment_orders WHERE id = ?").bind(order.id).first();
@@ -488,6 +502,10 @@ async function handleApi(request, env) {
       }
     }
 
+    await recordSolanaPaymentEvent(env, {
+      orderId: order.id, signature: match.signature, eventType: "transaction.payment_verified",
+      processingStatus: "processed", slot: match.slot,
+    });
     const ledgerTransactionId = crypto.randomUUID();
     try {
       await postLedgerTransaction(env.DB, {
