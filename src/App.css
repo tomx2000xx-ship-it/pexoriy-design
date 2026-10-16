@@ -1276,3 +1276,13 @@ button, a { -webkit-tap-highlight-color: transparent; }
     min-height: 42px;
   }
 }
+
+
+.referral-quest-progress{height:5px;overflow:hidden;border-radius:999px;background:rgba(255,255,255,.09);margin:14px 0 10px}
+.referral-quest-progress span{display:block;height:100%;border-radius:inherit;background:var(--lime,#b7f34a);transition:width .2s ease}
+.referral-quest-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:13px}
+.referral-quest-foot>strong{font-size:14px;color:var(--lime,#b7f34a);white-space:nowrap}
+.referral-quest-claim{white-space:nowrap}
+.mission-card-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.mission-card-actions .btn{min-height:38px}
+@media(max-width:560px){.mission-card-actions{width:100%;justify-content:stretch}.mission-card-actions .btn{flex:1}.referral-quest-foot{align-items:flex-start;flex-direction:column}.referral-quest-claim{width:100%}}

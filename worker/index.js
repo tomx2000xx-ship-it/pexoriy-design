@@ -590,8 +590,39 @@ async function handleApi(request, env) {
       ownCode = await env.DB.prepare("SELECT code FROM referral_codes WHERE user_id = ?").bind(user.id).first();
     }
     const counts = await env.DB.prepare("SELECT COUNT(*) AS invited, SUM(CASE WHEN status='activated' THEN 1 ELSE 0 END) AS activated FROM referral_attributions WHERE referrer_user_id = ?").bind(user.id).first();
-    const rows = await env.DB.prepare("SELECT status, created_at, activated_at FROM referral_attributions WHERE referrer_user_id = ? ORDER BY created_at DESC LIMIT 50").bind(user.id).all();
-    return json({ code: ownCode?.code || null, invited: Number(counts?.invited || 0), activated: Number(counts?.activated || 0), milestones: [{ id: "first", target: 1, reached: Number(counts?.activated || 0) >= 1 }, { id: "squad", target: 3, reached: Number(counts?.activated || 0) >= 3 }, { id: "community", target: 5, reached: Number(counts?.activated || 0) >= 5 }], referrals: rows.results || [], rewards: { referrerTC: 250, referredTC: 100, currency: "TC" } });
+    const [rows, quests, questClaims] = await Promise.all([
+      env.DB.prepare("SELECT status, created_at, activated_at FROM referral_attributions WHERE referrer_user_id = ? ORDER BY created_at DESC LIMIT 50").bind(user.id).all(),
+      env.DB.prepare("SELECT id,title,description,target_activations,reward_tc FROM referral_team_quests WHERE active=1 ORDER BY target_activations").all(),
+      env.DB.prepare("SELECT quest_id,status,ledger_transaction_id,created_at FROM referral_team_quest_claims WHERE user_id=?").bind(user.id).all()
+    ]);
+    const activated = Number(counts?.activated || 0);
+    const claimByQuest = new Map((questClaims.results || []).map(row => [row.quest_id, row]));
+    return json({ code: ownCode?.code || null, invited: Number(counts?.invited || 0), activated, milestones: [{ id: "first", target: 1, reached: activated >= 1 }, { id: "squad", target: 3, reached: activated >= 3 }, { id: "community", target: 5, reached: activated >= 5 }], quests: (quests.results || []).map(quest => ({ id: quest.id, title: quest.title, description: quest.description, target: Number(quest.target_activations), rewardTC: Number(quest.reward_tc), progress: activated, claim: claimByQuest.get(quest.id) || null })), referrals: rows.results || [], rewards: { referrerTC: 250, referredTC: 100, currency: "TC" } });
+  }
+
+  if (path === "/api/referrals/quests/claim" && request.method === "POST") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    if (!(await consumeAuthRateLimit(request, env, "referral-quest-claim", user.id, 10, 3600))) return json({ error: "Too many quest claims. Try again later." }, 429);
+    const body = await readJson(request);
+    const questId = typeof body?.questId === "string" ? body.questId.trim() : "";
+    const quest = await env.DB.prepare("SELECT id,title,target_activations,reward_tc FROM referral_team_quests WHERE id=? AND active=1").bind(questId).first();
+    if (!quest || Number(quest.reward_tc) <= 0) return json({ error: "This team quest is not available." }, 404);
+    const count = await env.DB.prepare("SELECT COUNT(*) AS activated FROM referral_attributions WHERE referrer_user_id=? AND status='activated'").bind(user.id).first();
+    if (Number(count?.activated || 0) < Number(quest.target_activations)) return json({ error: "The squad has not reached this activation milestone yet.", progress: Number(count?.activated || 0), target: Number(quest.target_activations) }, 409);
+    const idempotencyKey = "referral-quest:" + user.id + ":" + quest.id;
+    await env.DB.prepare("INSERT OR IGNORE INTO referral_team_quest_claims (id,user_id,quest_id,idempotency_key,status) VALUES (?,?,?,?,'pending')").bind(crypto.randomUUID(), user.id, quest.id, idempotencyKey).run();
+    const existing = await env.DB.prepare("SELECT * FROM referral_team_quest_claims WHERE user_id=? AND quest_id=?").bind(user.id, quest.id).first();
+    if (existing?.status === "paid" && existing?.ledger_transaction_id) return json({ status: "paid", duplicate: true, rewardTC: Number(quest.reward_tc), questId: quest.id });
+    let rewardResult;
+    try {
+      rewardResult = await postLedgerTransaction(env.DB, { id: crypto.randomUUID(), idempotencyKey, userId: user.id, eventType: "referral.team_quest_reward", metadata: { questId: quest.id, targetActivations: Number(quest.target_activations) }, postings: [{ accountKey: "user:" + user.id + ":TC", currency: "TC", amountAtoms: Number(quest.reward_tc) }, { accountKey: "system:issuance:TC", currency: "TC", amountAtoms: -Number(quest.reward_tc) }] });
+      await env.DB.prepare("UPDATE referral_team_quest_claims SET status='paid',ledger_transaction_id=? WHERE user_id=? AND quest_id=?").bind(rewardResult.transactionId, user.id, quest.id).run();
+    } catch {
+      return json({ status: "pending", rewardStatus: "retrying", message: "Quest eligibility is recorded. Reward delivery will retry safely." }, 202);
+    }
+    await appendAudit(env, { actorUserId: user.id, eventType: "referral.team_quest_reward_paid", entityType: "referral_team_quest_claim", entityId: existing?.id || quest.id, requestId, details: { questId: quest.id, rewardTC: Number(quest.reward_tc), duplicate: rewardResult.duplicate } });
+    return json({ status: "paid", duplicate: Boolean(rewardResult.duplicate), rewardTC: Number(quest.reward_tc), questId: quest.id });
   }
 
   if (path === "/api/referrals/activate" && request.method === "POST") {

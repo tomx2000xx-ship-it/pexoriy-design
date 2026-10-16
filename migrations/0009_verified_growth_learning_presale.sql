@@ -17,6 +17,30 @@ CREATE TABLE IF NOT EXISTS referral_attributions (
 );
 CREATE INDEX IF NOT EXISTS idx_referrals_owner_status ON referral_attributions(referrer_user_id, status, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS referral_team_quests (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  target_activations INTEGER NOT NULL CHECK (target_activations > 0),
+  reward_tc INTEGER NOT NULL CHECK (reward_tc BETWEEN 0 AND 10000),
+  active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE TABLE IF NOT EXISTS referral_team_quest_claims (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  quest_id TEXT NOT NULL REFERENCES referral_team_quests(id),
+  idempotency_key TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL CHECK (status IN ('pending','paid')),
+  ledger_transaction_id TEXT REFERENCES ledger_transactions(id),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  UNIQUE(user_id, quest_id)
+);
+CREATE INDEX IF NOT EXISTS idx_referral_quest_claims_user ON referral_team_quest_claims(user_id, created_at DESC);
+INSERT OR IGNORE INTO referral_team_quests (id,title,description,target_activations,reward_tc,active) VALUES
+('squad-three','Build your squad','Activate three referred members through verified email and a first simulated trade.',3,300,1),
+('arena-five','Grow the arena','Activate five referred members who complete a first simulated trade.',5,600,1);
+
 CREATE TABLE IF NOT EXISTS learning_lessons (
   id TEXT PRIMARY KEY,
   slug TEXT NOT NULL UNIQUE,
@@ -70,4 +94,4 @@ INSERT OR IGNORE INTO learning_lessons (id,slug,title,category,summary,content_j
 INSERT OR IGNORE INTO mission_definitions (id,title,reward_currency,reward_amount,active,rules_json) VALUES
 ('first-practice-trade','Make a practice trade','TC',250,1,'{"prerequisite":"practice_trade"}'),
 ('review-ai-setup','Review an AI trading setup','TC',150,1,'{"prerequisite":"ai_setup"}'),
-('community-challenge','Join a community challenge','TC',200,1,'{"prerequisite":"community_challenge"}');
+('community-challenge','Join a community challenge','TC',200,0,'{"prerequisite":"community_challenge"}');

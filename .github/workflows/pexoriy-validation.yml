@@ -34,7 +34,7 @@ jobs:
               raise SystemExit("No migrations found")
           for migration in migrations:
               db.executescript(migration.read_text(encoding="utf-8"))
-          required = {"referral_codes", "referral_attributions", "learning_lessons", "learning_attempts", "learning_progress", "presale_settings"}
+          required = {"referral_codes", "referral_attributions", "referral_team_quests", "referral_team_quest_claims", "learning_lessons", "learning_attempts", "learning_progress", "presale_settings"}
           found = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
           missing = required - found
           if missing:
@@ -42,7 +42,10 @@ jobs:
           lessons = db.execute("SELECT COUNT(*) FROM learning_lessons WHERE active=1").fetchone()[0]
           if lessons < 5:
               raise SystemExit(f"Expected at least five active learning lessons, found {lessons}")
-          print(f"Validated {len(migrations)} ordered migrations and {lessons} learning lessons.")
+          quests = db.execute("SELECT COUNT(*) FROM referral_team_quests WHERE active=1").fetchone()[0]
+          if quests < 2:
+              raise SystemExit(f"Expected at least two active referral team quests, found {quests}")
+          print(f"Validated {len(migrations)} ordered migrations, {lessons} learning lessons, and {quests} team quests.")
           PY
       - name: Run deterministic simulation and payment unit tests
         run: bun run test:unit

@@ -276,14 +276,15 @@ Proceed next with the AI execution service rather than polishing more UI. Requir
 - [x] Added authenticated server endpoints for learning content and quiz attempts. Correct answers remain server-side; the server scores attempts, rate-limits attempts, persists progress, issues TC through the existing balanced ledger with a unique idempotency key, and records an audit event.
 - [x] Added server-verified mission claim endpoints. The server checks the underlying trading/AI/challenge/learning records before a TC reward can be posted. Client-only mission completion no longer issues account-mode TC.
 - [x] Added unique referral links and registration attribution, plus verified activation based on email verification and a recorded simulated trade. TC referral rewards use idempotent ledger transactions; PXY is not issued through referrals.
+- [x] Added server-verified referral team quests (3 and 5 activated referrals) with TC-only milestone rewards, one-time claim records, ledger idempotency, and audit events. Demo mode shows no fabricated referral counts or milestone progress.
 - [x] Added the Learning Center page, persistent mission/reward UI, referral stats/milestones based on server counts, and a PXY Presale Preview page reachable from the sidebar and PXY Token page.
 - [x] Added mobile-responsive styles for the learning and presale preview pages.
-- [x] Added a CI step that executes the ordered SQL migrations against an in-memory SQLite database and checks the expected tables and seeded lessons.
+- [x] Added a CI step that executes the ordered SQL migrations against an in-memory SQLite database and checks the expected tables, five learning lessons, and active referral team quests.
 - [x] The first staged implementation commit passed Worker syntax validation, ordered migration validation, unit tests, production bundle build, and the existing desktop/mobile Playwright flow. The follow-up UX-safety patch has been pushed to the scope branch and requires its own fresh CI result.
 
 ### Still required before production activation
 
-- [ ] Review the latest CI run after the follow-up UX-safety patch; do not rely on the earlier successful run as evidence for the latest commit.
+- [ ] Review the latest CI run after the follow-up UX-safety and team-quest patch; do not rely on an earlier successful run as evidence for the latest commit.
 - [ ] Verify production D1's applied migration history and backup status, then apply migration 0009 through the controlled Wrangler migration process. No production migration has been applied by this implementation pass.
 - [ ] Review referral abuse monitoring and campaign economics before broad promotion. Current safeguards include verified email, a unique attribution per referred account, a first simulated trade requirement, request rate limits, self-referral rejection, and idempotent rewards; they are foundational, not a complete device/IP fraud-detection system.
 - [ ] Complete a full-site UX review for long pages, navigation consistency, keyboard focus, touch targets, and screen-size behavior beyond the newly added pages.
