@@ -615,14 +615,15 @@ async function handleApi(request, env) {
       ownCode = await env.DB.prepare("SELECT code FROM referral_codes WHERE user_id = ?").bind(user.id).first();
     }
     const counts = await env.DB.prepare("SELECT COUNT(*) AS invited, SUM(CASE WHEN status='activated' THEN 1 ELSE 0 END) AS activated FROM referral_attributions WHERE referrer_user_id = ?").bind(user.id).first();
-    const [rows, quests, questClaims] = await Promise.all([
+    const [rows, quests, questClaims, community] = await Promise.all([
       env.DB.prepare("SELECT status, created_at, activated_at FROM referral_attributions WHERE referrer_user_id = ? ORDER BY created_at DESC LIMIT 50").bind(user.id).all(),
       env.DB.prepare("SELECT id,title,description,target_activations,reward_tc FROM referral_team_quests WHERE active=1 ORDER BY target_activations").all(),
-      env.DB.prepare("SELECT quest_id,status,ledger_transaction_id,created_at FROM referral_team_quest_claims WHERE user_id=?").bind(user.id).all()
+      env.DB.prepare("SELECT quest_id,status,ledger_transaction_id,created_at FROM referral_team_quest_claims WHERE user_id=?").bind(user.id).all(),
+      env.DB.prepare("SELECT COUNT(*) AS activated FROM referral_attributions WHERE status='activated'").first()
     ]);
     const activated = Number(counts?.activated || 0);
     const claimByQuest = new Map((questClaims.results || []).map(row => [row.quest_id, row]));
-    return json({ code: ownCode?.code || null, invited: Number(counts?.invited || 0), activated, milestones: [{ id: "first", target: 1, reached: activated >= 1 }, { id: "squad", target: 3, reached: activated >= 3 }, { id: "community", target: 5, reached: activated >= 5 }], quests: (quests.results || []).map(quest => ({ id: quest.id, title: quest.title, description: quest.description, target: Number(quest.target_activations), rewardTC: Number(quest.reward_tc), progress: activated, claim: claimByQuest.get(quest.id) || null })), referrals: rows.results || [], rewards: { referrerTC: 250, referredTC: 100, currency: "TC" } });
+    return json({ code: ownCode?.code || null, invited: Number(counts?.invited || 0), activated, community: { verifiedActivations: Number(community?.activated || 0) }, milestones: [{ id: "first", target: 1, reached: activated >= 1 }, { id: "squad", target: 3, reached: activated >= 3 }, { id: "community", target: 5, reached: activated >= 5 }], quests: (quests.results || []).map(quest => ({ id: quest.id, title: quest.title, description: quest.description, target: Number(quest.target_activations), rewardTC: Number(quest.reward_tc), progress: activated, claim: claimByQuest.get(quest.id) || null })), referrals: rows.results || [], rewards: { referrerTC: 250, referredTC: 100, currency: "TC" } });
   }
 
   if (path === "/api/referrals/quests/claim" && request.method === "POST") {
