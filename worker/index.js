@@ -277,6 +277,31 @@ async function publicUser(env, user) {
   };
 }
 
+async function activateReferralForUser(env, user, requestId) {
+  if (!user?.email_verified_at) return { status: "pending", message: "Verify your email before referral activation can be checked." };
+  const qualifyingTrade = await env.DB.prepare("SELECT id FROM trading_positions WHERE user_id = ? LIMIT 1").bind(user.id).first();
+  if (!qualifyingTrade) return { status: "pending", message: "Complete your first simulated trade to qualify." };
+  const attribution = await env.DB.prepare("SELECT id, referrer_user_id, status FROM referral_attributions WHERE referred_user_id = ?").bind(user.id).first();
+  if (!attribution) return { status: "not_referred", message: "No referral is attached to this account." };
+  if (attribution.referrer_user_id === user.id) return { status: "rejected", message: "Self-referrals are not eligible." };
+  if (attribution.status === "pending") {
+    await env.DB.prepare("UPDATE referral_attributions SET status='activated', activated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND status='pending'").bind(attribution.id).run();
+  }
+  const latest = await env.DB.prepare("SELECT status FROM referral_attributions WHERE id=?").bind(attribution.id).first();
+  if (latest?.status !== "activated") return { status: latest?.status || "pending" };
+  const referrerId = attribution.referrer_user_id;
+  try {
+    await postLedgerTransaction(env.DB, { id: crypto.randomUUID(), idempotencyKey: "referral:" + attribution.id + ":referrer", userId: referrerId, eventType: "referral.activation_reward", metadata: { attributionId: attribution.id, role: "referrer" }, postings: [{ accountKey: "user:" + referrerId + ":TC", currency: "TC", amountAtoms: 250 }, { accountKey: "system:issuance:TC", currency: "TC", amountAtoms: -250 }] });
+    await postLedgerTransaction(env.DB, { id: crypto.randomUUID(), idempotencyKey: "referral:" + attribution.id + ":referred", userId: user.id, eventType: "referral.activation_reward", metadata: { attributionId: attribution.id, role: "referred" }, postings: [{ accountKey: "user:" + user.id + ":TC", currency: "TC", amountAtoms: 100 }, { accountKey: "system:issuance:TC", currency: "TC", amountAtoms: -100 }] });
+  } catch {
+    return { status: "activated", rewardStatus: "retrying", message: "Your activation is recorded. Reward delivery will retry safely." };
+  }
+  try {
+    await appendAudit(env, { actorUserId: user.id, eventType: "referral.activated", entityType: "referral_attribution", entityId: attribution.id, requestId, details: { referrerRewardTC: 250, referredRewardTC: 100 } });
+  } catch {}
+  return { status: "activated", rewardStatus: "paid", referrerRewardTC: 250, referredRewardTC: 100 };
+}
+
 async function handleApi(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
@@ -629,26 +654,7 @@ async function handleApi(request, env) {
     const user = await currentUser(request, env);
     if (!user) return json({ error: "Authentication required." }, 401);
     if (!(await consumeAuthRateLimit(request, env, "referral-activation", user.id, 10, 3600))) return json({ error: "Too many activation checks. Try again later." }, 429);
-    if (!user.email_verified_at) return json({ error: "Verify your email before referral activation can be checked." }, 409);
-    const qualifyingTrade = await env.DB.prepare("SELECT id FROM trading_positions WHERE user_id = ? LIMIT 1").bind(user.id).first();
-    if (!qualifyingTrade) return json({ status: "pending", message: "Complete your first simulated trade to qualify." });
-    const attribution = await env.DB.prepare("SELECT id, referrer_user_id, status FROM referral_attributions WHERE referred_user_id = ?").bind(user.id).first();
-    if (!attribution) return json({ status: "not_referred", message: "No referral is attached to this account." });
-    if (attribution.referrer_user_id === user.id) return json({ error: "Self-referrals are not eligible." }, 409);
-    if (attribution.status === "pending") {
-      await env.DB.prepare("UPDATE referral_attributions SET status='activated', activated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND status='pending'").bind(attribution.id).run();
-    }
-    const latest = await env.DB.prepare("SELECT status FROM referral_attributions WHERE id=?").bind(attribution.id).first();
-    if (latest?.status !== "activated") return json({ status: latest?.status || "pending" });
-    const referrerId = attribution.referrer_user_id;
-    try {
-      await postLedgerTransaction(env.DB, { id: crypto.randomUUID(), idempotencyKey: "referral:" + attribution.id + ":referrer", userId: referrerId, eventType: "referral.activation_reward", metadata: { attributionId: attribution.id, role: "referrer" }, postings: [{ accountKey: "user:" + referrerId + ":TC", currency: "TC", amountAtoms: 250 }, { accountKey: "system:issuance:TC", currency: "TC", amountAtoms: -250 }] });
-      await postLedgerTransaction(env.DB, { id: crypto.randomUUID(), idempotencyKey: "referral:" + attribution.id + ":referred", userId: user.id, eventType: "referral.activation_reward", metadata: { attributionId: attribution.id, role: "referred" }, postings: [{ accountKey: "user:" + user.id + ":TC", currency: "TC", amountAtoms: 100 }, { accountKey: "system:issuance:TC", currency: "TC", amountAtoms: -100 }] });
-    } catch {
-      return json({ status: "activated", rewardStatus: "retrying", message: "Your activation is recorded. Reward delivery will retry safely." }, 202);
-    }
-    await appendAudit(env, { actorUserId: user.id, eventType: "referral.activated", entityType: "referral_attribution", entityId: attribution.id, requestId, details: { referrerRewardTC: 250, referredRewardTC: 100 } });
-    return json({ status: "activated", rewardStatus: "paid", referrerRewardTC: 250, referredRewardTC: 100 });
+    return json(await activateReferralForUser(env, user, requestId));
   }
 
   if (path === "/api/learning" && request.method === "GET") {
@@ -844,6 +850,9 @@ async function handleApi(request, env) {
       ).bind(existing.position_id, user.id).first();
       if (!position) return json({ error: "The original order could not be recovered. Contact support." }, 409);
       if (position.status !== "open") return json({ error: "This idempotency key belongs to a position that is no longer open. Refresh your trade history." }, 409);
+      let referralActivation = null;
+      try { referralActivation = await activateReferralForUser(env, user, requestId); }
+      catch { referralActivation = { status: "retrying", message: "Referral activation could not be checked yet. Your existing trade is safe; retry from Referrals." }; }
       return json({ order: { id: existing.order_id, duplicate: true }, position: {
         ...position, amount: Number(position.reserved_tc), market: position.symbol,
         direction: position.side === "long" ? "Long" : "Short",
@@ -851,7 +860,7 @@ async function handleApi(request, env) {
         markPrice: Number(position.mark_price_micros) / 1000000,
         time: new Date(position.opened_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
         openedAt: position.opened_at, aiManaged: false,
-      } });
+      }, referralActivation });
     }
 
     const quote = await env.DB.prepare(
@@ -903,6 +912,8 @@ async function handleApi(request, env) {
       if (/position_limit_exceeded|position_size_limit_exceeded|total_exposure_limit_exceeded/i.test(String(error?.message || ""))) return json({ error: "This order exceeds the current practice-trading exposure limits. Refresh your balance and open positions." }, 409);
       return json({ error: "The simulated order could not be committed. No position was opened." }, 500);
     }
+    let referralActivation = null;
+    try { referralActivation = await activateReferralForUser(env, user, requestId); } catch {}
     return json({ order: { id: orderId, duplicate: false }, position: {
       id: positionId, symbol, market: symbol, side, direction: side === "long" ? "Long" : "Short",
       status: "open", leverage: 1, quantity_atoms: quantityAtoms, quantityAtoms,
@@ -912,7 +923,7 @@ async function handleApi(request, env) {
       quoteStatus: "live", open_fee_tc: openFeeTc, entry_quote_price_micros: quotePriceMicros, modelVersion: SIMULATION_MODEL_VERSION,
       opened_at: new Date().toISOString(), openedAt: new Date().toISOString(),
       time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }), aiManaged: false,
-    } }, 201);
+    }, referralActivation }, 201);
   }
 
   if (path === "/api/trading/positions/close" && request.method === "POST") {
