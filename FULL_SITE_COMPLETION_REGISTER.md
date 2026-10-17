@@ -303,3 +303,33 @@ Proceed next with the AI execution service rather than polishing more UI. Requir
 - [x] Automated live production smoke checks passed after deployment: `GET /api/presale/status` returns `previewEnabled=true`, `saleEnabled=false`, and `launchState='disabled'`; unauthenticated `GET /api/learning` returns HTTP 401.
 - [ ] Run the remaining live authenticated user-flow checks on the public app: registration without a referral code, referral registration/activation, quiz retries and duplicate claims, mission eligibility rejection, and account ledger display. CI covers the UI flows locally; these authenticated checks still require a real verified test account.
 - [x] Verified `sale_enabled=0` and `launch_state='disabled'`. The preview contains no purchase flow, and sale activation remains a separate owner-approved launch decision.
+
+
+## Production-readiness recheck — 17 October 2026
+
+### Live state verified read-only
+
+- [x] Cloudflare Worker metadata confirms production Worker `pexoriy-design` is at 100% traffic on version `4c29d79d-2d84-442d-8afd-db8bf5da063f`, deployment `9d5950c8-4e0f-4a06-aaa7-d6e302b971a1` (deployed 16 October 2026).
+- [x] Production D1 read-only queries confirm migrations `0001`–`0009`, five active learning lessons, two active referral quests, and presale state `preview_enabled=1`, `sale_enabled=0`, `launch_state='disabled'`. All audit queries reported zero rows written and `changed_db=false`.
+- [x] The isolated preview D1 database also has migrations `0001`–`0009`, five lessons, two active referral quests, and the same disabled sale state. Read-only checks made no changes.
+- [x] The connected Cloudflare account has no configured zones/custom domains returned by the Zones API. The production Worker has an `EMAIL` binding, but this does not prove verification-email delivery is configured; referral activation still requires verified email.
+- [x] Production D1 currently contains zero payment orders/events and zero verified users. No real payment settlement or authenticated referral activation has therefore been evidenced by production ledger data.
+
+### Release candidate isolated from production
+
+- [x] Created `scope/production-readiness-reconcile-20261017` from current `main` to avoid promoting a divergent branch wholesale.
+- [x] Staged the referral-activation helper and safe retry behavior on this candidate branch, together with the production-safe validation workflow. Candidate commits: `2e3999377651b2df8cbd92b1b4351a9b50f1688e` and `8c90be8ccf9b07cde12b2f933b637d35afff58ad`.
+- [x] Cloudflare candidate preview build `e57ecd09-ccdc-4bd9-b5d2-452f363ef0c0` completed successfully for commit `8c90be8ccf9b07cde12b2f933b637d35afff58ad`; preview URL: `https://scope-production-readiness-reconcile-20261017-pexoriy-design.mails4dikewills.workers.dev`.
+- [ ] GitHub Actions combined-status endpoint currently returns no check entries for the candidate commits; full unit and Playwright CI results are not yet independently confirmed.
+- [ ] The preview URL and API routes are inaccessible to the external browser checker in this session, so browser-level smoke tests and authenticated acceptance tests are still outstanding.
+- [ ] Build output remains large: approximately 1,210 kB minified JavaScript (about 362 kB gzip), above Vite's 500 kB chunk warning threshold. Build logs also confirm no committed package-manager lockfile; dependency reproducibility/cache remains a release-hardening task.
+- [ ] No production merge/deploy of this candidate has been performed. Production D1 was only read. Presale remains disabled.
+
+### Production gates still open
+
+1. Obtain confirmed GitHub CI results for syntax validation, ordered migrations, unit tests, and desktop/mobile Playwright flows.
+2. Complete authenticated acceptance tests for registration/email verification, referral attribution and activation, duplicate trade retry, learning reward idempotency, mission rejection, and ledger/account display.
+3. Configure and test verification-email delivery using a verified sender domain; do not relax verified-email referral controls as a shortcut.
+4. Test payment verification and credit allocation with a controlled supported-wallet transaction; no on-chain payment has been verified yet.
+5. Address dependency lockfile/reproducibility and evaluate safe route-level code splitting without changing product behavior.
+6. Promote only after the candidate passes tests and a production smoke check. Keep PXY presale activation as a separate explicit launch decision after legal/compliance and payment/refund readiness.
