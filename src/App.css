@@ -1286,3 +1286,9 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .mission-card-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .mission-card-actions .btn{min-height:38px}
 @media(max-width:560px){.mission-card-actions{width:100%;justify-content:stretch}.mission-card-actions .btn{flex:1}.referral-quest-foot{align-items:flex-start;flex-direction:column}.referral-quest-claim{width:100%}}
+
+/* Compact referral hub: keep the invite action and reward rules above the fold. */
+.referral-policy-note{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:18px 0 0;padding:12px 14px;border:1px solid var(--line);border-radius:12px;color:var(--muted);font-size:12px;line-height:1.55}
+.referral-policy-note button{display:inline-flex;align-items:center;gap:5px;flex-shrink:0;border:0;background:transparent;color:var(--lime);font:inherit;font-weight:700;cursor:pointer}
+.referral-share-link>button{white-space:nowrap}
+@media(max-width:560px){.referral-policy-note{align-items:flex-start;flex-direction:column}.referral-policy-note button{padding:4px 0}.referral-share-link>button{width:100%;justify-content:center}}
