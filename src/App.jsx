@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useTonConnectUI, useTonWallet } from '@tonconnect/ui-react';
 import { beginCell } from '@ton/core';
 import { calculateCloseSettlement, calculateSimulatedPnl, validateTCAllocation } from './domain/simulation.js';
-import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, Bell, Bot, ChartNoAxesCombined, Check, ChevronDown, ChevronRight, CircleHelp, CircleDollarSign, Flame, Gift, History, Home, Layers3, Menu, Pause, Play, Search, Settings, ShieldCheck, Sparkles, Square, Target, Trophy, Users, X, Zap, TrendingUp, BrainCircuit, CandlestickChart, Clock3, CalendarDays, LockKeyhole } from 'lucide-react';
+import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, Bell, Bot, ChartNoAxesCombined, Check, ChevronDown, ChevronRight, CircleHelp, CircleDollarSign, Copy, Flame, Gift, History, Home, Layers3, Menu, Pause, Play, Search, Settings, ShieldCheck, Sparkles, Square, Target, Trophy, Users, X, Zap, TrendingUp, BrainCircuit, CandlestickChart, Clock3, CalendarDays, LockKeyhole } from 'lucide-react';
 import './App.css';
 
 const initialTC=12450, initialAC=840, initialPXY=0;
