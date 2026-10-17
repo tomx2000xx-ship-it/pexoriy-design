@@ -850,6 +850,9 @@ async function handleApi(request, env) {
       ).bind(existing.position_id, user.id).first();
       if (!position) return json({ error: "The original order could not be recovered. Contact support." }, 409);
       if (position.status !== "open") return json({ error: "This idempotency key belongs to a position that is no longer open. Refresh your trade history." }, 409);
+      let referralActivation = null;
+      try { referralActivation = await activateReferralForUser(env, user, requestId); }
+      catch { referralActivation = { status: "retrying", message: "Referral activation could not be checked yet. Your existing trade is safe; retry from Referrals." }; }
       return json({ order: { id: existing.order_id, duplicate: true }, position: {
         ...position, amount: Number(position.reserved_tc), market: position.symbol,
         direction: position.side === "long" ? "Long" : "Short",
@@ -857,7 +860,7 @@ async function handleApi(request, env) {
         markPrice: Number(position.mark_price_micros) / 1000000,
         time: new Date(position.opened_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
         openedAt: position.opened_at, aiManaged: false,
-      } });
+      }, referralActivation });
     }
 
     const quote = await env.DB.prepare(
