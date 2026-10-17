@@ -51,9 +51,11 @@ jobs:
           # Payment settlement safety: transaction hashes and provider references must be unique,
           # and credited state must require a finalized transaction.
           indexes = list(db.execute("PRAGMA index_list('payment_orders')"))
-          unique_index_names = {row[1] for row in indexes if row[2]}
-          required_indexes = {"sqlite_autoindex_payment_orders_1", "sqlite_autoindex_payment_orders_2", "idx_payment_orders_reference_key"}
-          if not required_indexes.issubset(unique_index_names):
+          unique_columns = set()
+          for index in indexes:
+              if index[2]:
+                  unique_columns.update(info[2] for info in db.execute(f"PRAGMA index_info('{index[1]}')"))
+          if not {"idempotency_key", "tx_hash", "reference_key"}.issubset(unique_columns):
               raise SystemExit("Missing unique payment-order idempotency, transaction-hash, or reference constraint")
           trigger_names = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='trigger'")}
           if "trg_payment_credit_requires_verified_state" not in trigger_names or "trg_credited_payment_immutable" not in trigger_names:
