@@ -290,26 +290,27 @@ Proceed next with the AI execution service rather than polishing more UI. Requir
 - [x] Configured Wrangler preview bindings to use the preview D1 database, so preview traffic cannot accidentally read or mutate production account data.
 - [x] Configured the dedicated scope-branch preview build to apply ordered migrations to the preview database before creating the preview Worker. The first preview attempt exposed a Wrangler requirement for `--remote --preview`; the trigger command was corrected and the latest preview build succeeded.
 - [x] Verified the preview migration ledger contains migrations 0001–0009, five active lessons, two active team quests, and a presale row with `sale_enabled=0`.
-- [x] Configured the production build trigger to run `npx wrangler d1 migrations apply pexoriy-core --remote` before `npx wrangler deploy`. This will apply only unapplied migrations, capture a Cloudflare backup, and halt deployment if the migration fails. The production trigger has not run for this feature branch.
+- [x] Configured the production build trigger to run `npx wrangler d1 migrations apply pexoriy-core --remote` before `npx wrangler deploy`. This will apply only unapplied migrations, capture a Cloudflare backup, and halt deployment if the migration fails. The production trigger ran successfully after promotion to `main`; the release evidence is recorded below.
 
 ### Still required before production activation
 
 - [x] Review the latest CI run after the UX-safety and team-quest patches; the latest scope-branch CI and preview build succeeded.
-- [ ] Promote the verified scope branch to `main`, verify the production Wrangler migration step and deployment, then confirm production D1 records migration 0009 and the Worker serves the new assets. Production migration 0009 has not yet been applied.
+- [x] Promoted the verified scope branch to `main`. The production Wrangler migration step applied `0009_verified_growth_learning_presale.sql` and the production build succeeded. Cloudflare reports 100% traffic on Worker version `4c29d79d-2d84-442d-8afd-db8bf5da063f` (deployment `9d5950c8-4e0f-4a06-aaa7-d6e302b971a1`). Production D1 history contains `0001`–`0009`; the production Worker binding remains `3add741b-bda8-4f47-b857-538ff9a1dae8`; five lessons and two team quests are present; `sale_enabled=0` and `launch_state='disabled'`.
 - [ ] Review referral abuse monitoring and campaign economics before broad promotion. Current safeguards include verified email, a unique attribution per referred account, a first simulated trade requirement, request rate limits, self-referral rejection, and idempotent rewards; they are foundational, not a complete device/IP fraud-detection system.
 - [ ] Complete a full-site UX review for long pages, navigation consistency, keyboard focus, touch targets, and screen-size behavior beyond the newly added pages.
 - [ ] Review the presale with qualified legal/compliance advisers for applicable jurisdictions, offering terms, eligibility, token contract/allocation, payment/refund, and consumer disclosures before any sale is enabled.
-- [ ] Confirm the production Worker and static assets deployed successfully, then smoke-test registration without a referral code, referral registration/activation, quiz retries and duplicate claims, mission eligibility rejection, account ledger display, and presale-disabled status.
-- [ ] Keep `sale_enabled=0`. The preview contains no purchase flow, and sale activation remains a separate owner-approved launch decision.
+- [x] Confirmed the production Worker and static assets deployed successfully through Cloudflare deployment/version metadata, and verified the production D1 schema/state directly.
+- [x] Automated live production smoke checks passed after deployment: `GET /api/presale/status` returns `previewEnabled=true`, `saleEnabled=false`, and `launchState='disabled'`; unauthenticated `GET /api/learning` returns HTTP 401.
+- [ ] Run the remaining live authenticated user-flow checks on the public app: registration without a referral code, referral registration/activation, quiz retries and duplicate claims, mission eligibility rejection, and account ledger display. CI covers the UI flows locally; these authenticated checks still require a real verified test account.
+- [x] Verified `sale_enabled=0` and `launch_state='disabled'`. The preview contains no purchase flow, and sale activation remains a separate owner-approved launch decision.
 
 
-## Follow-up verification — 17 October 2026
+## Scope-branch follow-up — 17 October 2026
 
-- [x] Closed the referral activation gap by extracting a shared server-side activation routine and invoking it after a successful first simulated trade. Email verification remains required; TC rewards still use the existing idempotent ledger keys. The Referrals page retains its activation retry path.
-- [x] Committed the code change as `eda06929140065cfaea96569a31d4b3f42b6ddfe`.
-- [x] Cloudflare preview build `42d8a053-6cea-4fad-aa2b-4c2b3d44b873` completed successfully for that code commit. Preview URL: https://scope-verified-growth-learning-presale-pexoriy-design.mails4dikewills.workers.dev
-- [x] Rechecked the isolated `pexoriy-preview` database after the daily reset: migrations `0001` through `0009` are recorded; five active lessons and two active referral quests exist; presale remains `sale_enabled=0` and `launch_state='disabled'`. The read-only check reported zero rows written.
-- [ ] Run/inspect the GitHub validation workflow for the referral activation change and add focused regression coverage for the post-trade activation path. The GitHub combined-status connector did not return check entries during this pass, so CI is not claimed as newly verified for commit `eda0692`.
-- [ ] Complete an authenticated browser/API smoke test of registration with a referral code, first qualifying trade, one-time referrer/referred TC awards, retry behavior, and duplicate protection. The preview build is verified, but this session's external browser/network check could not reach the preview URL.
-- [ ] Address the production bundle warning before final release review: Vite currently emits a roughly 1.21 MB JavaScript chunk and reports chunks above 500 kB. The build also reports no checked-in package-manager lockfile, so dependency resolution is not fully reproducible yet.
-- [ ] Keep the scope branch isolated. No production merge, production migration, or presale activation occurred during this pass.
+- [x] Synced the scope branch's validation workflow with the latest `main` workflow, preserving the production-only smoke-test step while keeping it conditional on `main`.
+- [x] Hardened the duplicate/idempotent practice-trade response: if a client retries an already-created trade after the original request, the server retries referral activation safely rather than leaving a transient activation failure dependent on the user reopening Referrals.
+- [x] Latest Worker change: `e27b2f521280b38967fc83c143b12861cc62beb3`; workflow sync: `ef30ff5cf64248268bd027ec4c80be339912c47c`.
+- [ ] Referral rewards intentionally require verified email. Production email delivery/domain setup is still deferred, so real referral activation/reward flows cannot be considered fully production-ready until verification delivery is configured and tested, or the owner explicitly approves a different anti-abuse policy.
+- [ ] Run the scope-branch GitHub validation for the latest Worker and workflow commits; the GitHub combined-status connector did not return check entries during the prior verification pass.
+- [ ] Complete authenticated preview testing for referral-code attribution, verified-email activation, first simulated trade, one-time TC rewards, and duplicate/retry behavior.
+- [ ] Production is still isolated from this work: no merge, no production migration, and no presale activation.
