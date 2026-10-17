@@ -698,6 +698,63 @@ async function handleApi(request, env) {
     return json({ passed: true, score, total: keys.length, rewardTC: Number(lesson.reward_tc), duplicate: Boolean(progress?.reward_transaction_id || rewardResult.duplicate) });
   }
 
+  if (path === "/api/checkins" && request.method === "GET") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const [todayRow, latest, history] = await Promise.all([
+      env.DB.prepare("SELECT checkin_date, streak_days, reward_tc FROM daily_checkins WHERE user_id=? AND checkin_date=?").bind(user.id, today).first(),
+      env.DB.prepare("SELECT checkin_date, streak_days FROM daily_checkins WHERE user_id=? ORDER BY checkin_date DESC LIMIT 1").bind(user.id).first(),
+      env.DB.prepare("SELECT checkin_date, streak_days, reward_tc FROM daily_checkins WHERE user_id=? ORDER BY checkin_date DESC LIMIT 7").bind(user.id).all(),
+    ]);
+    const currentStreak = latest && (latest.checkin_date === today || latest.checkin_date === yesterday) ? Number(latest.streak_days) : 0;
+    return json({
+      checkedInToday: Boolean(todayRow),
+      streakDays: currentStreak,
+      rewardTC: 50,
+      history: (history.results || []).map(row => ({ date: row.checkin_date, streakDays: Number(row.streak_days), rewardTC: Number(row.reward_tc) })),
+    });
+  }
+
+  if (path === "/api/checkins" && request.method === "POST") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    if (!(await consumeAuthRateLimit(request, env, "daily-checkin", user.id, 10, 3600))) return json({ error: "Too many check-in attempts. Try again later." }, 429);
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const existing = await env.DB.prepare("SELECT streak_days, reward_tc FROM daily_checkins WHERE user_id=? AND checkin_date=?").bind(user.id, today).first();
+    if (existing) return json({ status: "already_checked_in", duplicate: true, checkedInToday: true, streakDays: Number(existing.streak_days), rewardTC: Number(existing.reward_tc) });
+    const previous = await env.DB.prepare("SELECT checkin_date, streak_days FROM daily_checkins WHERE user_id=? AND checkin_date<? ORDER BY checkin_date DESC LIMIT 1").bind(user.id, today).first();
+    const streakDays = previous && previous.checkin_date === yesterday ? Number(previous.streak_days) + 1 : 1;
+    const idempotencyKey = "daily-checkin:" + user.id + ":" + today;
+    let ledgerResult;
+    try {
+      ledgerResult = await postLedgerTransaction(env.DB, {
+        id: crypto.randomUUID(), idempotencyKey, userId: user.id, eventType: "daily.checkin_reward",
+        metadata: { checkinDate: today, streakDays, rewardTC: 50 },
+        postings: [
+          { accountKey: "user:" + user.id + ":TC", currency: "TC", amountAtoms: 50 },
+          { accountKey: "system:issuance:TC", currency: "TC", amountAtoms: -50 },
+        ],
+      });
+    } catch {
+      return json({ error: "The check-in reward could not be recorded safely. Please retry; duplicate rewards are prevented." }, 503);
+    }
+    const ledger = await env.DB.prepare("SELECT id,status FROM ledger_transactions WHERE idempotency_key=?").bind(idempotencyKey).first();
+    if (!ledger || ledger.status !== "posted" || ledger.id !== ledgerResult.transactionId) return json({ error: "The check-in reward is reconciling. Refresh your balance and retry shortly." }, 202);
+    try {
+      await env.DB.prepare("INSERT OR IGNORE INTO daily_checkins (id,user_id,checkin_date,streak_days,reward_tc,ledger_transaction_id) VALUES (?,?,?,?,?,?)")
+        .bind(crypto.randomUUID(), user.id, today, streakDays, 50, ledger.id).run();
+    } catch {
+      return json({ error: "The check-in was recorded in the ledger and is reconciling. Retry safely shortly." }, 202);
+    }
+    const recorded = await env.DB.prepare("SELECT streak_days,reward_tc FROM daily_checkins WHERE user_id=? AND checkin_date=?").bind(user.id, today).first();
+    if (!recorded) return json({ error: "The reward was recorded and the check-in record is reconciling. Please retry shortly." }, 202);
+    await appendAudit(env, { actorUserId: user.id, eventType: "daily.checkin_recorded", entityType: "daily_checkin", entityId: user.id + ":" + today, requestId, details: { checkinDate: today, streakDays: Number(recorded.streak_days), rewardTC: Number(recorded.reward_tc), duplicate: Boolean(ledgerResult.duplicate) } });
+    return json({ status: "checked_in", duplicate: Boolean(ledgerResult.duplicate), checkedInToday: true, streakDays: Number(recorded.streak_days), rewardTC: Number(recorded.reward_tc) });
+  }
+
   if (path === "/api/missions" && request.method === "GET") {
     const user = await currentUser(request, env);
     if (!user) return json({ error: "Authentication required." }, 401);
