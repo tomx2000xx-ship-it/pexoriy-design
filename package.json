@@ -20,5 +20,6 @@
     "buffer": "6.0.3",
     "vite-plugin-node-polyfills": "0.24.0"
   },
-  "devDependencies": {}
+  "devDependencies": {},
+  "packageManager": "bun@1.4.3"
 }
