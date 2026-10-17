@@ -433,6 +433,7 @@ test('referral progress is not fabricated in demo mode', async ({ page }) => {
 
 
 test('team quest rewards are shown only after the server confirms the claim', async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => {} } }));
   let questPaid = false;
   await page.route('**/api/me', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { id: 'account-user', email: 'account@example.test', displayName: 'Account User', balances: { TC: 1000, AC: 10, PXY: 0 } } }) }));
   await page.route('**/api/trading/positions', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ positions: [] }) }));
@@ -455,6 +456,9 @@ test('team quest rewards are shown only after the server confirms the claim', as
   });
   await enterApp(page, '/', 'live', 'account');
   await goTo(page, 'Referrals');
+  await expect(page.getByRole('button', { name: 'Copy link' })).toBeVisible();
+  await page.getByRole('button', { name: 'Copy link' }).click();
+  await expect(page.getByText('Your personal invite link has been copied.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Team quests' })).toBeVisible();
   await page.getByRole('button', { name: 'Claim reward' }).click();
   await expect(page.getByText('Team quest completed: +300 TC recorded.')).toBeVisible();
