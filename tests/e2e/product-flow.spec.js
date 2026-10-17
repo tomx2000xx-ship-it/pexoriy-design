@@ -426,7 +426,7 @@ test('public landing exposes a presale preview without requiring sign-in', async
 test('referral progress is not fabricated in demo mode', async ({ page }) => {
   await enterApp(page);
   await goTo(page, 'Referrals');
-  await expect(page.getByRole('heading', { name: /Good people make a great community/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Invite friends. Grow together./ })).toBeVisible();
   await expect(page.getByText('Sign in to track your squad and claim team quest rewards.')).toBeVisible();
   await expect(page.getByText('Verified referral progress is account-backed')).toBeVisible();
 });
