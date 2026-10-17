@@ -26,7 +26,7 @@ async function goTo(page, label) {
     await page.locator('.topbar').getByRole('button', { name: 'Activity', exact: true }).click();
     return;
   }
-  const mobileLabels = { 'Practice Trading': 'Practice', 'AI Trading': 'AI Centre', 'Community Challenges': 'Arena', 'Referrals': 'Invite' };
+  const mobileLabels = { 'Practice Trading': 'Practice', 'AI Trading': 'AI Centre', 'Community Challenges': 'Challenges', 'Referrals': 'Invite' };
   if (mobile && ['Learning Center', 'PXY Presale Preview'].includes(label)) {
     await page.locator('.menu-button').click();
     await page.locator('.sidebar').getByRole('button', { name: label, exact: true }).click();
