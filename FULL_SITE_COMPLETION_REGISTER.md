@@ -102,45 +102,44 @@ Do not hand off for owner testing until all launch-critical site functionality i
 - [x] Preserve the existing 12,450 TC welcome balance and 1x leverage. Relative exposure limits are conservative practice-mode defaults; higher leverage and public competition exposure remain disabled until the virtual-reserve budget and tier schedule are reviewed.
 
 ### P0 — AI operation service
-- [ ] Replace client-side “AI-like” selection logic with a real server-side AI provider/service.
-- [ ] Define the billable AI operation/cycle; reserve, charge, refund, and log AC exactly once.
-- [ ] Enforce user-authorized risk limits and the same trading controls used by manual traders.
-- [ ] Implement real session start/pause/resume/stop state, operation logs, safe failure behavior, and credit reconciliation.
-- [ ] Configure and protect the AI provider credentials; disable AI execution until verified.
+- [x] Server-side Cloudflare Workers AI inference is implemented through the production Worker's `AI` binding; model output is validated before a proposal is saved.
+- [x] The defined AI setup operation reserves 1.5 AC, releases the reservation on provider/validation failure, and charges only after a simulated trade executes. Ledger idempotency keys and audit events protect retries.
+- [x] Session/proposal state, fresh-market-quote checks, user risk profile, and shared server-side simulated-trade controls are implemented.
+- [x] Cloudflare production settings confirm the `AI` binding is present.
+- [ ] Run authenticated live AI inference and the complete reserve/release/charge cycle with a real test account. Production currently has no verified users, so this live acceptance test is still outstanding.
 
 ### P0 — Native SOL checkout and revenue reconciliation
-- [x] Confirmed the production Worker has the `SOLANA_RECEIVE_ADDRESS` secret binding configured and has deployed the authenticated order-creation and server-side verification routes. This confirms configuration is present, not yet that a real transaction has passed end-to-end verification.
-- [ ] Run a controlled real-SOL transaction against the configured receiver; verify the destination, quote, expiry, unique reference, exact amount, finality, under/overpayment, wrong-recipient, replay, and duplicate-transaction cases before announcing payment production readiness.
-- [ ] Verify the full payment-to-credit path is crash-safe/idempotent; reconcile confirmed-but-not-credited orders and duplicate verification requests.
-- [ ] Add internal payment/revenue reconciliation views or reports: confirmed receipts, pending/review, AC credits delivered, fees/costs where available, refunds/reversals, and mismatches.
-- [ ] Do not count pending/unconfirmed transfers as revenue.
-- [ ] Do not activate token bonus issuance until approved PXY reserves and cumulative bonus liabilities are enforced.
-- [ ] Keep the native-SOL purchase path available whenever server configuration is valid; do not disable it merely to defer implementation. Fail closed if the receiver, quote, or verification provider is invalid or unavailable.
+- [x] Production Worker has the `SOLANA_RECEIVE_ADDRESS` secret binding and authenticated server-side order/verification routes.
+- [x] Payment-order idempotency, unique transaction hashes/references, finalized-credit guards, and ledger-based AC delivery are implemented in code and checked by CI schema tests.
+- [x] Added `ops/payment-reconciliation.sql` with read-only checks for order states, confirmed-but-uncredited orders, credited orders without posted ledger transactions, review/refund states, failed events, and duplicate hashes.
+- [x] Executed all six reconciliation queries against production D1; all succeeded and reported zero rows written and `changed_db=false`.
+- [ ] Run a controlled real-SOL transaction and confirm exact amount, recipient, expiry, finality, under/overpayment, wrong-recipient, replay, and duplicate-transaction behavior end-to-end. No production payment orders/events exist yet, so real settlement is not verified.
+- [x] Pending/unconfirmed transfers are not counted as completed revenue in the reconciliation report.
+- [ ] Keep PXY bonus issuance disabled until reserves and cumulative bonus liabilities are approved.
+- [x] Keep the native-SOL path available when its server configuration is valid; fail closed on invalid/unavailable receiver, quote, or verification.
 
 ### P0 — GRAM checkout
-- [ ] Confirm the exact GRAM asset/network and recipient wallet; the current Store only displays a live estimate and does not implement verified GRAM order creation/settlement.
-- [ ] Implement server-side chain verification with unique order binding, amount/asset/recipient/finality checks, idempotent AC delivery, and reconciliation.
-- [ ] Confirm TON Connect manifest/domain/origin and production wallet compatibility.
-- [ ] Do not label GRAM as a live purchase method until its server-side payment verification and automatic AC delivery are implemented; wallet connection alone is not payment verification.
+- [x] Authenticated GRAM (TON mainnet) order creation, unique order reference/comment, server-side chain verification, and idempotent AC ledger delivery are implemented in the candidate code.
+- [x] Existing payment orders can be restored and verified again; the UI does not credit AI Credits until the server reports a verified payment.
+- [ ] Run a controlled real GRAM transaction through TON Connect and verify recipient, exact amount, order comment/reference, finality, replay handling, and automatic AC delivery. No production payment events exist yet.
+- [ ] Confirm TON Connect manifest/domain/origin and production wallet compatibility. The connected Cloudflare account has no configured custom domain, and email sender configuration is also pending.
+- [ ] Do not describe GRAM checkout as end-to-end verified until the controlled mainnet acceptance test passes.
 
 ### P1 — Missions, check-ins, streaks, and achievements
-- [ ] Move check-ins, streaks, mission progress/claims, and reward grants from browser state into D1.
-- [ ] Define server-verifiable mission prerequisites, cooldowns, caps, idempotency, and abuse checks.
-- [ ] Credit TC/AC through ledger transactions only; explicit PXY campaigns must have a budget and review path.
-- [ ] Show durable pending/approved/rejected/paid states and reasons.
+- [x] Added `0010_daily_checkins.sql` on the isolated candidate: check-ins/streak days are persisted in D1, with one 50 TC reward per user per UTC day, a ledger transaction reference, and immutable history. Production has not received migration 0010.
+- [x] Current learning completions, mission claims, referral rewards, and check-in rewards use server-side eligibility and ledger idempotency.
+- [x] Reward/check-in responses preserve pending/reconciliation states rather than optimistically claiming a balance change.
+- [ ] Permanent achievements and evidence-based Trader Rating still need persistent server-side unlock/scoring rules.
 
 ### P1 — Competitions and leaderboard
-- [ ] Persist challenge instances, joins, entry windows, starting/ending equity, scores, rank, and settlement status.
-- [ ] Implement server-authoritative scoring, drawdown/consistency eligibility, deterministic tie-breaks, anti-abuse review, and immutable finalized results.
-- [ ] Implement near-you rank and personal progress views.
-- [ ] Enforce approved 24-hour/7-day/14-day formats and PXY prize-pool reserve checks; never publish an unfunded pool as guaranteed.
-- [ ] Make settlement idempotent and auditable.
+- [x] The challenge page now presents the approved 24-hour, 7-day, and 14-day formats and the planned 5,000 / 12,000 / 25,000 PXY allocations as planned, not payable rewards. The misleading session-only “join” action has been removed.
+- [ ] Competition instances, entries, server-authoritative scores, leaderboards, anti-abuse review, and idempotent settlement are not implemented yet. Entry remains intentionally closed until scoring/eligibility rules and funded reserves are approved.
 
 ### P1 — Referrals, teams, and community
-- [ ] Generate unique referral codes/links and persist attribution.
-- [ ] Reward verified activation/meaningful activity rather than raw sign-ups.
-- [ ] Prevent self-referrals, duplicate-account farming, automated abuse, and repeated reward claims.
-- [ ] Add team/community quest participation and reviewable reward states.
+- [x] Unique invite codes/links and sign-up attribution are persisted. Activation requires verified email plus a recorded simulated trade; rewards are 250 TC to the referrer and 100 TC to the referred user, posted idempotently.
+- [x] Personal team quests at 3 and 5 activated referrals are server-verified and paid once through the ledger; the invite page now has distinct Copy link and Share actions and shows Pexoriy-wide verified activation progress.
+- [ ] The planned shared community reward pool is not implemented. Pool size and equal-versus-proportional distribution remain an open product/economic decision; no shared payout is being fabricated.
+- [ ] Stronger suspicious-account/device-pattern detection and admin investigation tools remain outstanding. Existing verified-email, unique-attribution, self-referral, rate-limit, and idempotency controls are foundational, not a complete anti-fraud system.
 
 ### P1 — Profile, support, activity, and admin operations
 - [ ] Persist profile/settings and account/security actions.
@@ -333,3 +332,28 @@ Proceed next with the AI execution service rather than polishing more UI. Requir
 4. Test payment verification and credit allocation with a controlled supported-wallet transaction; no on-chain payment has been verified yet.
 5. Address dependency lockfile/reproducibility and evaluate safe route-level code splitting without changing product behavior.
 6. Promote only after the candidate passes tests and a production smoke check. Keep PXY presale activation as a separate explicit launch decision after legal/compliance and payment/refund readiness.
+
+
+## Superseding checkpoint audit — 17 October 2026
+
+This section supersedes older checklist statements above where they conflict with the newer evidence.
+
+### Candidate changes and verification evidence
+
+- [x] Committed `bun.lock`, pinned direct dependencies, and switched CI to `bun install --frozen-lockfile`. The latest candidate CI run passed the frozen install.
+- [x] Split the main JavaScript and vendor libraries into separate cached chunks. Latest successful Cloudflare build has no chunk over Vite's 500 kB warning threshold; the largest emitted chunk is the TON Connect UI vendor chunk at about 357 kB minified. This improves caching/chunk size but does not mean the total initial-download bytes have fallen by the same amount.
+- [x] Candidate preview build `4ef6f5dc-bf23-419e-9d32-184ad2ae53b6` completed successfully for the latest UI/test branch state; preview migration command found no pending migrations.
+- [x] Preview D1 has migrations `0001`–`0010`, including daily check-ins; presale remains `preview_enabled=1`, `sale_enabled=0`, `launch_state='disabled'`.
+- [x] GitHub Actions run [`39025850882`](https://github.com/tomx2000xx-ship-it/pexoriy-design/actions/runs/39025850882) passed Worker syntax validation, ordered migrations, payment schema safety checks, unit tests, production bundle build, desktop/mobile Playwright flows, and candidate preview endpoint smoke tests. The production smoke step was correctly skipped because this was a candidate-branch run.
+- [x] Production D1 was rechecked read-only: migrations remain `0001`–`0009`; `daily_checkins` is absent from production; presale remains disabled; payment orders/events, verified users, and activated referrals are all zero. All queries reported zero writes and `changed_db=false`.
+- [x] The candidate branch is based on current `main` and is ahead by 38 commits with zero commits behind. It has not been merged or deployed to production.
+
+### Still open before production sign-off
+
+1. **Real payment acceptance:** run a controlled SOL and GRAM mainnet payment through the actual checkout, confirm the on-chain transaction and exactly-once AC delivery, then run the reconciliation report. The report is ready, but production has no payment evidence yet.
+2. **Email verification:** intentionally deferred until the owner creates/configures the sending domain and sender identity. Cloudflare has an `EMAIL` binding, but no sender variables/custom domain are configured; do not weaken the verified-email referral gate.
+3. **Shared referral reward pool:** the page now shows global community progress, but the shared pool and its payout rule remain unimplemented until pool budget and equal-versus-proportional distribution are decided.
+4. **Competition service:** the UI is an honest launch-gated preview; persistent entries, scoring, leaderboards, anti-abuse review, and prize settlement still need implementation and approval of rules/reserves.
+5. **Operations and progression:** persistent achievements/Trader Rating, role-protected admin review, support/dispute recovery, and stronger duplicate-account/device-pattern fraud review remain incomplete.
+6. **Live authenticated acceptance:** test account registration/verification, referral activation, check-in, AI inference/credit settlement, and the account ledger. Email-dependent tests must wait for the sender domain.
+7. **Promotion:** do not merge/deploy this candidate or apply migration `0010` to production until the relevant gates above are passed and the owner approves promotion. Keep PXY presale disabled.
