@@ -60,7 +60,25 @@ jobs:
           trigger_names = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='trigger'")}
           if "trg_payment_credit_requires_verified_state" not in trigger_names or "trg_credited_payment_immutable" not in trigger_names:
               raise SystemExit("Missing payment finality or credited-order immutability guard")
-          print(f"Validated {len(migrations)} ordered migrations, {lessons} learning lessons, {quests} team quests, and payment settlement constraints.")
+          # Exercise the database invariants with synthetic fixtures only; no live funds or production DB.
+          db.execute("INSERT INTO users (id,email,display_name,password_salt,password_hash) VALUES ('ci-payment-user','ci-payment@example.test','CI Payment','salt','hash')")
+          db.execute("INSERT INTO payment_orders (id,user_id,idempotency_key,provider,network,asset,expected_amount_atoms,status,tx_hash,reference_key) VALUES ('ci-order-1','ci-payment-user','ci-idem-1','test','testnet','TEST',100,'confirmed','ci-tx-hash','ci-ref-1')")
+          duplicate_tx_rejected = False
+          try:
+              db.execute("INSERT INTO payment_orders (id,user_id,idempotency_key,provider,network,asset,expected_amount_atoms,status,tx_hash,reference_key) VALUES ('ci-order-2','ci-payment-user','ci-idem-2','test','testnet','TEST',100,'confirmed','ci-tx-hash','ci-ref-2')")
+          except sqlite3.IntegrityError:
+              duplicate_tx_rejected = True
+          if not duplicate_tx_rejected:
+              raise SystemExit("Payment schema accepted a transaction hash already used by another order")
+          db.execute("INSERT INTO payment_orders (id,user_id,idempotency_key,provider,network,asset,expected_amount_atoms,status) VALUES ('ci-order-3','ci-payment-user','ci-idem-3','test','testnet','TEST',100,'created')")
+          unverified_credit_rejected = False
+          try:
+              db.execute("UPDATE payment_orders SET status='credited' WHERE id='ci-order-3'")
+          except sqlite3.IntegrityError:
+              unverified_credit_rejected = True
+          if not unverified_credit_rejected:
+              raise SystemExit("Payment schema allowed a credit without finalized transaction evidence")
+          print(f"Validated {len(migrations)} ordered migrations, {lessons} learning lessons, {quests} team quests, unique payment hashes, and finalized-credit guards.")
           PY
       - name: Run deterministic simulation and payment unit tests
         run: bun run test:unit
