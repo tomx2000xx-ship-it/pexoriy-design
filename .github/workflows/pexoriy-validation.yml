@@ -42,7 +42,7 @@ jobs:
               raise SystemExit("No migrations found")
           for migration in migrations:
               db.executescript(migration.read_text(encoding="utf-8"))
-          required = {"referral_codes", "referral_attributions", "referral_team_quests", "referral_team_quest_claims", "learning_lessons", "learning_attempts", "learning_progress", "presale_settings"}
+          required = {"referral_codes", "referral_attributions", "referral_team_quests", "referral_team_quest_claims", "learning_lessons", "learning_attempts", "learning_progress", "presale_settings", "daily_checkins"}
           found = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
           missing = required - found
           if missing:
@@ -68,6 +68,8 @@ jobs:
           trigger_names = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='trigger'")}
           if "trg_payment_credit_requires_verified_state" not in trigger_names or "trg_credited_payment_immutable" not in trigger_names:
               raise SystemExit("Missing payment finality or credited-order immutability guard")
+          if not {"trg_daily_checkin_requires_posted_ledger", "trg_daily_checkin_immutable_update", "trg_daily_checkin_immutable_delete"}.issubset(trigger_names):
+              raise SystemExit("Missing daily check-in ledger or immutability guard")
           # Exercise the database invariants with synthetic fixtures only; no live funds or production DB.
           db.execute("INSERT INTO users (id,email,display_name,password_salt,password_hash) VALUES ('ci-payment-user','ci-payment@example.test','CI Payment','salt','hash')")
           db.execute("INSERT INTO payment_orders (id,user_id,idempotency_key,provider,network,asset,expected_amount_atoms,status,tx_hash,reference_key) VALUES ('ci-order-1','ci-payment-user','ci-idem-1','test','testnet','TEST',100,'confirmed','ci-tx-hash','ci-ref-1')")
@@ -86,7 +88,7 @@ jobs:
               unverified_credit_rejected = True
           if not unverified_credit_rejected:
               raise SystemExit("Payment schema allowed a credit without finalized transaction evidence")
-          print(f"Validated {len(migrations)} ordered migrations, {lessons} learning lessons, {quests} team quests, unique payment hashes, and finalized-credit guards.")
+          print(f"Validated {len(migrations)} ordered migrations, {lessons} learning lessons, {quests} team quests, payment settlement guards, and immutable daily check-ins.")
           PY
       - name: Run deterministic simulation and payment unit tests
         run: bun run test:unit
