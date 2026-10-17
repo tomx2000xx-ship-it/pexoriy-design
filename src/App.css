@@ -1292,3 +1292,5 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .referral-policy-note button{display:inline-flex;align-items:center;gap:5px;flex-shrink:0;border:0;background:transparent;color:var(--lime);font:inherit;font-weight:700;cursor:pointer}
 .referral-share-link>button{white-space:nowrap}
 @media(max-width:560px){.referral-policy-note{align-items:flex-start;flex-direction:column}.referral-policy-note button{padding:4px 0}.referral-share-link>button{width:100%;justify-content:center}}
+
+.streak-checkin-notice{margin:10px 0 0;color:#c7f987;font-size:12px;line-height:1.5}
