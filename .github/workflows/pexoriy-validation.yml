@@ -21,6 +21,14 @@ jobs:
         uses: oven-sh/setup-bun@v2
       - name: Install app dependencies
         run: bun install
+      - name: Export generated Bun lockfile for candidate bootstrap
+        if: github.ref == 'refs/heads/scope/production-readiness-reconcile-20261017'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pexoriy-bun-lockfile-${{ github.sha }}
+          path: bun.lock*
+          if-no-files-found: error
+          retention-days: 2
       - name: Validate Worker JavaScript syntax
         run: node --check worker/index.js
       - name: Validate ordered SQL migrations against SQLite
