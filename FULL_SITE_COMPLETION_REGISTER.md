@@ -301,3 +301,15 @@ Proceed next with the AI execution service rather than polishing more UI. Requir
 - [ ] Review the presale with qualified legal/compliance advisers for applicable jurisdictions, offering terms, eligibility, token contract/allocation, payment/refund, and consumer disclosures before any sale is enabled.
 - [ ] Confirm the production Worker and static assets deployed successfully, then smoke-test registration without a referral code, referral registration/activation, quiz retries and duplicate claims, mission eligibility rejection, account ledger display, and presale-disabled status.
 - [ ] Keep `sale_enabled=0`. The preview contains no purchase flow, and sale activation remains a separate owner-approved launch decision.
+
+
+## Follow-up verification — 17 October 2026
+
+- [x] Closed the referral activation gap by extracting a shared server-side activation routine and invoking it after a successful first simulated trade. Email verification remains required; TC rewards still use the existing idempotent ledger keys. The Referrals page retains its activation retry path.
+- [x] Committed the code change as `eda06929140065cfaea96569a31d4b3f42b6ddfe`.
+- [x] Cloudflare preview build `42d8a053-6cea-4fad-aa2b-4c2b3d44b873` completed successfully for that code commit. Preview URL: https://scope-verified-growth-learning-presale-pexoriy-design.mails4dikewills.workers.dev
+- [x] Rechecked the isolated `pexoriy-preview` database after the daily reset: migrations `0001` through `0009` are recorded; five active lessons and two active referral quests exist; presale remains `sale_enabled=0` and `launch_state='disabled'`. The read-only check reported zero rows written.
+- [ ] Run/inspect the GitHub validation workflow for the referral activation change and add focused regression coverage for the post-trade activation path. The GitHub combined-status connector did not return check entries during this pass, so CI is not claimed as newly verified for commit `eda0692`.
+- [ ] Complete an authenticated browser/API smoke test of registration with a referral code, first qualifying trade, one-time referrer/referred TC awards, retry behavior, and duplicate protection. The preview build is verified, but this session's external browser/network check could not reach the preview URL.
+- [ ] Address the production bundle warning before final release review: Vite currently emits a roughly 1.21 MB JavaScript chunk and reports chunks above 500 kB. The build also reports no checked-in package-manager lockfile, so dependency resolution is not fully reproducible yet.
+- [ ] Keep the scope branch isolated. No production merge, production migration, or presale activation occurred during this pass.
