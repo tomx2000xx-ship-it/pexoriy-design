@@ -1,6 +1,6 @@
 # Pexoriy — Full-Site Completion and Go-Live Register
 
-Updated: 16 October 2026 (Stage 2 market-feed and server-trading closeout)  
+Updated: 17 October 2026 (checkpoint audit, payment reconciliation, persistent check-ins, and UX closeout)  
 Purpose: internal implementation tracker. This is not customer-facing copy and does not declare production readiness.
 
 ## Release rule
@@ -31,7 +31,7 @@ Do not hand off for owner testing until all launch-critical site functionality i
 - [x] Production Worker health and D1 connection verified; all five supported markets returned fresh quotes on the first request and valid cached quotes on the second request five seconds later.
 - [x] Applied and verified production D1 migration `0005_trade_execution_risk.sql`; `open_fee_tc`, `entry_quote_price_micros`, and `close_return_tc` columns plus the database-enforced position/exposure trigger are present in the live database.
 - [x] Server P&L is calculated by the shared Worker settlement helper, returned on initial position open, and refreshed with persisted positions/balances/history every 15 seconds; stale server P&L is shown as unavailable rather than recomputed in the browser.
-- [x] Removed browser-only manual trade fallback: unauthenticated/demo users cannot open or close practice positions as if they were persisted account trades. AI-assisted execution remains disabled until the server-side AI provider and AC settlement are implemented and verified.
+- [x] Removed browser-only manual trade fallback: unauthenticated/demo users cannot open or close practice positions as if they were persisted account trades. Server-side AI proposal/execution and AC settlement are implemented; live authenticated inference/settlement acceptance remains a release gate.
 - [ ] Passing automated checks are not a substitute for provider-term review and final production configuration evidence.
 
 ## Stage 2 closeout — live market feed and server-authoritative practice trading (16 October 2026)
@@ -41,7 +41,7 @@ Do not hand off for owner testing until all launch-critical site functionality i
 - [x] Complete: browser UI consumes server P&L and periodically refreshes persisted account/trade state; no browser-only manual-trade fallback.
 - [x] Complete: latest full automated workflow and deployed API smoke checks passed in run [38851136150](https://github.com/tomx2000xx-ship-it/pexoriy-design/actions/runs/38851136150).
 - [x] Complete: live D1 migration and risk trigger verified; latest live snapshots showed fresh, validated exchange timestamps for all five supported markets.
-- [ ] Overall product launch is **not** declared complete: the other P0/P1 items below remain separate release gates. AI execution, public competitions, token bonuses, and unverified payment methods remain disabled until their server-side controls are ready.
+- [ ] Overall product launch is **not** declared complete: the other P0/P1 items below remain separate release gates. AI execution code is present but needs live authenticated acceptance; public competition entry and PXY bonus issuance remain gated; payment paths are not end-to-end verified until controlled mainnet transactions pass.
 
 ## Stage 3 progress — account security, identity flows, and reliability
 
@@ -163,9 +163,9 @@ Do not hand off for owner testing until all launch-critical site functionality i
 These are not reasons to stop coding around them; implement safe defaults and keep affected capabilities disabled until evidence/configuration exists:
 1. Final market provider approval and its production access/terms.
 2. Public competition exposure and any leverage above 1x remain gated on the reserve budget; the current 12,450 TC welcome balance, 1x leverage, 13 bps adverse fill model, 5 bps taker fee, and relative exposure limits are implemented as the conservative practice-mode baseline.
-3. AI provider and credentials plus the final definition of a billable AI operation.
+3. Live authenticated AI inference/AC settlement acceptance; the Cloudflare AI binding and 1.5 AC operation lifecycle are implemented, but must be exercised with a real test account.
 4. Email delivery provider/domain for verification and recovery.
-5. GRAM asset/network/recipient and verification details.
+5. Controlled GRAM mainnet payment, TON Connect manifest/domain/origin, and exactly-once AC delivery acceptance.
 6. PXY token deployment/issuance and funded reserve for any PXY bonuses/prizes.
 7. Production domain and final deployment environment.
 8. Legal, security, and operational review appropriate to the launch jurisdictions.
@@ -232,16 +232,14 @@ Proceed next with the AI execution service rather than polishing more UI. Requir
 5. Persist session state and activity history; ensure the UI can never create an AI trade or charge AC from client-side state alone.
 6. Add provider failure, timeout, duplicate-request, concurrent-session, insufficient-AC, insufficient-TC, and ledger-reconciliation tests before enabling AI execution.
 
-## AI backend foundation — 16 October 2026
+## AI backend foundation — updated 17 October 2026
 
-- [x] Added the Cloudflare Workers AI binding to `wrangler.jsonc` as `env.AI`. Official Cloudflare documentation confirms the binding is configured with `"ai": { "binding": "AI" }` and does not require a separate model-provider API key.
-- [x] Added migration `0007_ai_credit_half_units.sql` so the existing UI's 1.5 AC billable-operation cost can be represented accurately without editing immutable posted ledger rows. The migration adds one balanced adjustment transaction that doubles existing AC ledger atoms; the user-facing API divides AC atoms by two, new welcome credits are issued as 1,680 half-unit atoms for 840 displayed AC, and native SOL/GRAM purchases now post twice the package's displayed AC amount.
-- [x] Validated the migration's balancing logic and posting-trigger behavior against a local SQLite schema simulation. The migration has **not** yet been applied to production D1; it must be applied through the normal Wrangler migration/deployment process.
-- [ ] Implement server-authoritative AI sessions and persisted proposals with unique idempotency keys.
-- [ ] Implement AC reservation before provider work, charge 1.5 AC only at the agreed successful billable point, and release reservations on provider failure, cancellation, expiry, or failed trade execution.
-- [ ] Route AI-confirmed trades through the existing fresh-quote, exposure, position, fee, and TC ledger controls. No AI trade action may bypass the manual trading service.
-- [ ] Choose and verify the model for market-setup generation, then add timeouts, output validation, abuse limits, and provider-failure tests.
-- [ ] Keep AI execution disabled in the UI until the server endpoints, AC settlement, persistence, and reconciliation tests pass.
+- [x] Configured the Cloudflare Workers AI binding and selected the server-side model.
+- [x] Implemented server-authoritative AI sessions and persisted proposals with unique idempotency keys.
+- [x] Implemented AC reservation before provider work, charge of 1.5 AC only after successful simulated execution, and release on provider/validation/trade failure.
+- [x] Route AI-confirmed trades through the existing fresh-quote, exposure, position, fee, and TC ledger controls.
+- [x] Structured output validation, operation states, and audit events are implemented.
+- [ ] Keep the live release gate open until authenticated AI inference, concurrent retry, provider timeout, and AC reconciliation acceptance tests are demonstrated.
 
 ## AI execution implementation pass — 16 October 2026
 
