@@ -97,6 +97,39 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Test rendered desktop and mobile product flows
         run: npx playwright test tests/e2e/product-flow.spec.js --reporter=line
+      - name: Smoke-test release-candidate preview endpoints
+        if: github.ref == 'refs/heads/scope/production-readiness-reconcile-20261017'
+        run: |
+          set -eu
+          base="https://scope-production-readiness-reconcile-20261017-pexoriy-design.mails4dikewills.workers.dev"
+          for attempt in $(seq 1 24); do
+            code="$(curl -sS -o /tmp/pexoriy-preview-presale.json -w '%{http_code}' "$base/api/presale/status" || true)"
+            if [ "$code" = "200" ]; then
+              python3 - <<'PY'
+          import json
+          with open("/tmp/pexoriy-preview-presale.json", encoding="utf-8") as f:
+              status = json.load(f)
+          assert status.get("previewEnabled") is True, status
+          assert status.get("saleEnabled") is False, status
+          assert status.get("launchState") == "disabled", status
+          print("Candidate preview presale is preview-only and disabled.")
+          PY
+              for endpoint in learning referrals checkins; do
+                auth_code="$(curl -sS -o "/tmp/pexoriy-preview-${endpoint}.json" -w '%{http_code}' "$base/api/${endpoint}" || true)"
+                if [ "$auth_code" != "401" ]; then
+                  echo "Expected unauthenticated /api/${endpoint} to return 401, got $auth_code"
+                  cat "/tmp/pexoriy-preview-${endpoint}.json"
+                  exit 1
+                fi
+              done
+              echo "Candidate learning, referral, and check-in endpoints enforce authentication."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Candidate preview presale endpoint did not return HTTP 200."
+          cat /tmp/pexoriy-preview-presale.json || true
+          exit 1
       - name: Smoke-test deployed production endpoints
         if: github.ref == 'refs/heads/main'
         run: |
