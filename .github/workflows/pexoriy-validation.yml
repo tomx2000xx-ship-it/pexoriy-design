@@ -48,7 +48,17 @@ jobs:
           community_mission = db.execute("SELECT active FROM mission_definitions WHERE id='community-challenge'").fetchone()
           if community_mission and community_mission[0] != 0:
               raise SystemExit("The community challenge mission must stay inactive until verified challenge entry exists")
-          print(f"Validated {len(migrations)} ordered migrations, {lessons} learning lessons, {quests} team quests, and safe mission activation.")
+          # Payment settlement safety: transaction hashes and provider references must be unique,
+          # and credited state must require a finalized transaction.
+          indexes = list(db.execute("PRAGMA index_list('payment_orders')"))
+          unique_index_names = {row[1] for row in indexes if row[2]}
+          required_indexes = {"sqlite_autoindex_payment_orders_1", "sqlite_autoindex_payment_orders_2", "idx_payment_orders_reference_key"}
+          if not required_indexes.issubset(unique_index_names):
+              raise SystemExit("Missing unique payment-order idempotency, transaction-hash, or reference constraint")
+          trigger_names = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='trigger'")}
+          if "trg_payment_credit_requires_verified_state" not in trigger_names or "trg_credited_payment_immutable" not in trigger_names:
+              raise SystemExit("Missing payment finality or credited-order immutability guard")
+          print(f"Validated {len(migrations)} ordered migrations, {lessons} learning lessons, {quests} team quests, and payment settlement constraints.")
           PY
       - name: Run deterministic simulation and payment unit tests
         run: bun run test:unit
