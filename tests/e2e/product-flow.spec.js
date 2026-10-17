@@ -419,6 +419,15 @@ test('mobile layout stays within the viewport on Practice and AI Trading', async
 });
 
 
+test('community challenge preview does not pretend to save entries or pay prizes', async ({ page }) => {
+  await enterApp(page, '/', 'demo', 'demo');
+  await goTo(page, 'Community Challenges');
+  await expect(page.getByRole('heading', { name: /Compete together/ })).toBeVisible();
+  await expect(page.getByText(/Entries, ranking, and PXY settlement remain disabled/)).toBeVisible();
+  await expect(page.getByText('Entry opens after scoring, reserve, and launch checks are complete.').first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /Review eligibility/ }).first()).toBeVisible();
+});
+
 test('learning and presale preview are discoverable without enabling a sale', async ({ page }) => {
   await enterApp(page);
   await goTo(page, 'Learning Center');
