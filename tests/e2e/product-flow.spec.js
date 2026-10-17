@@ -39,6 +39,31 @@ async function goTo(page, label) {
   await nav.getByRole('button', { name: visibleLabel, exact: true }).click();
 }
 
+test('daily check-in is persisted through the server and refreshes the account streak', async ({ page }) => {
+  let balance = 1000;
+  let postCount = 0;
+  await page.route('**/api/me', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { id: 'checkin-user', email: 'checkin@example.test', displayName: 'Check-in User', balances: { TC: balance, AC: 10, PXY: 0 } } }) }));
+  await page.route('**/api/trading/positions', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ positions: [] }) }));
+  await page.route('**/api/trading/history', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ history: [] }) }));
+  await page.route('**/api/missions', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ missions: [] }) }));
+  await page.route('**/api/learning', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ lessons: [], completed: 0 }) }));
+  await page.route('**/api/checkins', async route => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ checkedInToday: false, streakDays: 2, rewardTC: 50, history: [] }) });
+      return;
+    }
+    postCount += 1;
+    balance = 1050;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'checked_in', duplicate: false, checkedInToday: true, streakDays: 3, rewardTC: 50 }) });
+  });
+  await enterApp(page, '/', 'live', 'account');
+  await expect(page.getByText('2 day streak')).toBeVisible();
+  await page.getByRole('button', { name: 'Check in · +50 TC' }).click();
+  await expect(page.getByRole('button', { name: 'Checked in' })).toBeDisabled();
+  await expect(page.getByText('+50 TC added to your account.')).toBeVisible();
+  expect(postCount).toBe(1);
+});
+
 test('registration signs in immediately while email verification and recovery remain deferred', async ({ page }) => {
   await page.route('**/api/auth/register', route => route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({user:{id:'test-user',email:'verified@example.test',displayName:'Verified User',balances:{TC:12450,AC:840,PXY:0}}})}));
   await page.goto('/');
