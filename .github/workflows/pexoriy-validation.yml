@@ -50,9 +50,9 @@ jobs:
           quests = db.execute("SELECT COUNT(*) FROM referral_team_quests WHERE active=1").fetchone()[0]
           if quests < 2:
               raise SystemExit(f"Expected at least two active referral team quests, found {quests}")
-          community_mission = db.execute("SELECT active FROM mission_definitions WHERE id='community-challenge'").fetchone()
-          if community_mission and community_mission[0] != 0:
-              raise SystemExit("The community challenge mission must stay inactive until verified challenge entry exists")
+          community_mission = db.execute("SELECT active,rules_json FROM mission_definitions WHERE id='community-challenge'").fetchone()
+          if not community_mission or community_mission[0] != 1 or json.loads(community_mission[1]).get("prerequisite") != "community_challenge":
+              raise SystemExit("The community challenge mission must use the persistent competition-entry eligibility rule")
           # Payment settlement safety: transaction hashes and provider references must be unique,
           # and credited state must require a finalized transaction.
           indexes = list(db.execute("PRAGMA index_list('payment_orders')"))
