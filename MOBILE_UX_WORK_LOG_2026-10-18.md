@@ -1,21 +1,27 @@
 # Mobile UX work log — 2026-10-18
 
-Database-independent work session.
+## Scope and safety
+- Frontend presentation only; isolated on `scope/mobile-rewards-competition-20261018`.
+- No D1 reads/writes, schema changes, migrations, payment ledgers, or reward settlement changes were made in this work.
+- This is not a production deployment. Do not merge/promote until validation and deployment-binding checks pass.
 
-## Scope
-- Frontend presentation only.
-- No D1 reads/writes, schema changes, migrations, payment ledgers, or reward settlement changes.
-- Keep changes isolated on `scope/mobile-rewards-competition-20261018` until validated.
+## Implemented in this session
+- Added `src/mobile-ux-overrides.css` for responsive presentation refinements: safe-area-aware horizontal padding, stronger mobile bottom-navigation touch targets, improved mission summary/card spacing, single-column mission actions, more readable lesson layouts, larger lesson selection targets, and reduced-motion support.
+- Updated `src/main.jsx` to load the new stylesheet after the existing base stylesheet.
+- No business logic, API requests, reward rules, or database code was changed by these two edits.
 
-## Status
-- Inspection completed: current app has a mobile bottom navigation, missions/rewards screen, challenge screens, and Learning Center.
-- Implementation and validation are still pending; do not treat inspection as completion.
+## Validation status
+- GitHub file writes succeeded on the scoped branch.
+- Build, unit tests, mobile browser checks, and visual verification: **not yet run**. Do not call the changes fully tested until those checks produce evidence.
+- No production deployment was attempted.
 
-## Next steps
-1. Implement scoped mobile UX changes.
-2. Run build and non-database checks.
-3. Record exact commit, changed files, and test outcomes here.
-4. Do not deploy until checks pass and the production binding is verified.
+## Remaining frontend work
+- Inspect and safely adjust mobile bottom-nav destination (Missions & Rewards) and Practice Trading entry to AI tools; this needs a focused JSX change and browser validation.
+- Rework Learning Center mobile selection into a clearly navigable lesson detail view with a back action; not yet implemented.
+- Verify challenge/referral mobile screens and ensure no layout overflow at narrow viewport widths.
+- Run build and non-database checks; record actual results and the resulting commit SHA here.
 
-## Tomorrow
-- Resume database work from the existing checkpoint; do not redo verified frontend tasks.
+## Tomorrow's database handover
+- Do not repeat the completed stylesheet import and mobile CSS pass without first checking this log.
+- Resume D1 usage/schema/migration reconciliation from `CHECKPOINT_2026-10-18_MOBILE_COMPETITION_REFERRALS.md`.
+- Preview database retirement/consolidation remains pending. Do not migrate or delete data until schema, migration history, and any necessary data have been compared.
