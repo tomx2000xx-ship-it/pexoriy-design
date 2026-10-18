@@ -1480,3 +1480,27 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .community-hub-card-only .community-campaign-intro{padding:0 0 3px}
 .community-hub-card-only .community-trade-card-panel{max-width:760px}
 @media(max-width:640px){.presale-benefit-grid{grid-template-columns:minmax(0,1fr)}}
+
+
+/* Invite & Grow: keep the circle overview first and give each community activity its own destination. */
+.invite-grow-nav{display:flex;align-items:center;gap:7px;overflow-x:auto;padding:6px;margin:0 0 18px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:#12140f;scrollbar-width:thin}
+.invite-grow-nav button{flex:0 0 auto;border:1px solid transparent;border-radius:9px;padding:11px 15px;background:transparent;color:#aeb5a5;font:inherit;font-size:12px;font-weight:650;white-space:nowrap;cursor:pointer;transition:background .16s ease,color .16s ease,border-color .16s ease}
+.invite-grow-nav button:hover{color:#f0f3e9;background:rgba(255,255,255,.035)}
+.invite-grow-nav button.active{background:rgba(183,243,74,.1);border-color:rgba(183,243,74,.28);color:#c7f77a}
+.referral-circle-reset{display:flex;flex-direction:column;gap:10px;margin:17px 0;padding:14px 15px;border:1px solid rgba(183,243,74,.16);border-radius:13px;background:rgba(183,243,74,.035)}
+.referral-circle-reset>div:first-child{display:flex;flex-direction:column;gap:5px}
+.referral-circle-reset .eyebrow{font-size:9px;letter-spacing:.11em}
+.referral-circle-reset small{color:#9ea795;font-size:10px}
+.referral-circle-countdown{display:flex;flex-direction:column;gap:0}
+.referral-circle-countdown>div{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.065)}
+.referral-circle-countdown>div:last-child{border-bottom:0}
+.referral-circle-countdown span{color:#a4ad99;font-size:10px;font-weight:650;letter-spacing:.08em}
+.referral-circle-countdown strong{color:#eef3e5;font-size:18px;font-variant-numeric:tabular-nums;letter-spacing:-.025em}
+.community-hub-external-nav .community-hub-hero,.community-hub-external-nav .community-hub-tabs{display:none}
+.community-hub-external-nav .community-hub-page{gap:14px}
+.community-hub-external-nav .community-hub-footer-note{margin-top:2px}
+@media(max-width:640px){
+ .invite-grow-nav{gap:4px;padding:4px;border-radius:11px}
+ .invite-grow-nav button{padding:10px 12px;font-size:11px}
+ .referral-circle-reset{padding:12px}
+}
