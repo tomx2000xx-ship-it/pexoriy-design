@@ -31,3 +31,30 @@
 - Do not redo the responsive stylesheet, stylesheet import, Learning Center mobile detail/back navigation, or preview hint.
 - Resume D1 usage/schema/migration reconciliation from `CHECKPOINT_2026-10-18_MOBILE_COMPETITION_REFERRALS.md`.
 - Compare `pexoriy-preview` and `pexoriy-core` schema, migration history, dependencies, and necessary data before any consolidation or deletion.
+
+
+## Signature UI/UX implementation — 18 October 2026 (latest)
+
+### Direct-to-main commits
+- Dashboard quick-action command bar and balance prioritisation: `314ccddcf8d39ad96b628de49959fb70eaa4e09b`.
+- Compact mobile-first dashboard layout and spacing: `a0cfc0b07f9c82b3d86c28b9e01b0a4ad22bf91b`.
+- Responsive AI Credit Store, challenge/Arena, referral and PXY token layouts: `390ed54e13cbdaff5083f5a21eaa02040443bb78`.
+
+### What changed
+- Added a visible mobile dashboard command bar for Practice, AI Centre, Challenges and Invite Friends so the primary destinations are immediately discoverable.
+- Reordered dashboard presentation so the primary trading/challenge hero is followed by balances before the streak/referral modules; retained the full content and destinations.
+- Tightened mobile header, page spacing, hero height, balance cards, streak, referral, AI Centre, challenge cards, market rows, missions and bottom navigation for small screens and touch.
+- Added responsive AI Credit Store package sizing/labels, clearer selected-package treatment, and mobile payment-method layout; added responsive challenge, referral and PXY token screens.
+- Preserved the dark graphite/acid-lime visual identity and the existing TC/AC/PXY messaging, payment behavior, reward gates, market data, and API/backend logic.
+
+### Production evidence
+- Active production deployment: `a2e2bdbf-23ff-4fe6-ab5b-77744e5f13a5`.
+- Active Worker version: `cdd19380-617a-44b2-b817-d7241e3d0ad1` (version 241), serving 100% of production traffic.
+- Version metadata confirms `DB` remains bound to production `pexoriy-core` (`3add741b-bda8-4f47-b857-538ff9a1dae8`).
+- This was a frontend-only release. No D1 migration, schema change, data copy, or database write was performed as part of the UI work.
+- Production URL: https://pexoriy-design.mails4dikewills.workers.dev
+
+### Validation boundary
+- Cloudflare confirms version 241 is deployed to 100% of traffic. This confirms deployment, not a human visual review of every screen.
+- Do not claim the new screens were visually inspected on a physical phone unless an actual browser/device review is completed.
+- Next review should focus on visible production rendering at mobile widths (360–430 px) and tablet widths; preserve this work and do not redo the UI changes during the separate D1 reconciliation phase.
