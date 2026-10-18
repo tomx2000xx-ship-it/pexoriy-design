@@ -37,3 +37,10 @@
 .learning-mobile-back svg{transform:rotate(180deg)}
 }
 @media(prefers-reduced-motion:reduce){.mobile-bottom-nav *, .mission-detail-card *, .learning-choice *{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+.learning-mobile-preview-note{display:none}
+@media(max-width:760px){
+.learning-mobile-preview-note{display:flex;align-items:flex-start;gap:9px;margin-top:12px;padding:12px;border:1px solid rgba(183,243,74,.2);border-radius:10px;background:rgba(183,243,74,.045);color:var(--muted);font-size:12px;line-height:1.6}
+.learning-mobile-preview-note svg{flex:0 0 auto;color:var(--lime);margin-top:1px}
+.learning-layout.learning-detail-open .learning-mobile-preview-note{display:none}
+}
