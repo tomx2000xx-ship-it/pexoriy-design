@@ -39,7 +39,7 @@ jobs:
               raise SystemExit("No migrations found")
           for migration in migrations:
               db.executescript(migration.read_text(encoding="utf-8"))
-          required = {"referral_codes", "referral_attributions", "referral_team_quests", "referral_team_quest_claims", "learning_lessons", "learning_attempts", "learning_progress", "presale_settings", "daily_checkins"}
+          required = {"referral_codes", "referral_attributions", "referral_team_quests", "referral_team_quest_claims", "learning_lessons", "learning_attempts", "learning_progress", "presale_settings", "daily_checkins", "competition_rounds", "competition_participants", "competition_awards", "referral_pool_rounds", "referral_pool_awards", "pxy_issuance_controls"}
           found = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
           missing = required - found
           if missing:
@@ -85,7 +85,22 @@ jobs:
               unverified_credit_rejected = True
           if not unverified_credit_rejected:
               raise SystemExit("Payment schema allowed a credit without finalized transaction evidence")
-          print(f"Validated {len(migrations)} ordered migrations, {lessons} learning lessons, {quests} team quests, payment settlement guards, and immutable daily check-ins.")
+          gate = db.execute("SELECT reserves_verified, launch_approved, issuance_enabled FROM pxy_issuance_controls WHERE id=1").fetchone()
+          if gate != (0, 0, 0):
+              raise SystemExit(f"PXY issuance must default to gated, found {gate}")
+          gate_rejected = False
+          try:
+              db.execute("UPDATE pxy_issuance_controls SET issuance_enabled=1 WHERE id=1")
+          except sqlite3.IntegrityError:
+              gate_rejected = True
+          if not gate_rejected:
+              raise SystemExit("PXY issuance gate allowed enablement without reserve and launch approval")
+          pool = db.execute("SELECT pool_tc, status FROM referral_pool_rounds LIMIT 1").fetchone()
+          db.execute("INSERT INTO competition_rounds (id,slug,title,period_start,period_end,prize_pool_pxy,status,payouts_enabled) VALUES ('ci-round','daily-sprint','CI Round','2026-10-18T00:00:00.000Z','2026-10-19T00:00:00.000Z',5000,'open',0)")
+          payout_default = db.execute("SELECT payouts_enabled FROM competition_rounds WHERE id='ci-round'").fetchone()[0]
+          if payout_default != 0:
+              raise SystemExit("Competition PXY payouts must remain gated by default")
+          print(f"Validated {len(migrations)} ordered migrations, {lessons} learning lessons, {quests} team quests, competition and referral pool schemas, default PXY issuance gate, payment settlement guards, and immutable daily check-ins.")
           PY
       - name: Run deterministic simulation and payment unit tests
         run: bun run test:unit
@@ -127,9 +142,73 @@ jobs:
           assert status.get("launchState") == "disabled", status
           print("Candidate presale safety evidence: previewEnabled=true, saleEnabled=false, launchState=disabled.")
           PY
-          for endpoint in /api/health /api/markets /api/payments/solana/config /api/payments/ton/config /api/ai/config; do check_code "$endpoint" 200; done
-          for endpoint in /api/learning /api/referrals /api/checkins /api/ai/activity /api/payments/solana/orders /api/payments/ton/orders; do check_code "$endpoint" 401; done
+          for endpoint in /api/health /api/markets /api/competitions /api/pxy/issuance-status /api/payments/solana/config /api/payments/ton/config /api/ai/config; do check_code "$endpoint" 200; done
+          for endpoint in /api/learning /api/referrals /api/checkins /api/ai/activity /api/competitions/join /api/referrals/pool/claim /api/payments/solana/orders /api/payments/ton/orders; do if [ "$endpoint" = "/api/competitions/join" ] || [ "$endpoint" = "/api/referrals/pool/claim" ]; then code="$(curl --connect-timeout 10 --max-time 25 -sS -X POST -H "content-type: application/json" -d "{}" -o "/tmp/pexoriy-candidate-$(echo "$endpoint" | tr '/' '_').json" -w '%{http_code}' "$base$endpoint" || true)"; echo "HTTP evidence: POST $endpoint -> $code (expected 401)"; if [ "$code" != "401" ]; then cat "/tmp/pexoriy-candidate-$(echo "$endpoint" | tr '/' '_').json" || true; exit 1; fi; else check_code "$endpoint" 401; fi; done
           echo "Candidate HTTP smoke checks passed with explicit status-code evidence."
+      - name: Live Workers AI inference and AC reserve-release-charge acceptance (isolated preview only)
+        if: github.ref == 'refs/heads/scope/mobile-rewards-competition-20261018'
+        timeout-minutes: 8
+        run: |
+          set -eu
+          PREVIEW_BASE="https://scope-mobile-rewards-competition-20261018-pexoriy-design.mails4dikewills.workers.dev"
+          export PREVIEW_BASE
+          python3 - <<'PY'
+          import json, os, time, urllib.error, urllib.request, http.cookiejar
+          base = os.environ["PREVIEW_BASE"]
+          run_id = os.environ.get("GITHUB_RUN_ID", str(int(time.time())))
+          opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+          def call(path, method="GET", payload=None, expected=(200,)):
+              data = None if payload is None else json.dumps(payload).encode()
+              headers = {"Accept":"application/json"}
+              if data is not None: headers["Content-Type"] = "application/json"
+              req = urllib.request.Request(base + path, data=data, headers=headers, method=method)
+              try:
+                  with opener.open(req, timeout=30) as response:
+                      code, raw = response.status, response.read()
+              except urllib.error.HTTPError as error:
+                  code, raw = error.code, error.read()
+              print(f"AI acceptance HTTP evidence: {method} {path} -> {code} (expected one of {expected})")
+              if code not in expected:
+                  raise RuntimeError(f"{method} {path} returned HTTP {code}: {raw[:800].decode(errors='replace')}")
+              try: return json.loads(raw or b"{}")
+              except Exception: raise RuntimeError(f"{path} returned invalid JSON")
+          call("/api/health")
+          call("/api/markets")
+          before = call("/api/ai/config")
+          if before.get("providerConfigured") is not True:
+              raise RuntimeError(f"Workers AI binding is not configured: {before}")
+          email = f"pexoriy-ai-acceptance-{run_id}@example.test"
+          call("/api/auth/register", "POST", {"displayName":"AI Acceptance Test","email":email,"password":"Pexoriy-Acceptance-2026-Strong!"}, (200,201))
+          me = call("/api/me")
+          initial_ac = float(me["user"]["balances"]["AC"])
+          call("/api/ai/session", "POST", {"action":"start","riskProfile":"Balanced","marketSymbol":"BTC/USDT"})
+          first = call("/api/ai/proposals", "POST", {"symbol":"BTC/USDT","idempotencyKey":f"ci-release-{run_id}-cancel"})
+          proposal = first.get("proposal")
+          if not proposal or not proposal.get("id"): raise RuntimeError(f"AI inference did not produce a proposal: {first}")
+          held = float(call("/api/me")["user"]["balances"]["AC"])
+          if abs((initial_ac - held) - 1.5) > 0.01: raise RuntimeError(f"AI reserve was not reflected in AC balance: before={initial_ac}, held={held}")
+          cancelled = call("/api/ai/proposals/cancel", "POST", {"proposalId":proposal["id"]})
+          if cancelled.get("status") != "cancelled": raise RuntimeError(f"AI reservation release failed: {cancelled}")
+          released = float(call("/api/me")["user"]["balances"]["AC"])
+          if abs(released - initial_ac) > 0.01: raise RuntimeError(f"AI cancellation did not restore reserved AC: initial={initial_ac}, after_release={released}")
+          second = call("/api/ai/proposals", "POST", {"symbol":"BTC/USDT","idempotencyKey":f"ci-release-{run_id}-execute"})
+          proposal2 = second.get("proposal")
+          if not proposal2 or not proposal2.get("id"): raise RuntimeError(f"Second live AI inference did not produce a proposal: {second}")
+          executed = call("/api/ai/proposals/execute", "POST", {"proposalId":proposal2["id"],"allocationTc":100})
+          if executed.get("status") != "executed" or not executed.get("position",{}).get("id"):
+              raise RuntimeError(f"AI execution/AC charge did not complete: {executed}")
+          final_ac = float(call("/api/me")["user"]["balances"]["AC"])
+          if abs((released - final_ac) - 1.5) > 0.01:
+              raise RuntimeError(f"AI AC charge mismatch: before={released}, after={final_ac}")
+          activity = call("/api/ai/activity")
+          types = {item.get("type") for item in activity.get("events",[])}
+          if "ai.trade_fee_charged" not in types or "ai.trade_executed" not in types:
+              raise RuntimeError(f"AI charge/execution audit evidence is missing: {types}")
+          close = call("/api/trading/positions/close", "POST", {"positionId":executed["position"]["id"],"idempotencyKey":f"ci-release-{run_id}-close"})
+          if close.get("closed") is not True: raise RuntimeError(f"Acceptance test position cleanup failed: {close}")
+          call("/api/auth/logout", "POST", {})
+          print(f"PASS: live model={before.get('model')}; AC reservation 1.5; cancellation release 1.5; successful simulated execution charge 1.5; ledger/audit evidence present; test position closed; account={email}. Preview D1 only.")
+          PY
       - name: Smoke-test deployed production endpoints with explicit HTTP evidence
         if: github.ref == 'refs/heads/main'
         run: |
