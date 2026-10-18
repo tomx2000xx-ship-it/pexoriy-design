@@ -378,6 +378,7 @@ function Challenges({navigate,workspaceMode,onRequireAuth}) {
         </article>})}
       </div>
     </section>
+    {(competitionData?.recentResults||[]).length>0&&<section className="panel challenge-recent-results"><Title title="Recent round results" desc="Completed rounds keep their results visible. Any PXY allocation remains gated until approvals are recorded."/><div className="challenge-recent-list">{competitionData.recentResults.map(result=><div className="challenge-recent-row" key={result.roundId+":"+result.rank}><span className="challenge-rank">#{result.rank}</span><div><strong>{result.displayName}</strong><small>{result.title} · {new Date(result.periodEnd).toLocaleDateString()}</small></div><div className="challenge-result-prize"><strong>{money(result.prizePXY)} PXY</strong><small>Gated · not paid</small></div></div>)}</div></section>}
     <section className="panel challenge-how-compact"><Title title="Know how scoring works" desc="The shared leaderboard rewards verified practice, learning, and consistency. AI-assisted and manual traders follow the same rules."/><div className="challenge-quick-links"><Btn kind="outline" onClick={()=>navigate('Learning Center')}>Learn practice rules <ArrowRight size={15}/></Btn><Btn kind="outline" onClick={()=>navigate('Practice Trading')}>Explore practice trading <ArrowRight size={15}/></Btn></div></section>
   </>;
 }
