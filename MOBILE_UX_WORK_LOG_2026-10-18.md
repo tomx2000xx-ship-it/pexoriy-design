@@ -83,3 +83,12 @@
 - Existing simulated-trading disclosures and server-backed trade/AI/reward gates are retained. P&L shown in the spotlight is calculated from the loaded trade-history records; it is labelled as simulated.
 - GitHub source assertions confirmed the new balance spotlight, Missions bottom-nav item, removed dashboard AI Centre card, nested AI practice label, referral activity grid, and searchable presale destination.
 - Deployment must be verified against the latest frontend commit below before reporting it live. A successful GitHub write alone is not proof of a production deployment.
+
+
+### Final integration and production confirmation
+- AI-assisted trading now opens as a mode within the Practice Trading destination rather than a separate primary-navigation destination. The Practice navigation item stays selected; the header identifies the AI-assisted mode, and a clear “Back to manual practice” action returns users to the standard trade ticket.
+- Integration commit: `1d9d4089483fb2cce39c4d799f0a80adfbe51b72`.
+- Latest active production deployment: `b2d8fe47-4b04-4953-96d4-fcfd7018c7c0`, created 2026-10-18 12:32:33 UTC.
+- Active Worker version: `2e418ac9-622a-4c7c-ab83-b71549391b53` (version 251), serving 100% of production traffic.
+- Cloudflare version metadata confirms the existing production D1 binding remains `pexoriy-core` / `3add741b-bda8-4f47-b857-538ff9a1dae8`. No database changes were performed.
+- Source assertions were re-run against the latest GitHub files. Cloudflare deployment and binding metadata were verified. A full physical-device visual pass and an independently accessible public HTTP smoke test remain unverified in this session; do not claim otherwise.
