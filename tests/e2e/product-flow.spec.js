@@ -26,8 +26,8 @@ async function goTo(page, label) {
     await page.locator('.topbar').getByRole('button', { name: 'Activity', exact: true }).click();
     return;
   }
-  const mobileLabels = { 'Practice Trading': 'Practice', 'AI Trading': 'AI Centre', 'Community Challenges': 'Challenges', 'Invite & Grow': 'Invite' };
-  if (mobile && ['Learning Center', 'PXY Pre-sale'].includes(label)) {
+  const mobileLabels = { 'Practice Trading': 'Practice', 'AI Trading': 'AI Centre', 'Community Challenges': 'Challenges', 'Invite & Grow': 'Invite', 'Referrals': 'Invite' };
+  if (mobile && ['Learning Center', 'PXY Pre-sale', 'PXY Presale Preview'].includes(label)) {
     await page.locator('.menu-button').click();
     await page.locator('.sidebar').getByRole('button', { name: label, exact: true }).click();
     return;
@@ -437,9 +437,9 @@ test('learning and PXY pre-sale page are discoverable without falsely enabling p
   } else {
     await expect(page.locator('.learning-lesson').getByText(/Preview mode: sign in to take scored quizzes/)).toBeVisible();
   }
-  await goTo(page, 'PXY Presale Preview');
-  await expect(page.getByRole('heading', { name: /Nothing is for sale yet/ })).toBeVisible();
-  await expect(page.getByText(/No purchase button, payment order, wallet transaction/)).toBeVisible();
+  await goTo(page, 'PXY Pre-sale');
+  await expect(page.getByRole('heading', { name: /The PXY pre-sale/ })).toBeVisible();
+  await expect(page.getByText('PRE-SALE PAGE LIVE')).toBeVisible();
   await expect(page.getByRole('button', { name: /Buy PXY|Purchase tokens|Connect wallet/i })).toHaveCount(0);
 });
 
@@ -448,22 +448,22 @@ test('learning and PXY pre-sale page remain reachable on mobile', async ({ page 
   await enterApp(page);
   await goTo(page, 'Learning Center');
   await expect(page.getByRole('heading', { name: /Learn the market/ })).toBeVisible();
-  await goTo(page, 'PXY Presale Preview');
-  await expect(page.getByRole('heading', { name: /Nothing is for sale yet/ })).toBeVisible();
+  await goTo(page, 'PXY Pre-sale');
+  await expect(page.getByRole('heading', { name: /The PXY pre-sale/ })).toBeVisible();
 });
 
 
 test('public landing exposes the PXY pre-sale page without requiring sign-in', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: 'PXY preview', exact: true }).click();
-  await expect(page.getByRole('heading', { name: /Nothing is for sale yet/ })).toBeVisible();
-  await expect(page.getByText(/No purchase button, payment order, wallet transaction/)).toBeVisible();
+  await page.getByRole('button', { name: 'PXY Pre-sale', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /The PXY pre-sale/ })).toBeVisible();
+  await expect(page.getByText('PRE-SALE PAGE LIVE')).toBeVisible();
 });
 
 
 test('referral progress is not fabricated in demo mode', async ({ page }) => {
   await enterApp(page);
-  await goTo(page, 'Referrals');
+  await goTo(page, 'Invite & Grow');
   await expect(page.getByRole('heading', { name: /Invite friends. Grow together./ })).toBeVisible();
   await expect(page.getByText('Sign in to track your squad and claim team quest rewards.')).toBeVisible();
   await expect(page.getByText('Verified referral progress is account-backed')).toBeVisible();
