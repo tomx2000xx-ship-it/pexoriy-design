@@ -26,21 +26,22 @@ async function goTo(page, label) {
     await page.locator('.topbar').getByRole('button', { name: 'Activity', exact: true }).click();
     return;
   }
-  const mobileLabels = { 'Practice Trading': 'Practice', 'Missions & Rewards': 'Missions', 'Community Challenges': 'Challenges', 'Referrals': 'Invite' };
-  if (mobile && label === 'AI Trading') {
-    await page.locator('.menu-button').click();
-    await page.locator('.sidebar').getByRole('button', { name: label, exact: true }).click();
+  if (label === 'AI Trading') {
+    const visibleLabel = mobile ? 'Practice' : 'Practice Trading';
+    const nav = mobile ? page.locator('.mobile-bottom-nav') : page.locator('.sidebar');
+    await nav.getByRole('button', { name: visibleLabel, exact: true }).click();
+    const bridge = page.getByRole('region', { name: 'Switch to AI Trading' });
+    await bridge.getByRole('button', { name: /Explore AI Trading/ }).click();
     return;
   }
+  const mobileLabels = { 'Practice Trading': 'Practice', 'Missions & Rewards': 'Missions', 'Community Challenges': 'Challenges', 'Referrals': 'Invite' };
   if (mobile && ['Learning Center', 'PXY Presale Preview'].includes(label)) {
     await page.locator('.menu-button').click();
     await page.locator('.sidebar').getByRole('button', { name: label, exact: true }).click();
     return;
   }
   const visibleLabel = mobile ? (mobileLabels[label] || label) : label;
-  const nav = mobile
-    ? page.locator('.mobile-bottom-nav')
-    : page.locator('.sidebar');
+  const nav = mobile ? page.locator('.mobile-bottom-nav') : page.locator('.sidebar');
   await nav.getByRole('button', { name: visibleLabel, exact: true }).click();
 }
 
