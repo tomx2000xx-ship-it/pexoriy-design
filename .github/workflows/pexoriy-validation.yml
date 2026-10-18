@@ -159,7 +159,7 @@ jobs:
           opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
           def call(path, method="GET", payload=None, expected=(200,)):
               data = None if payload is None else json.dumps(payload).encode()
-              headers = {"Accept":"application/json"}
+              headers = {"Accept":"application/json", "Origin":base, "Sec-Fetch-Site":"same-origin"}
               if data is not None: headers["Content-Type"] = "application/json"
               req = urllib.request.Request(base + path, data=data, headers=headers, method=method)
               try:
