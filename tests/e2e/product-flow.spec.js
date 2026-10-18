@@ -459,6 +459,9 @@ test('learning and presale preview remain reachable on mobile', async ({ page })
   await enterApp(page);
   await goTo(page, 'Learning Center');
   await expect(page.getByRole('heading', { name: /Learn the market/ })).toBeVisible();
+  await page.locator('.learning-list').getByRole('button', { name: /Understand long and short/ }).click();
+  await expect(page.locator('.learning-lesson h2')).toHaveText('Understand long and short');
+  await expect.poll(() => page.locator('.learning-lesson').evaluate(el => el.getBoundingClientRect().top)).toBeLessThan(120);
   await goTo(page, 'PXY Presale Preview');
   await expect(page.getByRole('heading', { name: /Nothing is for sale yet/ })).toBeVisible();
 });
