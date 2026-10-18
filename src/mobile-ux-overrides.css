@@ -233,3 +233,26 @@
  .referral-activity-grid>button{transition:none}
  .referral-activity-grid>button:hover{transform:none}
 }
+
+.balance-spotlight-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:15px}
+.balance-spotlight-metrics>div{display:flex;flex-direction:column;gap:6px;min-width:0;padding:10px 9px;border:1px solid rgba(231,238,219,.08);border-radius:10px;background:rgba(8,10,7,.28)}
+.balance-spotlight-metrics>div>span{font-size:9px;line-height:1.4;color:#9fa697}
+.balance-spotlight-metrics>div>strong{font-size:12px;line-height:1.35;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+@media(max-width:850px){
+ .balance-spotlight-metrics{gap:6px}
+ .balance-spotlight-metrics>div{padding:9px 7px}
+ .balance-spotlight-metrics>div>span{font-size:9px}
+ .balance-spotlight-metrics>div>strong{font-size:11px}
+ .dashboard-experience>.home-banner{padding:17px!important;min-height:0!important}
+ .dashboard-experience>.home-banner .banner-art{display:none!important}
+ .dashboard-experience>.home-banner .welcome-content h2{font-size:clamp(22px,6vw,28px);line-height:1.12;margin:10px 0 7px}
+ .dashboard-experience>.home-banner .welcome-content p{font-size:11px;line-height:1.5;margin-bottom:0}
+ .dashboard-experience>.home-banner .hero-actions{display:none!important}
+ .dashboard-experience>.referral-feature-banner{padding:14px!important;gap:11px}
+ .dashboard-experience>.referral-feature-banner .referral-feature-copy h3{font-size:15px}
+ .dashboard-experience>.referral-feature-banner .referral-feature-copy p{font-size:11px;line-height:1.5}
+}
+@media(max-width:380px){
+ .balance-spotlight-metrics{grid-template-columns:1fr 1fr}
+ .balance-spotlight-metrics>div:last-child{grid-column:1/-1}
+}
