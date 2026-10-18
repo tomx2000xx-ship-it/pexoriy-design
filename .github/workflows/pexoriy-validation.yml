@@ -280,7 +280,7 @@ jobs:
           check_code /api/payments/solana/config 200
           check_code /api/payments/ton/config 200
           check_code /api/ai/config 200
-          for endpoint in /api/learning /api/referrals /api/checkins /api/ai/activity /api/payments/solana/orders /api/payments/ton/orders; do check_code "$endpoint" 401; done
+          for endpoint in /api/learning /api/referrals /api/checkins /api/progress /api/ai/activity /api/payments/solana/orders /api/payments/ton/orders; do check_code "$endpoint" 401; done
           python3 - <<'PY'
           import json
           with open("/tmp/pexoriy-production-_api_presale_status.json", encoding="utf-8") as f:
