@@ -540,3 +540,21 @@ test('mobile users see balances and mission progress immediately, with missions 
   await page.locator('.mobile-bottom-nav').getByRole('button', { name: 'Missions', exact: true }).click();
   await expect(page.getByRole('heading', { name: /Every action moves you forward/i })).toBeVisible();
 });
+
+
+test('overview shows account-backed XP, levels and achievement badges', async ({ page }) => {
+  const account = { user: { id:'progress-user', email:'progress@example.test', displayName:'Progress User', balances:{ TC:1200, AC:20, PXY:0 } } };
+  await page.route('**/api/me', route => route.fulfill({ status:200, contentType:'application/json', body:JSON.stringify(account) }));
+  await page.route('**/api/trading/positions', route => route.fulfill({ status:200, contentType:'application/json', body:JSON.stringify({positions:[]}) }));
+  await page.route('**/api/trading/history', route => route.fulfill({ status:200, contentType:'application/json', body:JSON.stringify({history:[]}) }));
+  await page.route('**/api/missions', route => route.fulfill({ status:200, contentType:'application/json', body:JSON.stringify({missions:[]}) }));
+  await page.route('**/api/learning', route => route.fulfill({ status:200, contentType:'application/json', body:JSON.stringify({lessons:[],completed:0}) }));
+  await page.route('**/api/checkins', route => route.fulfill({ status:200, contentType:'application/json', body:JSON.stringify({checkedInToday:false,streakDays:0,rewardTC:50,history:[]}) }));
+  await page.route('**/api/progress', route => route.fulfill({ status:200, contentType:'application/json', body:JSON.stringify({xp:275,level:2,xpInLevel:25,xpToNextLevel:225,maxLevel:50,earnedBadges:2,totalBadges:6,note:'XP and badges reflect server-verified activity.',badges:[{id:'first-trade',title:'First Practice',description:'Close your first simulated practice trade.',earned:true},{id:'market-learner',title:'Market Learner',description:'Complete a market-learning lesson.',earned:true},{id:'consistent-three',title:'Finding a Rhythm',description:'Check in on three days.',earned:false}]}) }));
+  await enterApp(page, '/', 'live', 'account');
+  await expect(page.getByRole('region', { name:'Your verified progress' })).toBeVisible();
+  await expect(page.getByText('275 XP')).toBeVisible();
+  await expect(page.getByText('2/6 badges earned')).toBeVisible();
+  await expect(page.getByText('First Practice')).toBeVisible();
+  await expect(page.getByText('Market Learner')).toBeVisible();
+});
