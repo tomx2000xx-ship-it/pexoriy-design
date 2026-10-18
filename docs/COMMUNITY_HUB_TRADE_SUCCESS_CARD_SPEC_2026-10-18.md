@@ -262,6 +262,33 @@ Names are suggestions pending alignment with existing event/audit conventions:
 
 Each event should include timestamp, authenticated actor/user, relevant community/cycle/trade/campaign ID, unique event/idempotency key, schema/rule version, and a minimal privacy-safe metadata payload. Do not use client-generated events as sole proof for balance-changing rewards.
 
+## 10. Initial code inventory (read-only inspection, 2026-10-18)
+
+The current `worker/index.js` was inspected through GitHub on `main` (blob SHA `f95e299440945968bfb2433174fa88579321452e`). This is a source-code inventory only; it is not proof that every production schema or deployment matches the repository.
+
+### Relevant routes already present
+- `GET /api/referrals`
+- `POST /api/referrals/quests/claim`
+- `POST /api/referrals/activate`
+- `GET /api/missions`
+- `POST /api/missions/claim`
+- `GET /api/ledger`
+- `GET /api/trading/history`
+- `GET /api/trading/positions`
+- `POST /api/trading/positions`
+- `POST /api/trading/positions/close`
+- Existing learning and daily check-in endpoints.
+
+### Relevant storage names referenced by Worker source
+The Worker references existing structures including `users`, `referral_codes`, `referral_attributions`, `referral_team_quests`, `referral_team_quest_claims`, `mission_definitions`, `mission_claims`, `trading_positions`, `trade_orders`, `ledger_accounts`, `ledger_postings`, `ledger_transactions`, `audit_events`, and `competition_entries`, among others.
+
+### Initial gap assessment
+- The inspected route list does **not** show dedicated community creation/membership, community feed/chat, community cycle/pool, campaign evidence/review, reminder-management, or trade-card endpoints.
+- Existing referral, mission, trade history, ledger, and audit services should be evaluated for reuse; do not create duplicate versions before reading their full implementation and current schema.
+- The UI currently maps trade history into frontend state; a trade card must request or derive data from the authoritative server-side closed-trade record, never from a client-supplied P&L.
+- The presence of a table name in Worker source does not establish all constraints, indexes, migration history, production row state, or production binding. Those remain to be checked in the separate authorized schema-review phase.
+- No D1 query or mutation was run for this specification. No schema change or reward issuance was performed.
+
 ## 10. Candidate data model (not an approved migration)
 
 Inspect current schema and reuse existing tables/services before proposing new ones. Candidate logical entities, only if no equivalent already exists:
