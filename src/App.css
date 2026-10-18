@@ -1627,3 +1627,17 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .invite-next-actions>button>svg{flex-shrink:0;color:#929a87}
 .invite-next-icon{width:36px;height:36px;flex-shrink:0;display:grid;place-items:center;border-radius:10px;background:rgba(183,243,74,.09);color:var(--lime)}
 @media(max-width:600px){.invite-journey-panel{padding:15px 12px}.invite-journey-heading{gap:8px}.invite-journey-heading h2{font-size:18px}.invite-journey-heading p{font-size:10px}.invite-journey-count{font-size:9px;padding:6px 8px}.invite-journey-steps,.invite-next-actions{grid-template-columns:1fr}.invite-journey-step{padding:12px}.invite-next-actions>button{padding:12px}.invite-step-state{font-size:9px}}
+
+
+/* Community allocation and transparent TC reward guide */
+.community-reward-guide{margin:16px 0 20px;padding:20px}
+.community-reward-guide>.community-panel-description{font-size:11px;line-height:1.7;color:#9ca48f;max-width:900px}
+.community-reward-guide-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:16px}
+.community-reward-guide-grid>div{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:0;padding:14px;border:1px solid #303528;border-radius:11px;background:#141610}
+.community-reward-guide-grid>div>span{font-size:10px;line-height:1.5;color:#a6ad9a}
+.community-reward-guide-grid>div>strong{font-family:Manrope,sans-serif;font-size:20px;letter-spacing:-.035em;color:var(--lime)}
+.community-reward-guide-grid>div>small{font-size:9px;line-height:1.5;color:#7f8875}
+.community-reward-guide-foot{display:flex;align-items:flex-start;gap:8px;margin-top:15px;padding-top:13px;border-top:1px solid var(--line);font-size:10px;line-height:1.65;color:#929a87}
+.community-reward-guide-foot svg{flex-shrink:0;color:var(--lime);margin-top:1px}
+@media(max-width:760px){.community-reward-guide{padding:15px 12px}.community-reward-guide-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.community-reward-guide-grid>div{padding:11px}.community-reward-guide-grid>div>strong{font-size:18px}}
+@media(max-width:380px){.community-reward-guide-grid{grid-template-columns:1fr}}
