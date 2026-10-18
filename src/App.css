@@ -1602,3 +1602,28 @@ button, a { -webkit-tap-highlight-color: transparent; }
 }
 
 .community-quest-pending{display:flex;align-items:center;gap:7px;width:100%;padding:10px 11px;border:1px dashed var(--border,rgba(255,255,255,.16));border-radius:9px;color:var(--muted,#a6ac9b);font-size:12px;line-height:1.4;box-sizing:border-box}
+
+
+/* Invite & Grow journey: explicit progress and mobile-first next steps */
+.invite-journey-panel{margin:20px 0 18px;padding:22px;border:1px solid var(--line);border-radius:15px;background:linear-gradient(145deg,#191d15,#151711)}
+.invite-journey-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:17px}
+.invite-journey-heading h2{font-family:Manrope,sans-serif;font-size:clamp(18px,2vw,23px);letter-spacing:-.035em;margin:7px 0}
+.invite-journey-heading p{font-size:11px;line-height:1.6;color:#929a87;margin:0}
+.invite-journey-count{flex-shrink:0;padding:7px 10px;border:1px solid rgba(183,243,74,.24);border-radius:999px;color:var(--lime);font-size:10px;font-weight:750;white-space:nowrap}
+.invite-journey-steps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.invite-journey-step{display:grid;grid-template-columns:36px minmax(0,1fr);align-items:start;gap:10px;padding:13px;border:1px solid #303528;border-radius:11px;background:#141610;min-width:0}
+.invite-journey-number{width:34px;height:34px;display:grid;place-items:center;border-radius:10px;background:#24291e;color:#a0a795}
+.invite-journey-step.complete .invite-journey-number{background:rgba(183,243,74,.12);color:var(--lime)}
+.invite-journey-step>div{min-width:0}
+.invite-journey-step strong,.invite-next-actions strong{display:block;font-size:11px;line-height:1.4;color:#edf1e5}
+.invite-journey-step small,.invite-next-actions small{display:block;margin-top:5px;font-size:10px;line-height:1.55;color:#929a87}
+.invite-step-state{grid-column:2;color:var(--lime);font-size:9px;font-weight:700;margin-top:2px}
+.invite-journey-footer{display:flex;align-items:flex-start;gap:8px;margin-top:15px;padding-top:13px;border-top:1px solid var(--line);color:#909783;font-size:10px;line-height:1.6}
+.invite-journey-footer svg{flex-shrink:0;color:var(--lime);margin-top:1px}
+.invite-next-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:0 0 22px}
+.invite-next-actions>button{display:flex;align-items:center;gap:11px;min-width:0;text-align:left;padding:14px;border:1px solid var(--line);border-radius:12px;background:#171a14;color:#e9eddf;cursor:pointer;transition:border-color .18s ease,transform .18s ease}
+.invite-next-actions>button:hover{border-color:rgba(183,243,74,.42);transform:translateY(-1px)}
+.invite-next-actions>button>span:nth-child(2){flex:1;min-width:0}
+.invite-next-actions>button>svg{flex-shrink:0;color:#929a87}
+.invite-next-icon{width:36px;height:36px;flex-shrink:0;display:grid;place-items:center;border-radius:10px;background:rgba(183,243,74,.09);color:var(--lime)}
+@media(max-width:600px){.invite-journey-panel{padding:15px 12px}.invite-journey-heading{gap:8px}.invite-journey-heading h2{font-size:18px}.invite-journey-heading p{font-size:10px}.invite-journey-count{font-size:9px;padding:6px 8px}.invite-journey-steps,.invite-next-actions{grid-template-columns:1fr}.invite-journey-step{padding:12px}.invite-next-actions>button{padding:12px}.invite-step-state{font-size:9px}}
