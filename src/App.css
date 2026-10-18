@@ -1600,3 +1600,5 @@ button, a { -webkit-tap-highlight-color: transparent; }
  .community-success-card-stats>div{padding:8px 4px}
  .community-success-card-stats strong{font-size:16px}
 }
+
+.community-quest-pending{display:flex;align-items:center;gap:7px;width:100%;padding:10px 11px;border:1px dashed var(--border,rgba(255,255,255,.16));border-radius:9px;color:var(--muted,#a6ac9b);font-size:12px;line-height:1.4;box-sizing:border-box}
