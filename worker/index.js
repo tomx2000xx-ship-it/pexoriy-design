@@ -334,7 +334,20 @@ async function ensureCompetitionRounds(env, now = new Date()) {
     const round = await env.DB.prepare("SELECT * FROM competition_rounds WHERE id=?").bind(period.id).first();
     if (round) rounds.push(round);
   }
-  await env.DB.prepare("UPDATE competition_rounds SET status='completed' WHERE status='open' AND period_end<=?").bind(now.toISOString()).run();
+  const closing = await env.DB.prepare("SELECT * FROM competition_rounds WHERE status='open' AND period_end<=? ORDER BY period_end")
+    .bind(now.toISOString()).all();
+  for (const round of closing.results || []) {
+    const participants = await env.DB.prepare("SELECT user_id FROM competition_participants WHERE round_id=?").bind(round.id).all();
+    for (const participant of participants.results || []) await refreshCompetitionScore(env, round, participant.user_id, now);
+    const winners = await env.DB.prepare("SELECT user_id,score_points FROM competition_participants WHERE round_id=? ORDER BY score_points DESC,joined_at ASC,user_id ASC LIMIT 3")
+      .bind(round.id).all();
+    const shares = [0.5, 0.3, 0.2];
+    const statements = (winners.results || []).map((winner, index) => env.DB.prepare(
+      "INSERT OR IGNORE INTO competition_awards (id,round_id,user_id,rank,prize_pxy,status) VALUES (?,?,?,?,?,'gated')"
+    ).bind(crypto.randomUUID(), round.id, winner.user_id, index + 1, Math.floor(Number(round.prize_pool_pxy) * shares[index])));
+    statements.push(env.DB.prepare("UPDATE competition_rounds SET status='completed',payouts_enabled=0 WHERE id=? AND status='open'").bind(round.id));
+    await env.DB.batch(statements);
+  }
   return rounds;
 }
 
