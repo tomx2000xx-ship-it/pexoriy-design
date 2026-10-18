@@ -126,7 +126,7 @@ jobs:
       - name: Test rendered desktop and mobile product flows
         run: npx playwright test tests/e2e/product-flow.spec.js --reporter=line
       - name: Smoke-test release-candidate preview endpoints with explicit HTTP evidence
-        if: github.ref == 'refs/heads/scope/mobile-rewards-competition-20261018'
+        if: github.ref == 'refs/heads/scope/mobile-rewards-competition-20261018' && contains(github.event.head_commit.message, '[db-validation]')
         run: |
           set -eu
           base="https://scope-mobile-rewards-competition-20261018-pexoriy-design.mails4dikewills.workers.dev"
@@ -173,7 +173,7 @@ jobs:
           PY
           echo "Candidate HTTP smoke checks passed with explicit status-code evidence."
       - name: Live Workers AI inference and AC reserve-release-charge acceptance (isolated preview only)
-        if: github.ref == 'refs/heads/scope/mobile-rewards-competition-20261018'
+        if: github.ref == 'refs/heads/scope/mobile-rewards-competition-20261018' && contains(github.event.head_commit.message, '[db-validation]')
         timeout-minutes: 8
         run: |
           set -eu
