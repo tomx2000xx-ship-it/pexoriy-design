@@ -21,7 +21,7 @@ Do not merge or fast-forward untested code. Do not mark a release complete based
 
 ## Cloudflare build-trigger behavior
 
-- Production build trigger watches `main` only.
+- Production build trigger watches `main` only. Live production API smoke checks in GitHub Actions run only when the commit message includes `[db-validation]`; routine frontend-only commits therefore avoid DB-backed production requests while D1 quota is exhausted.
 - The completion register, this runbook, and the GitHub validation workflow are excluded from Cloudflare production builds because documentation/workflow-only edits do not change the app bundle. Application code, dependencies, Worker code, and migrations must remain included.
 - Cloudflare's native build trigger does not wait for GitHub Actions to finish. Therefore, the candidate workflow must pass **before** the candidate is promoted to `main`. The main-branch workflow is post-promotion verification, not permission to promote untested code.
 - A successful build is not proof that the intended version is active. Check the deployment's traffic allocation and the version-specific D1 binding.
