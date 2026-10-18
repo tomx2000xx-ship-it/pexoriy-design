@@ -40,12 +40,14 @@ Do not merge or fast-forward untested code. Do not mark a release complete based
 - The external HTTP checker could not reach the Worker URL in this session. Use the main-branch GitHub production smoke workflow or another direct HTTP client to capture explicit live endpoint status codes; do not infer HTTP smoke success from Cloudflare deployment metadata alone.
 
 
-## Frontend-only release evidence — 18 October 2026 (later update)
+## Frontend-only release evidence — 18 October 2026 (latest update)
 
 - Mobile UX changes were committed directly to `main` and deployed by Cloudflare Workers Builds.
-- Build `64cee42e-68ae-4be7-88b0-c23109cd7eee` succeeded for commit `1cd0e790eda0b1c7a74645e65482954d27d07d30`.
-- Active deployment `e1407a0f-def3-4662-b892-aee27ec08b40` serves 100% traffic on version `68c7edb8-5f7b-4209-85c5-cbdaeca13156` (version 235).
-- The deployed version's metadata confirms `DB` points to production `pexoriy-core` (`3add741b-bda8-4f47-b857-538ff9a1dae8`).
-- Cloudflare logs confirmed earlier builds failed at the explicit D1 migration command with error 7500 because the daily row-read limit was exceeded. The production build configuration was changed to use `npx wrangler deploy --config wrangler.frontend-release.jsonc`; that build completed successfully without running the migration command.
-- GitHub Actions run `39121997223` is not green: 46 browser tests passed, one skipped, and the mobile Learning Center/presale test failed because the lesson preview note is hidden until a lesson is selected. Adjust the test to the intended mobile flow and revalidate without running database-backed smoke tests until quota resets.
-- Public HTTP visual verification could not be completed from this session; do not infer it from deployment metadata alone.
+- Final successful Cloudflare build `ee5cab17-10d9-43c9-99f5-72a17e74b02b` built app commit `c53031efcbb0ed30924212107fa18d8b75ecf149`.
+- Active production deployment `b0894665-a543-4b8e-92dc-3cdf6001018a` serves 100% traffic on Worker version `eacfa347-a9be-4823-a049-7ef93617f416` (version 238).
+- The deployed version's metadata confirms `DB` points to production `pexoriy-core` (`3add741b-bda8-4f47-b857-538ff9a1dae8`), not the preview database.
+- Cloudflare's production build command is now `npx wrangler deploy --config wrangler.frontend-release.jsonc`. That config retains the production DB binding but omits migration configuration; the successful deployment did not run the D1 migration command.
+- Earlier builds failed with Cloudflare error 7500 at `wrangler d1 migrations apply` because the daily row-read limit was exceeded. Those failed before deployment; the later frontend-only build succeeded.
+- GitHub Actions run `39122491018` includes the corrected responsive Learning Center assertion and the new live static-asset smoke test that avoids DB-backed endpoints. At the last check it was still running; confirm its final result before calling validation green.
+- GitHub Actions' live API/D1 smoke step is gated behind an explicit `[db-validation]` commit-message marker. Routine frontend-only commits do not intentionally call DB-backed production endpoints.
+- Direct public HTTP inspection from this session was unavailable; use the GitHub static-asset smoke result for independent HTTP evidence when it completes. Do not claim visual/browser verification from deployment metadata alone.
