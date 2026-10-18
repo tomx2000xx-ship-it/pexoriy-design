@@ -339,7 +339,7 @@ async function ensureCompetitionRounds(env, now = new Date()) {
   for (const round of closing.results || []) {
     const participants = await env.DB.prepare("SELECT user_id FROM competition_participants WHERE round_id=?").bind(round.id).all();
     for (const participant of participants.results || []) await refreshCompetitionScore(env, round, participant.user_id, now);
-    const winners = await env.DB.prepare("SELECT user_id,score_points FROM competition_participants WHERE round_id=? ORDER BY score_points DESC,joined_at ASC,user_id ASC LIMIT 3")
+    const winners = await env.DB.prepare("SELECT user_id,return_bps FROM competition_participants WHERE round_id=? AND eligible_for_prize=1 ORDER BY return_bps DESC,max_drawdown_bps ASC,active_days DESC,joined_at ASC,user_id ASC LIMIT 3")
       .bind(round.id).all();
     const shares = [0.5, 0.3, 0.2];
     const statements = (winners.results || []).map((winner, index) => env.DB.prepare(
@@ -352,21 +352,41 @@ async function ensureCompetitionRounds(env, now = new Date()) {
 }
 
 async function refreshCompetitionScore(env, round, userId, now = new Date()) {
+  const participant = await env.DB.prepare("SELECT joined_at,starting_balance_tc FROM competition_participants WHERE round_id=? AND user_id=?").bind(round.id,userId).first();
+  if (!participant) return { returnBps:0, tradeCount:0, activeDays:0, maxDrawdownBps:0, eligibleForPrize:false };
+  const startingBalance = Math.max(1, Number(participant.starting_balance_tc || 0));
+  const joinedAt = Date.parse(participant.joined_at || round.period_start);
+  const startAt = Math.max(Date.parse(round.period_start), joinedAt);
+  const eligibleStart = new Date(startAt).toISOString();
   const [trades, lessons, checkins] = await Promise.all([
-    env.DB.prepare("SELECT COUNT(*) AS count FROM trading_positions WHERE user_id=? AND status='closed' AND closed_at>=? AND closed_at<?")
-      .bind(userId, round.period_start, round.period_end).first(),
+    env.DB.prepare("SELECT realized_pnl_tc,closed_at FROM trading_positions WHERE user_id=? AND status='closed' AND close_transaction_id IS NOT NULL AND opened_at>=? AND opened_at<? AND closed_at>=? AND closed_at<? ORDER BY closed_at ASC,id ASC")
+      .bind(userId, eligibleStart, round.period_end, round.period_start, round.period_end).all(),
     env.DB.prepare("SELECT COUNT(*) AS count FROM learning_progress WHERE user_id=? AND completed_at>=? AND completed_at<?")
-      .bind(userId, round.period_start, round.period_end).first(),
+      .bind(userId, eligibleStart, round.period_end).first(),
     env.DB.prepare("SELECT COUNT(*) AS count FROM daily_checkins WHERE user_id=? AND checkin_date>=? AND checkin_date<?")
-      .bind(userId, round.period_start.slice(0, 10), round.period_end.slice(0, 10)).first(),
+      .bind(userId, eligibleStart.slice(0,10), round.period_end.slice(0,10)).first(),
   ]);
-  const tradeCount = Math.min(5, Number(trades?.count || 0));
-  const lessonCount = Math.min(5, Number(lessons?.count || 0));
-  const checkinCount = Math.min(Math.ceil((Date.parse(round.period_end) - Date.parse(round.period_start)) / 86400000), Number(checkins?.count || 0));
-  const score = tradeCount * 10 + lessonCount * 15 + checkinCount * 5;
-  await env.DB.prepare("UPDATE competition_participants SET score_points=?,verified_trades=?,completed_lessons=?,daily_checkins=?,last_scored_at=? WHERE round_id=? AND user_id=?")
-    .bind(score, tradeCount, lessonCount, checkinCount, now.toISOString(), round.id, userId).run();
-  return { score, tradeCount, lessonCount, checkinCount };
+  const rows = trades.results || [];
+  let netPnl = 0, equity = startingBalance, peakEquity = startingBalance, maxDrawdown = 0;
+  const activeDates = new Set();
+  for (const trade of rows) {
+    netPnl += Number(trade.realized_pnl_tc || 0);
+    equity = startingBalance + netPnl;
+    peakEquity = Math.max(peakEquity, equity);
+    maxDrawdown = Math.max(maxDrawdown, peakEquity - equity);
+    if (trade.closed_at) activeDates.add(String(trade.closed_at).slice(0,10));
+  }
+  const tradeCount = rows.length;
+  const activeDays = activeDates.size;
+  const returnBps = Math.round((netPnl / startingBalance) * 10000);
+  const maxDrawdownBps = Math.round((maxDrawdown / startingBalance) * 10000);
+  const lessonCount = Number(lessons?.count || 0);
+  const checkinCount = Number(checkins?.count || 0);
+  const minimumActiveDays = round.slug === "daily-sprint" ? 1 : 2;
+  const eligibleForPrize = tradeCount >= 3 && activeDays >= minimumActiveDays && maxDrawdownBps <= 2000;
+  await env.DB.prepare("UPDATE competition_participants SET score_points=?,verified_trades=?,completed_lessons=?,daily_checkins=?,return_bps=?,max_drawdown_bps=?,active_days=?,eligible_for_prize=?,last_scored_at=? WHERE round_id=? AND user_id=?")
+    .bind(Math.max(0,returnBps), tradeCount, lessonCount, checkinCount, returnBps, maxDrawdownBps, activeDays, eligibleForPrize ? 1 : 0, now.toISOString(), round.id, userId).run();
+  return { returnBps, tradeCount, activeDays, maxDrawdownBps, eligibleForPrize, netPnl, startingBalance };
 }
 
 async function ensureReferralPoolRound(env, now = new Date()) {
@@ -714,11 +734,13 @@ async function handleApi(request, env) {
       const participants = await env.DB.prepare("SELECT user_id FROM competition_participants WHERE round_id=?").bind(round.id).all();
       for (const participant of participants.results || []) await refreshCompetitionScore(env, round, participant.user_id, now);
       const leaderboard = await env.DB.prepare(
-        "SELECT cp.user_id, u.display_name, cp.joined_at, cp.score_points, cp.verified_trades, cp.completed_lessons, cp.daily_checkins FROM competition_participants cp JOIN users u ON u.id=cp.user_id WHERE cp.round_id=? ORDER BY cp.score_points DESC, cp.joined_at ASC, cp.user_id ASC LIMIT 100"
-      ).bind(round.id).all();
-      const ranked = (leaderboard.results || []).map((row, index) => ({
-        rank: index + 1, displayName: row.display_name || "Pexoriy Trader",
-        score: Number(row.score_points || 0), trades: Number(row.verified_trades || 0),
+        "WITH ranked AS (SELECT cp.user_id,u.display_name,cp.joined_at,cp.return_bps,cp.max_drawdown_bps,cp.active_days,cp.eligible_for_prize,cp.verified_trades,cp.completed_lessons,cp.daily_checkins,ROW_NUMBER() OVER (ORDER BY cp.return_bps DESC,cp.max_drawdown_bps ASC,cp.active_days DESC,cp.joined_at ASC,cp.user_id ASC) AS rank FROM competition_participants cp JOIN users u ON u.id=cp.user_id WHERE cp.round_id=? AND cp.verified_trades>0) SELECT * FROM ranked WHERE rank<=100 OR user_id=? ORDER BY rank"
+      ).bind(round.id, user?.id || "").all();
+      const ranked = (leaderboard.results || []).map(row => ({
+        rank: Number(row.rank), displayName: row.display_name || "Pexoriy Trader",
+        returnPct: Number(row.return_bps || 0) / 100, maxDrawdownPct: Number(row.max_drawdown_bps || 0) / 100,
+        trades: Number(row.verified_trades || 0), activeDays: Number(row.active_days || 0),
+        eligibleForPrize: Number(row.eligible_for_prize) === 1,
         lessons: Number(row.completed_lessons || 0), checkins: Number(row.daily_checkins || 0),
         joinedAt: row.joined_at, isYou: Boolean(user && user.id === row.user_id),
       }));
@@ -728,7 +750,7 @@ async function handleApi(request, env) {
         prizePoolPXY: Number(round.prize_pool_pxy), status: round.status,
         joined: Boolean(user && (participants.results || []).some(row => row.user_id === user.id)),
         leaderboard: ranked, participantCount: (participants.results || []).length,
-        scoring: { closedPracticeTrade: 10, completedLesson: 15, dailyCheckIn: 5, tradeCap: 5, lessonCap: 5 },
+        scoring: { baseline: "TC balance snapshot at entry", metric: "net realized return percentage", minimumClosedTradesForPrize: 3, minimumActiveDaysForPrize: round.slug === "daily-sprint" ? 1 : 2, maximumDrawdownPctForPrize: 20, tieBreakers: ["lower drawdown","more active days","earlier entry","deterministic user id"] },
         payoutStatus: "gated", payoutsEnabled: false,
       });
     }
@@ -750,8 +772,10 @@ async function handleApi(request, env) {
     if (!round || round.status !== "open" || Date.parse(round.period_end) <= Date.now()) return json({ error: "This competition round is not open for entry. Refresh the challenge list." }, 409);
     const existing = await env.DB.prepare("SELECT id,joined_at FROM competition_participants WHERE round_id=? AND user_id=?").bind(round.id, user.id).first();
     if (existing) return json({ status: "joined", duplicate: true, roundId: round.id, joinedAt: existing.joined_at, payoutsEnabled: false });
-    await env.DB.prepare("INSERT OR IGNORE INTO competition_participants (id,round_id,user_id,joined_at) VALUES (?,?,?,?)")
-      .bind(crypto.randomUUID(), round.id, user.id, new Date().toISOString()).run();
+    const startingBalanceTc = await getLedgerBalance(env.DB, "user:" + user.id + ":TC");
+    if (!Number.isSafeInteger(startingBalanceTc) || startingBalanceTc <= 0) return json({ error: "A positive TC balance is required to enter a return-based competition." }, 409);
+    await env.DB.prepare("INSERT OR IGNORE INTO competition_participants (id,round_id,user_id,joined_at,starting_balance_tc) VALUES (?,?,?,?,?)")
+      .bind(crypto.randomUUID(), round.id, user.id, new Date().toISOString(), startingBalanceTc).run();
     const joined = await env.DB.prepare("SELECT id,joined_at FROM competition_participants WHERE round_id=? AND user_id=?").bind(round.id, user.id).first();
     if (!joined) return json({ error: "Competition entry could not be saved. Please retry." }, 503);
     await appendAudit(env, { actorUserId: user.id, eventType: "competition.joined", entityType: "competition_round", entityId: round.id, requestId, details: { slug: round.slug, scoringVersion: "participation-v1", payoutStatus: "gated" } });
