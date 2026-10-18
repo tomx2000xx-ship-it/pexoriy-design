@@ -692,6 +692,62 @@ async function handleApi(request, env) {
   }
 
 
+  if (path === "/api/competitions" && request.method === "GET") {
+    const now = new Date();
+    const rounds = await ensureCompetitionRounds(env, now);
+    const user = await currentUser(request, env);
+    const result = [];
+    for (const round of rounds) {
+      const participants = await env.DB.prepare("SELECT user_id FROM competition_participants WHERE round_id=?").bind(round.id).all();
+      for (const participant of participants.results || []) await refreshCompetitionScore(env, round, participant.user_id, now);
+      const leaderboard = await env.DB.prepare(
+        "SELECT cp.user_id, u.display_name, cp.joined_at, cp.score_points, cp.verified_trades, cp.completed_lessons, cp.daily_checkins FROM competition_participants cp JOIN users u ON u.id=cp.user_id WHERE cp.round_id=? ORDER BY cp.score_points DESC, cp.joined_at ASC, cp.user_id ASC LIMIT 100"
+      ).bind(round.id).all();
+      const ranked = (leaderboard.results || []).map((row, index) => ({
+        rank: index + 1, displayName: row.display_name || "Pexoriy Trader",
+        score: Number(row.score_points || 0), trades: Number(row.verified_trades || 0),
+        lessons: Number(row.completed_lessons || 0), checkins: Number(row.daily_checkins || 0),
+        joinedAt: row.joined_at, isYou: Boolean(user && user.id === row.user_id),
+      }));
+      result.push({
+        id: round.id, slug: round.slug, title: round.title,
+        startsAt: round.period_start, endsAt: round.period_end,
+        prizePoolPXY: Number(round.prize_pool_pxy), status: round.status,
+        joined: Boolean(user && (participants.results || []).some(row => row.user_id === user.id)),
+        leaderboard: ranked, participantCount: (participants.results || []).length,
+        scoring: { closedPracticeTrade: 10, completedLesson: 15, dailyCheckIn: 5, tradeCap: 5, lessonCap: 5 },
+        payoutStatus: "gated", payoutsEnabled: false,
+      });
+    }
+    const issuance = await env.DB.prepare("SELECT reserves_verified,launch_approved,issuance_enabled,approval_reference FROM pxy_issuance_controls WHERE id=1").first();
+    return json({ rounds: result, scoringVersion: "participation-v1", pxyIssuanceEnabled: Boolean(issuance && issuance.reserves_verified === 1 && issuance.launch_approved === 1 && issuance.issuance_enabled === 1 && issuance.approval_reference), message: "Leaderboards use verified activity. PXY prizes remain gated until reserves and launch approvals are recorded." });
+  }
+
+  if (path === "/api/competitions/join" && request.method === "POST") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    if (!(await consumeAuthRateLimit(request, env, "competition-join", user.id, 12, 3600))) return json({ error: "Too many competition join attempts. Try again later." }, 429);
+    const body = await readJson(request);
+    const roundId = typeof body?.roundId === "string" ? body.roundId.trim() : "";
+    const rounds = await ensureCompetitionRounds(env);
+    const round = rounds.find(item => item.id === roundId);
+    if (!round || round.status !== "open" || Date.parse(round.period_end) <= Date.now()) return json({ error: "This competition round is not open for entry. Refresh the challenge list." }, 409);
+    const existing = await env.DB.prepare("SELECT id,joined_at FROM competition_participants WHERE round_id=? AND user_id=?").bind(round.id, user.id).first();
+    if (existing) return json({ status: "joined", duplicate: true, roundId: round.id, joinedAt: existing.joined_at, payoutsEnabled: false });
+    await env.DB.prepare("INSERT OR IGNORE INTO competition_participants (id,round_id,user_id,joined_at) VALUES (?,?,?,?)")
+      .bind(crypto.randomUUID(), round.id, user.id, new Date().toISOString()).run();
+    const joined = await env.DB.prepare("SELECT id,joined_at FROM competition_participants WHERE round_id=? AND user_id=?").bind(round.id, user.id).first();
+    if (!joined) return json({ error: "Competition entry could not be saved. Please retry." }, 503);
+    await appendAudit(env, { actorUserId: user.id, eventType: "competition.joined", entityType: "competition_round", entityId: round.id, requestId, details: { slug: round.slug, scoringVersion: "participation-v1", payoutStatus: "gated" } });
+    return json({ status: "joined", duplicate: false, roundId: round.id, joinedAt: joined.joined_at, payoutsEnabled: false });
+  }
+
+  if (path === "/api/pxy/issuance-status" && request.method === "GET") {
+    const gate = await env.DB.prepare("SELECT reserves_verified,launch_approved,issuance_enabled FROM pxy_issuance_controls WHERE id=1").first();
+    const enabled = Boolean(gate && Number(gate.reserves_verified) === 1 && Number(gate.launch_approved) === 1 && Number(gate.issuance_enabled) === 1);
+    return json({ enabled, reservesVerified: Boolean(gate && Number(gate.reserves_verified) === 1), launchApproved: Boolean(gate && Number(gate.launch_approved) === 1), status: enabled ? "approved" : "gated", reason: enabled ? null : "PXY issuance remains disabled until reserves and launch approvals are explicitly recorded." });
+  }
+
   if (path === "/api/referrals" && request.method === "GET") {
     const user = await currentUser(request, env);
     if (!user) return json({ error: "Authentication required." }, 401);
