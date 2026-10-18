@@ -26,8 +26,8 @@ async function goTo(page, label) {
     await page.locator('.topbar').getByRole('button', { name: 'Activity', exact: true }).click();
     return;
   }
-  const mobileLabels = { 'Practice Trading': 'Practice', 'AI Trading': 'AI Centre', 'Community Challenges': 'Challenges', 'Referrals': 'Invite' };
-  if (mobile && ['Learning Center', 'PXY Presale Preview'].includes(label)) {
+  const mobileLabels = { 'Practice Trading': 'Practice', 'AI Trading': 'AI Centre', 'Community Challenges': 'Challenges', 'Invite & Grow': 'Invite' };
+  if (mobile && ['Learning Center', 'PXY Pre-sale'].includes(label)) {
     await page.locator('.menu-button').click();
     await page.locator('.sidebar').getByRole('button', { name: label, exact: true }).click();
     return;
@@ -428,7 +428,7 @@ test('community challenge preview does not pretend to save entries or pay prizes
   await expect(page.getByRole('button', { name: /Review eligibility/ }).first()).toBeVisible();
 });
 
-test('learning and presale preview are discoverable without enabling a sale', async ({ page }) => {
+test('learning and PXY pre-sale page are discoverable without falsely enabling payment', async ({ page }) => {
   await enterApp(page);
   await goTo(page, 'Learning Center');
   await expect(page.getByRole('heading', { name: /Learn the market/ })).toBeVisible();
@@ -443,7 +443,7 @@ test('learning and presale preview are discoverable without enabling a sale', as
   await expect(page.getByRole('button', { name: /Buy PXY|Purchase tokens|Connect wallet/i })).toHaveCount(0);
 });
 
-test('learning and presale preview remain reachable on mobile', async ({ page }) => {
+test('learning and PXY pre-sale page remain reachable on mobile', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await enterApp(page);
   await goTo(page, 'Learning Center');
@@ -453,7 +453,7 @@ test('learning and presale preview remain reachable on mobile', async ({ page })
 });
 
 
-test('public landing exposes a presale preview without requiring sign-in', async ({ page }) => {
+test('public landing exposes the PXY pre-sale page without requiring sign-in', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'PXY preview', exact: true }).click();
   await expect(page.getByRole('heading', { name: /Nothing is for sale yet/ })).toBeVisible();
@@ -504,12 +504,12 @@ test('team quest rewards are shown only after the server confirms the claim', as
 });
 
 
-test('presale preview never appears live without a verified purchase flow', async ({ page }) => {
-  await page.route('**/api/presale/status', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ previewEnabled: true, saleEnabled: true, launchState: 'active' }) }));
+test('PXY pre-sale page is live while unverified purchase settlement remains unavailable', async ({ page }) => {
+  await page.route('**/api/presale/status', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ previewEnabled: false, saleEnabled: true, launchState: 'active', purchaseFlowReady: false }) }));
   await enterApp(page);
-  await goTo(page, 'PXY Presale Preview');
-  await expect(page.getByText('PRE-LAUNCH PREVIEW')).toBeVisible();
-  await expect(page.getByText('Activation flag set; review required')).toBeVisible();
-  await expect(page.getByText('Disabled')).toBeVisible();
+  await goTo(page, 'PXY Pre-sale');
+  await expect(page.getByText('PRE-SALE PAGE LIVE')).toBeVisible();
+  await expect(page.getByText(/page is live, but the token-purchase flow still needs/i)).toBeVisible();
+  await expect(page.getByText('Not connected')).toBeVisible();
   await expect(page.getByRole('button', { name: /Buy PXY|Purchase tokens|Connect wallet/i })).toHaveCount(0);
 });
