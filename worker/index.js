@@ -751,6 +751,8 @@ async function handleApi(request, env) {
   if (path === "/api/referrals" && request.method === "GET") {
     const user = await currentUser(request, env);
     if (!user) return json({ error: "Authentication required." }, 401);
+    await finalizeClosedReferralPools(env);
+    const currentPool = await ensureReferralPoolRound(env);
     let ownCode = await env.DB.prepare("SELECT code FROM referral_codes WHERE user_id = ?").bind(user.id).first();
     if (!ownCode) {
       const code = randomHex(6).toUpperCase();
@@ -758,15 +760,45 @@ async function handleApi(request, env) {
       ownCode = await env.DB.prepare("SELECT code FROM referral_codes WHERE user_id = ?").bind(user.id).first();
     }
     const counts = await env.DB.prepare("SELECT COUNT(*) AS invited, SUM(CASE WHEN status='activated' THEN 1 ELSE 0 END) AS activated FROM referral_attributions WHERE referrer_user_id = ?").bind(user.id).first();
-    const [rows, quests, questClaims, community] = await Promise.all([
+    const [rows, quests, questClaims, community, poolAwards, poolActivations] = await Promise.all([
       env.DB.prepare("SELECT status, created_at, activated_at FROM referral_attributions WHERE referrer_user_id = ? ORDER BY created_at DESC LIMIT 50").bind(user.id).all(),
       env.DB.prepare("SELECT id,title,description,target_activations,reward_tc FROM referral_team_quests WHERE active=1 ORDER BY target_activations").all(),
       env.DB.prepare("SELECT quest_id,status,ledger_transaction_id,created_at FROM referral_team_quest_claims WHERE user_id=?").bind(user.id).all(),
-      env.DB.prepare("SELECT COUNT(*) AS activated FROM referral_attributions WHERE status='activated'").first()
+      env.DB.prepare("SELECT COUNT(*) AS activated FROM referral_attributions WHERE status='activated'").first(),
+      env.DB.prepare("SELECT a.id,a.round_id,a.verified_activations,a.reward_tc,a.status,a.ledger_transaction_id,a.claimed_at,r.period_start,r.period_end FROM referral_pool_awards a JOIN referral_pool_rounds r ON r.id=a.round_id WHERE a.user_id=? ORDER BY r.period_start DESC LIMIT 12").bind(user.id).all(),
+      env.DB.prepare("SELECT COUNT(*) AS activated FROM referral_attributions WHERE referrer_user_id=? AND status='activated' AND activated_at>=? AND activated_at<?").bind(user.id,currentPool.period_start,currentPool.period_end).first()
     ]);
     const activated = Number(counts?.activated || 0);
     const claimByQuest = new Map((questClaims.results || []).map(row => [row.quest_id, row]));
-    return json({ code: ownCode?.code || null, invited: Number(counts?.invited || 0), activated, community: { verifiedActivations: Number(community?.activated || 0) }, milestones: [{ id: "first", target: 1, reached: activated >= 1 }, { id: "squad", target: 3, reached: activated >= 3 }, { id: "community", target: 5, reached: activated >= 5 }], quests: (quests.results || []).map(quest => ({ id: quest.id, title: quest.title, description: quest.description, target: Number(quest.target_activations), rewardTC: Number(quest.reward_tc), progress: activated, claim: claimByQuest.get(quest.id) || null })), referrals: rows.results || [], rewards: { referrerTC: 250, referredTC: 100, currency: "TC" } });
+    return json({ code: ownCode?.code || null, invited: Number(counts?.invited || 0), activated, community: { verifiedActivations: Number(community?.activated || 0) }, milestones: [{ id: "first", target: 1, reached: activated >= 1 }, { id: "squad", target: 3, reached: activated >= 3 }, { id: "community", target: 5, reached: activated >= 5 }], quests: (quests.results || []).map(quest => ({ id: quest.id, title: quest.title, description: quest.description, target: Number(quest.target_activations), rewardTC: Number(quest.reward_tc), progress: activated, claim: claimByQuest.get(quest.id) || null })), referrals: rows.results || [], rewards: { referrerTC: 250, referredTC: 100, currency: "TC" }, communityPool: { roundId: currentPool.id, periodStart: currentPool.period_start, periodEnd: currentPool.period_end, poolTC: Number(currentPool.pool_tc), status: currentPool.status, verifiedActivations: Number(poolActivations?.activated || 0), distribution: "proportional-to-verified-activations", payoutCurrency: "TC" }, poolAwards: (poolAwards.results || []).map(award => ({ roundId: award.round_id, periodStart: award.period_start, periodEnd: award.period_end, verifiedActivations: Number(award.verified_activations), rewardTC: Number(award.reward_tc), status: award.status, claimedAt: award.claimed_at })) });
+  }
+
+  if (path === "/api/referrals/pool/claim" && request.method === "POST") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    if (!(await consumeAuthRateLimit(request, env, "referral-pool-claim", user.id, 10, 3600))) return json({ error: "Too many community pool claims. Try again later." }, 429);
+    await finalizeClosedReferralPools(env);
+    const body = await readJson(request);
+    const roundId = typeof body?.roundId === "string" ? body.roundId.trim() : "";
+    const round = await env.DB.prepare("SELECT * FROM referral_pool_rounds WHERE id=? AND status='finalized'").bind(roundId).first();
+    if (!round) return json({ error: "This weekly pool is not finalized yet. Claims open after the UTC week closes." }, 409);
+    const award = await env.DB.prepare("SELECT * FROM referral_pool_awards WHERE round_id=? AND user_id=?").bind(round.id,user.id).first();
+    if (!award) return json({ error: "No verified referral activations qualified for this pool round." }, 404);
+    if (award.status === "paid" && award.ledger_transaction_id) return json({ status: "paid", duplicate: true, rewardTC: Number(award.reward_tc), roundId: round.id });
+    if (Number(award.reward_tc) <= 0) return json({ error: "This round did not allocate a positive TC share to this account." }, 409);
+    const idempotencyKey = "referral-pool:" + round.id + ":" + user.id;
+    let result;
+    try {
+      result = await postLedgerTransaction(env.DB, { id: crypto.randomUUID(), idempotencyKey, userId: user.id, eventType: "referral.community_pool_reward", metadata: { roundId: round.id, verifiedActivations: Number(award.verified_activations), poolTC: Number(round.pool_tc), totalActivations: Number(round.total_activations) }, postings: [{ accountKey: "user:" + user.id + ":TC", currency: "TC", amountAtoms: Number(award.reward_tc) }, { accountKey: "system:issuance:TC", currency: "TC", amountAtoms: -Number(award.reward_tc) }] });
+      await env.DB.prepare("UPDATE referral_pool_awards SET status='paid',ledger_transaction_id=?,claimed_at=? WHERE round_id=? AND user_id=? AND status='available'")
+        .bind(result.transactionId, new Date().toISOString(), round.id, user.id).run();
+    } catch {
+      return json({ status: "pending", rewardStatus: "retrying", message: "Your pool share is recorded. TC delivery will retry safely." }, 202);
+    }
+    const saved = await env.DB.prepare("SELECT status,ledger_transaction_id FROM referral_pool_awards WHERE round_id=? AND user_id=?").bind(round.id,user.id).first();
+    if (!saved || saved.status !== "paid" || saved.ledger_transaction_id !== result.transactionId) return json({ status: "pending", rewardStatus: "retrying", message: "Your pool share is reconciling. Refresh before retrying." }, 202);
+    await appendAudit(env, { actorUserId: user.id, eventType: "referral.community_pool_reward_paid", entityType: "referral_pool_award", entityId: round.id + ":" + user.id, requestId, details: { rewardTC: Number(award.reward_tc), verifiedActivations: Number(award.verified_activations), duplicate: Boolean(result.duplicate) } });
+    return json({ status: "paid", duplicate: Boolean(result.duplicate), rewardTC: Number(award.reward_tc), roundId: round.id });
   }
 
   if (path === "/api/referrals/quests/claim" && request.method === "POST") {
