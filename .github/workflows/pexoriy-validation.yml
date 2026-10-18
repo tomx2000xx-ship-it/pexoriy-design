@@ -63,12 +63,25 @@ jobs:
           if not {"idempotency_key", "tx_hash", "reference_key"}.issubset(unique_columns):
               raise SystemExit("Missing unique payment-order idempotency, transaction-hash, or reference constraint")
           trigger_names = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='trigger'")}
+          if "trg_pxy_issuance_requires_approval" not in trigger_names or "trg_pxy_issuance_update_requires_approval" not in trigger_names:
+              raise SystemExit("Missing database-level PXY issuance gate")
+          competition_columns = {row[1] for row in db.execute("PRAGMA table_info('competition_participants')")}
+          if not {"starting_balance_tc","return_bps","max_drawdown_bps","active_days","eligible_for_prize"}.issubset(competition_columns):
+              raise SystemExit("Missing return-based competition score and risk-control columns")
           if "trg_payment_credit_requires_verified_state" not in trigger_names or "trg_credited_payment_immutable" not in trigger_names:
               raise SystemExit("Missing payment finality or credited-order immutability guard")
           if not {"trg_daily_checkin_requires_posted_ledger", "trg_daily_checkin_immutable_update", "trg_daily_checkin_immutable_delete"}.issubset(trigger_names):
               raise SystemExit("Missing daily check-in ledger or immutability guard")
           # Exercise the database invariants with synthetic fixtures only; no live funds or production DB.
           db.execute("INSERT INTO users (id,email,display_name,password_salt,password_hash) VALUES ('ci-payment-user','ci-payment@example.test','CI Payment','salt','hash')")
+          db.execute("INSERT INTO ledger_transactions (id,idempotency_key,user_id,event_type,status,metadata_json) VALUES ('ci-pxy-test','ci-pxy-test-key','ci-payment-user','test.pxy_gate','pending','{}')")
+          pxy_posting_rejected = False
+          try:
+              db.execute("INSERT INTO ledger_postings (id,transaction_id,account_key,amount_atoms,currency) VALUES ('ci-pxy-posting','ci-pxy-test','system:issuance:PXY',-1,'PXY')")
+          except sqlite3.IntegrityError as error:
+              pxy_posting_rejected = "pxy_issuance_gated" in str(error)
+          if not pxy_posting_rejected:
+              raise SystemExit("The ledger accepted a PXY posting while reserves and launch approvals were gated")
           db.execute("INSERT INTO payment_orders (id,user_id,idempotency_key,provider,network,asset,expected_amount_atoms,status,tx_hash,reference_key) VALUES ('ci-order-1','ci-payment-user','ci-idem-1','test','testnet','TEST',100,'confirmed','ci-tx-hash','ci-ref-1')")
           duplicate_tx_rejected = False
           try:
