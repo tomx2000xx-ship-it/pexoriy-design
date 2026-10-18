@@ -432,7 +432,11 @@ test('learning and presale preview are discoverable without enabling a sale', as
   await enterApp(page);
   await goTo(page, 'Learning Center');
   await expect(page.getByRole('heading', { name: /Learn the market/ })).toBeVisible();
-  await expect(page.getByText(/Preview mode: sign in to take scored quizzes/)).toBeVisible();
+  if (page.viewportSize().width <= 760) {
+    await expect(page.locator('.learning-mobile-preview-note')).toBeVisible();
+  } else {
+    await expect(page.locator('.learning-lesson').getByText(/Preview mode: sign in to take scored quizzes/)).toBeVisible();
+  }
   await goTo(page, 'PXY Presale Preview');
   await expect(page.getByRole('heading', { name: /Nothing is for sale yet/ })).toBeVisible();
   await expect(page.getByText(/No purchase button, payment order, wallet transaction/)).toBeVisible();
