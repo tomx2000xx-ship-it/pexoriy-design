@@ -1539,3 +1539,64 @@ button, a { -webkit-tap-highlight-color: transparent; }
  .referral-circle-countdown{grid-template-columns:minmax(0,1fr)}
  .referral-circle-countdown>div{flex-direction:row-reverse}
 }
+
+
+/* Invite & Grow: clans, cooperative quests, community report and success card */
+.community-feature-layout{display:grid;gap:18px;min-width:0}
+.community-feature-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;min-width:0}
+.community-feature-card{display:flex;flex-direction:column;align-items:flex-start;gap:12px;min-width:0}
+.community-feature-card h3{margin:0;font-size:19px;line-height:1.25}
+.community-feature-card>p{margin:0;color:var(--muted,#a6ac9b);line-height:1.6}
+.community-feature-icon{display:grid;place-items:center;width:42px;height:42px;border:1px solid rgba(183,243,74,.22);border-radius:13px;background:rgba(183,243,74,.08);color:var(--accent,#b7f34a)}
+.community-field-label{display:block;margin:3px 0 7px;color:var(--muted,#a6ac9b);font-size:12px;font-weight:650}
+.community-feature-input{display:block;width:100%;min-height:44px;margin:0 0 10px;padding:11px 12px;border:1px solid var(--border,rgba(255,255,255,.12));border-radius:10px;background:var(--surface,#11140f);color:var(--text,#f3f5ee);font:inherit;box-sizing:border-box}
+.community-feature-card form{width:100%;margin-top:2px}
+.community-feature-footnote{display:block;color:var(--muted,#9ca394);font-size:12px;line-height:1.55}
+.community-cycle-principles{padding:20px}
+.community-principle-list{display:grid;gap:0}
+.community-principle-list>div{display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-top:1px solid var(--border,rgba(255,255,255,.1))}
+.community-principle-list>div>strong{color:var(--accent,#b7f34a);font-size:13px;letter-spacing:.08em}
+.community-principle-list>div>span{display:grid;gap:4px}
+.community-principle-list b{font-size:14px}
+.community-principle-list small{color:var(--muted,#a6ac9b);font-size:12px;line-height:1.55}
+.community-quest-meta{display:grid;gap:8px;width:100%;padding:12px;border:1px solid var(--border,rgba(255,255,255,.1));border-radius:10px;background:rgba(255,255,255,.018)}
+.community-quest-meta>span{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;color:var(--muted,#a6ac9b);font-size:12px}
+.community-quest-meta strong{color:var(--text,#f3f5ee);text-align:right;font-weight:650}
+.community-progress-track{width:100%;height:6px;overflow:hidden;border-radius:999px;background:rgba(255,255,255,.09)}
+.community-progress-track span{display:block;height:100%;border-radius:inherit;background:var(--accent,#b7f34a)}
+.community-success-preview{display:grid;gap:16px;padding:18px}
+.community-success-card-art{display:flex;flex-direction:column;gap:22px;width:100%;min-height:290px;padding:clamp(16px,4vw,30px);border:1px solid rgba(183,243,74,.25);border-radius:18px;background:radial-gradient(circle at 90% 0,rgba(183,243,74,.12),transparent 35%),linear-gradient(145deg,#151912,#0e100d);box-sizing:border-box}
+.community-success-card-top{display:flex;justify-content:space-between;gap:10px;align-items:center;color:var(--accent,#b7f34a);font-size:10px;font-weight:750;letter-spacing:.12em}
+.community-success-card-top span:last-child{color:#aeb5a4;text-align:right}
+.community-success-card-center{display:grid;justify-items:center;text-align:center;gap:9px;padding:2px 0}
+.community-success-orbit{display:grid;place-items:center;width:54px;height:54px;border:1px solid rgba(183,243,74,.3);border-radius:18px;color:var(--accent,#b7f34a);background:rgba(183,243,74,.08)}
+.community-success-card-center h3{margin:0;color:#f3f5ee;font-size:clamp(23px,4vw,32px)}
+.community-success-card-center p{margin:0;color:#b1b8a7;font-size:13px;line-height:1.5}
+.community-success-card-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.community-success-card-stats>div{display:grid;gap:6px;min-width:0;padding:10px 8px;border-radius:10px;background:rgba(255,255,255,.035);text-align:center}
+.community-success-card-stats strong{color:#f3f5ee;font-size:21px}
+.community-success-card-stats span{color:#aeb5a4;font-size:10px;line-height:1.35}
+.community-success-card-foot{margin-top:auto;color:#aeb5a4;font-size:10px;line-height:1.45}
+.community-success-card-actions{display:flex;flex-wrap:wrap;gap:10px}
+.community-success-rules{display:grid;gap:11px;margin:0;padding-left:19px;color:var(--muted,#a6ac9b);font-size:13px;line-height:1.55}
+.community-report-sections{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0}
+.community-report-sections section{padding:14px;border:1px solid var(--border,rgba(255,255,255,.1));border-radius:12px}
+.community-report-sections h3{margin:8px 0;font-size:15px}
+.community-report-sections p{margin:0;color:var(--muted,#a6ac9b);font-size:12px;line-height:1.55}
+.community-report-metrics>div small{display:block;margin-top:5px;color:var(--muted,#a6ac9b);font-size:11px;line-height:1.4}
+@media(max-width:720px){
+ .community-feature-grid{grid-template-columns:minmax(0,1fr);gap:12px}
+ .community-feature-card{padding:15px}
+ .community-report-sections{grid-template-columns:minmax(0,1fr)}
+ .community-success-card-art{min-height:270px;gap:18px}
+ .community-success-card-stats strong{font-size:18px}
+ .community-success-card-stats span{font-size:9px}
+ .community-success-card-actions{display:grid;grid-template-columns:minmax(0,1fr)}
+ .community-success-card-actions button{width:100%;justify-content:center}
+}
+@media(max-width:360px){
+ .community-success-card-top{font-size:8px;letter-spacing:.07em}
+ .community-success-card-stats{gap:5px}
+ .community-success-card-stats>div{padding:8px 4px}
+ .community-success-card-stats strong{font-size:16px}
+}
