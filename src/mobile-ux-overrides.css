@@ -85,3 +85,151 @@
 @media(max-width:520px){.ai-package-grid{grid-template-columns:minmax(0,1fr);gap:9px}.ai-store-page-card{padding:13px}.ai-package-value>strong{font-size:23px}.ai-package-reward{align-items:center}.ai-package-reward-label{width:auto;margin-left:auto}.ai-package-payment{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.ai-package-payment>span{text-align:right;max-width:45%}.challenge-hub-art{display:none}.challenge-hub-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.referral-actions{grid-template-columns:minmax(0,1fr)}.referral-share-link{grid-template-columns:minmax(0,1fr)}.referral-share-link .btn{width:100%}.pyx-hero{display:block}.pyx-token-mark{margin-bottom:12px}.pxy-allocation-legend{grid-template-columns:minmax(0,1fr)}}
 @keyframes pexoriyPackagePulse{0%{transform:scale(.985);box-shadow:0 0 0 0 rgba(183,243,74,.25)}55%{transform:scale(1.008);box-shadow:0 0 0 5px rgba(183,243,74,.08)}100%{transform:scale(1);box-shadow:0 0 0 1px rgba(183,243,74,.12)}}
 @media(prefers-reduced-motion:reduce){.ai-package-just-selected{animation:none!important}}
+
+
+/* Signature UX pass — hierarchy, findability and action-first mobile layouts.
+   Presentation-only: no database, API, rewards, or trade rules changed. */
+.dashboard-balance-spotlight{display:none}
+.balance-spotlight-top,.balance-spotlight-main,.balance-spotlight-actions,.balance-spotlight-foot{display:flex;align-items:center}
+.balance-spotlight-top{justify-content:space-between;gap:12px}
+.balance-live-label{display:inline-flex;align-items:center;gap:6px;font-size:9px;letter-spacing:.8px;color:#b7f34a;font-weight:800}
+.balance-live-label>span{width:6px;height:6px;border-radius:50%;background:#b7f34a;box-shadow:0 0 0 3px rgba(183,243,74,.12)}
+.balance-spotlight-main{gap:9px;margin-top:8px;align-items:baseline}
+.balance-spotlight-main strong{font-family:Manrope,sans-serif;font-size:clamp(36px,7vw,52px);line-height:1;letter-spacing:-1.8px;font-weight:800;color:#f4f6ef;font-variant-numeric:tabular-nums}
+.balance-spotlight-main>span{font-size:15px;font-weight:800;color:#b7f34a}
+.balance-spotlight-actions{gap:10px;flex-wrap:wrap;margin-top:16px}
+.balance-spotlight-secondary{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:42px;border:1px solid var(--line);background:transparent;color:#d8ddcf;border-radius:10px;padding:0 12px;font-size:12px;font-weight:700}
+.balance-spotlight-foot{flex-wrap:wrap;gap:8px 14px;border-top:1px solid rgba(231,238,219,.1);margin-top:16px;padding-top:12px}
+.balance-spotlight-foot>span,.balance-spotlight-foot>button{display:inline-flex;align-items:center;gap:6px;font-size:10px}
+.balance-spotlight-foot>span{color:#c5cbbd}
+.balance-spotlight-foot>button{border:0;background:transparent;color:#b7f34a;padding:3px 0;font-weight:700}
+.practice-mode-switch{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:15px 17px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(115deg,rgba(183,243,74,.055),rgba(23,26,21,.96) 55%)}
+.practice-mode-switch>div:first-child{display:flex;flex-direction:column;gap:5px;min-width:0}
+.practice-mode-switch>div:first-child>strong{font-size:14px;letter-spacing:-.2px}
+.practice-mode-switch>div:first-child>small{font-size:11px;line-height:1.55;color:var(--muted)}
+.practice-mode-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.practice-mode-current{display:inline-flex;align-items:center;gap:6px;color:var(--lime);font-size:11px;font-weight:700;white-space:nowrap}
+.practice-mode-actions .btn{min-height:38px;white-space:nowrap}
+.referral-activity-launchpad{margin-top:24px}
+.referral-activity-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.referral-activity-grid>button{display:flex;align-items:center;gap:11px;min-width:0;text-align:left;padding:14px;border:1px solid var(--line);border-radius:13px;background:#171a15;color:#f2f3ed;transition:border-color .18s ease,transform .18s ease,background .18s ease}
+.referral-activity-grid>button:hover{border-color:rgba(183,243,74,.38);background:#1c2018;transform:translateY(-1px)}
+.referral-activity-icon{display:grid;place-items:center;flex:0 0 38px;width:38px;height:38px;border-radius:11px;background:rgba(183,243,74,.1);color:var(--lime)}
+.referral-activity-grid>button>span:nth-child(2){display:flex;flex:1;flex-direction:column;gap:4px;min-width:0}
+.referral-activity-grid strong{font-size:12px;line-height:1.3}
+.referral-activity-grid small{font-size:10px;line-height:1.5;color:var(--muted)}
+.referral-activity-grid>button>svg:last-child{flex:0 0 auto;color:#8f9785}
+.mobile-command-bar>button{min-width:0}
+.mobile-command-bar>button>span:nth-child(2){min-width:0}
+.mobile-command-bar>button strong,.mobile-command-bar>button small{overflow-wrap:anywhere}
+.mobile-command-icon.mission-command-icon{background:rgba(183,243,74,.1);color:var(--lime)}
+@media(min-width:851px){
+ .dashboard-balance-spotlight{display:none!important}
+}
+@media(max-width:850px){
+ .dashboard-experience{display:flex;flex-direction:column;gap:14px}
+ .dashboard-experience>.page-heading{order:0;margin-bottom:0}
+ .dashboard-experience>.dashboard-balance-spotlight{display:block;order:1;padding:18px 16px;border:1px solid rgba(183,243,74,.25);border-radius:17px;background:radial-gradient(ellipse at 95% 0%,rgba(183,243,74,.10),transparent 48%),#171a15;box-shadow:0 10px 28px rgba(0,0,0,.16)}
+ .dashboard-experience>.streak-referral-row{order:2;margin:0}
+ .dashboard-experience>.mobile-command-bar{order:3;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:0}
+ .dashboard-experience>.home-banner{order:4;margin:0;min-height:0}
+ .dashboard-experience>.referral-feature-banner{order:5;margin:0}
+ .dashboard-experience>.challenge-feature{order:6;margin:0}
+ .dashboard-experience>.market-pulse-section{order:7;margin:0}
+ .dashboard-experience>.lower-grid{order:8;margin:0}
+ .dashboard-experience>.page-footer{order:9}
+ .dashboard-experience>.dashboard-balance-section{display:none!important}
+ .dashboard-experience>.home-ai-card:not(.practice-ai-bridge){display:none!important}
+ .mobile-command-bar>button{display:flex;align-items:center;gap:7px;min-height:62px;padding:9px 8px;border:1px solid var(--line);border-radius:12px;background:#171a15;color:#f2f3ed;text-align:left}
+ .mobile-command-bar>button>span:nth-child(2){display:flex;flex:1;flex-direction:column;gap:3px}
+ .mobile-command-bar>button strong{font-size:10px;line-height:1.25}
+ .mobile-command-bar>button small{font-size:9px;line-height:1.3;color:var(--muted)}
+ .mobile-command-bar>button>svg:last-child{display:none}
+ .mobile-command-icon{width:29px;height:29px;flex:0 0 29px;border-radius:9px}
+ .mobile-bottom-nav{grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;min-height:66px;padding-top:5px;padding-bottom:max(5px,env(safe-area-inset-bottom));}
+ .mobile-bottom-nav button{min-width:0;gap:4px;padding:4px 1px;font-size:9px;white-space:nowrap}
+ .mobile-bottom-nav button svg{width:18px;height:18px;flex:0 0 18px}
+ .page-content{padding-bottom:calc(82px + env(safe-area-inset-bottom))}
+ .topbar{min-height:58px;padding-inline:12px}
+ .breadcrumb{max-width:45vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .topbar-right{gap:7px}
+ .search-button{min-width:34px;padding:0 9px}
+ .search-button span{display:none}
+ .balance-spotlight-main strong{font-size:clamp(38px,10vw,48px)}
+ .balance-spotlight-actions{display:grid;grid-template-columns:minmax(0,1fr) auto}
+ .balance-spotlight-actions .btn{min-height:43px;justify-content:center;padding-inline:12px;font-size:11px}
+ .balance-spotlight-secondary{padding-inline:10px;font-size:10px}
+ .balance-spotlight-foot{gap:8px 12px}
+ .balance-spotlight-foot>span,.balance-spotlight-foot>button{font-size:10px}
+ .streak-card-expanded{padding:14px!important}
+ .streak-main{align-items:flex-start;gap:10px}
+ .streak-copy{min-width:0}
+ .streak-copy strong{font-size:14px;line-height:1.3}
+ .streak-copy small{font-size:11px;line-height:1.5}
+ .streak-main>.btn{min-height:38px;padding-inline:11px;font-size:11px;white-space:nowrap}
+ .streak-week-track{gap:5px}
+ .streak-day{min-width:0;padding:7px 2px}
+ .streak-day small{font-size:8px}
+ .practice-mode-switch{align-items:flex-start;flex-direction:column;gap:12px;padding:13px}
+ .practice-mode-actions{width:100%;justify-content:space-between}
+ .practice-mode-actions .btn{min-height:40px;flex:0 0 auto}
+ .practice-mode-current{font-size:10px}
+ .market-chooser-panel{padding:13px!important}
+ .market-chooser-heading{align-items:flex-start;gap:8px}
+ .market-chooser-heading h2{font-size:16px}
+ .market-chooser-heading p{font-size:11px;line-height:1.45}
+ .asset-picker.market-picker-top{display:flex;gap:7px;overflow-x:auto;padding:2px 1px 7px;scroll-snap-type:x proximity}
+ .asset-picker.market-picker-top .asset-option{flex:0 0 138px;scroll-snap-align:start;padding:10px}
+ .asset-picker.market-picker-top .asset-option .asset-change{font-size:10px}
+ .trading-layout{display:flex;flex-direction:column;gap:12px}
+ .trading-layout>.order-panel{order:0}
+ .trading-layout>.terminal-panel{order:1}
+ .order-panel{padding:15px!important;scroll-margin-top:12px}
+ .order-panel .terminal-heading h2{font-size:19px}
+ .order-panel .direction-switch{margin-top:12px}
+ .order-panel .field-label{margin-top:13px}
+ .order-panel .amount-input-wrap input{min-height:48px;font-size:18px}
+ .order-panel>.btn,.order-panel .order-review-actions .btn{min-height:44px}
+ .order-summary{gap:8px;padding:11px}
+ .order-summary>div{font-size:11px}
+ .terminal-panel{padding:13px!important}
+ .pro-chart{min-height:0}
+ .chart-visual{max-height:205px}
+ .referral-activity-launchpad{margin-top:20px}
+ .referral-activity-grid{grid-template-columns:minmax(0,1fr);gap:8px}
+ .referral-activity-grid>button{padding:12px}
+ .referral-activity-grid strong{font-size:12px}
+ .referral-activity-grid small{font-size:10px}
+ .referral-team-quests{margin-top:20px}
+ .referral-hero,.referral-stats-grid,.referral-team-quests,.referral-rewards-panel{min-width:0}
+ .referral-share-link strong{overflow-wrap:anywhere;word-break:break-word}
+ .referral-flow{flex-wrap:wrap}
+ .mission-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .mission-summary>div:first-child{grid-column:1/-1}
+ .mission-page-grid,.challenge-grid,.profile-page-grid{grid-template-columns:minmax(0,1fr)}
+ .challenge-feature{padding:16px!important}
+ .challenge-feature-copy h2{font-size:clamp(24px,7vw,32px)}
+ .challenge-mini{gap:8px;padding:11px}
+ .challenge-mini-reward strong{font-size:11px}
+ .challenge-mini-reward small{font-size:9px}
+ .search-page-input{gap:8px;padding:11px}
+ .search-results>button{min-height:60px;padding:12px}
+}
+@media(max-width:380px){
+ .dashboard-experience>.mobile-command-bar{gap:5px}
+ .mobile-command-bar>button{gap:5px;padding:8px 6px}
+ .mobile-command-icon{width:25px;height:25px;flex-basis:25px}
+ .mobile-command-icon svg{width:15px;height:15px}
+ .mobile-command-bar>button strong{font-size:9px}
+ .mobile-command-bar>button small{font-size:8px}
+ .balance-spotlight-actions{grid-template-columns:1fr}
+ .balance-spotlight-secondary{width:100%}
+ .streak-main{flex-wrap:wrap}
+ .streak-main>.btn{margin-left:44px}
+ .mobile-bottom-nav button{font-size:8px}
+ .mobile-bottom-nav button svg{width:17px;height:17px}
+}
+@media(prefers-reduced-motion:reduce){
+ .referral-activity-grid>button{transition:none}
+ .referral-activity-grid>button:hover{transform:none}
+}
