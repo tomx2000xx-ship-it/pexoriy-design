@@ -732,8 +732,11 @@ async function handleApi(request, env) {
         payoutStatus: "gated", payoutsEnabled: false,
       });
     }
-    const issuance = await env.DB.prepare("SELECT reserves_verified,launch_approved,issuance_enabled,approval_reference FROM pxy_issuance_controls WHERE id=1").first();
-    return json({ rounds: result, scoringVersion: "participation-v1", pxyIssuanceEnabled: Boolean(issuance && issuance.reserves_verified === 1 && issuance.launch_approved === 1 && issuance.issuance_enabled === 1 && issuance.approval_reference), message: "Leaderboards use verified activity. PXY prizes remain gated until reserves and launch approvals are recorded." });
+    const [issuance, recentResults] = await Promise.all([
+      env.DB.prepare("SELECT reserves_verified,launch_approved,issuance_enabled,approval_reference FROM pxy_issuance_controls WHERE id=1").first(),
+      env.DB.prepare("SELECT a.rank,a.prize_pxy,a.status,a.round_id,a.user_id,u.display_name,r.title,r.period_start,r.period_end FROM competition_awards a JOIN users u ON u.id=a.user_id JOIN competition_rounds r ON r.id=a.round_id WHERE r.status='completed' ORDER BY r.period_end DESC,a.rank ASC LIMIT 30").all()
+    ]);
+    return json({ rounds: result, recentResults: (recentResults.results || []).map(row => ({ rank: Number(row.rank), prizePXY: Number(row.prize_pxy), status: row.status, roundId: row.round_id, displayName: row.display_name || "Pexoriy Trader", title: row.title, periodStart: row.period_start, periodEnd: row.period_end })), scoringVersion: "participation-v1", pxyIssuanceEnabled: Boolean(issuance && Number(issuance.reserves_verified) === 1 && Number(issuance.launch_approved) === 1 && Number(issuance.issuance_enabled) === 1 && Boolean(issuance.approval_reference)), message: "Leaderboards use verified activity. PXY prizes remain gated until reserves and launch approvals are recorded." });
   }
 
   if (path === "/api/competitions/join" && request.method === "POST") {
