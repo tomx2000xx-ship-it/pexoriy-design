@@ -415,4 +415,16 @@ Do not silently decide the following during implementation:
 7. Test ledger idempotency, settlement caps, referral abuse, privacy boundaries, and trade-card integrity.
 8. Deploy directly through the established GitHub/Cloudflare workflow only after checks; verify live version and perform Android QA.
 
-**Current status:** specification document only. No code behavior, database schema/data, reward budget, reward balances, or production deployment changed by this document.
+**Specification baseline:** This document itself is a product/implementation specification; it does not change database schema/data, reward budget, reward balances, or deployment.
+
+**2026-10-18 UI-only implementation checkpoint (GitHub main):**
+- Invite & Grow now exposes dedicated Clans, Tasks & Quests, Community Feed, Group Chats, Growth Campaigns, Weekly Report, and Community Success Card sections.
+- Added clan create/join draft forms and an explanation of the intended seven-day team cycle, shared-benefit principle, and pending reward-rule approvals.
+- Restored the existing Build Your Squad (3 verified activations / 300 TC) and Grow the Arena (5 verified activations / 600 TC) concepts in a dedicated task view, plus the cooperative learning/practice and consistency quests.
+- Reworked the weekly report into verified-activity, retention, practice, and confirmed-ledger-settlement sections; added a distinct community success-card preview with no fabricated metrics.
+- Added responsive styles for the new views.
+- The forms/cards are UI scaffolding only where server endpoints do not yet exist. Clan creation/joining, community aggregate reporting, community success-card generation/sharing, and persistent community feed/chat remain inactive until backend work is completed.
+- No D1 queries, schema changes, migrations, reward issuance, or ledger mutations were performed as part of this UI work. Database/schema reconciliation and migration remain deferred to the next planned session.
+- The changes were committed directly to `main`; a production build and live deployment of these exact commits have **not yet been verified**. Do not call the UI work production-verified until the build and deployment are checked.
+
+The open approval gates in Section 14 remain open; this UI work does not silently finalize pool currency, budget, scoring, leader/member split, eligibility caps, or unverified campaign rewards.
