@@ -31,7 +31,7 @@ jobs:
       - name: Validate ordered SQL migrations against SQLite
         run: |
           python3 - <<'PY'
-          import sqlite3
+          import json, sqlite3
           from pathlib import Path
           db = sqlite3.connect(":memory:")
           migrations = sorted(Path("migrations").glob("*.sql"))
