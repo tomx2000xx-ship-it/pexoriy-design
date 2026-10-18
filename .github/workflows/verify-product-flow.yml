@@ -37,6 +37,28 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Test rendered product flows
         run: npx playwright test
+      - name: Smoke-test deployed frontend assets without database access
+        run: |
+          set -euo pipefail
+          base="https://pexoriy-design.mails4dikewills.workers.dev"
+          curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 "$base/" -o /tmp/pexoriy-live-index.html
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          html = Path("/tmp/pexoriy-live-index.html").read_text(encoding="utf-8")
+          assets = sorted(set(re.findall(r'(?:src|href)="([^"]*/assets/[^"]+\.(?:js|css))"', html)))
+          if not any(x.endswith(".js") for x in assets) or not any(x.endswith(".css") for x in assets):
+              raise SystemExit("Production homepage did not reference both JS and CSS assets")
+          Path("/tmp/pexoriy-live-assets.txt").write_text("\\n".join(assets), encoding="utf-8")
+          print("Production homepage references:", *assets, sep="\\n")
+          PY
+          while IFS= read -r asset; do
+            curl --fail --silent --show-error --retry 3 --retry-all-errors --retry-delay 2 "$base$asset" -o "/tmp/pexoriy-$(basename "$asset")"
+            echo "HTTP 200 static asset: $asset"
+          done < /tmp/pexoriy-live-assets.txt
+          grep -q 'learning-mobile-preview-note' /tmp/pexoriy-*.css
+          grep -q 'All lessons' /tmp/pexoriy-*.js
+          echo "Live frontend smoke passed: homepage, bundled JS/CSS, and mobile lesson UI markers are present. No API/D1 endpoints were called."
       - name: Exercise authenticated trading against local D1
         run: |
           set -euo pipefail
