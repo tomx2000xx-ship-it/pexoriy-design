@@ -86,3 +86,6 @@ CREATE TABLE IF NOT EXISTS pxy_issuance_controls (
 );
 INSERT OR IGNORE INTO pxy_issuance_controls (id, reserves_verified, launch_approved, issuance_enabled, approval_reference)
 VALUES (1, 0, 0, 0, NULL);
+
+-- Community challenge mission becomes claimable now that persistent entry records exist.
+UPDATE mission_definitions SET active=1 WHERE id='community-challenge' AND rules_json='{"prerequisite":"community_challenge"}';
