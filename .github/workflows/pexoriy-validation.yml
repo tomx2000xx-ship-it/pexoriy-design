@@ -195,6 +195,17 @@ jobs:
           call("/api/auth/register", "POST", {"displayName":"AI Acceptance Test","email":email,"password":"Pexoriy-Acceptance-2026-Strong!"}, (200,201))
           me = call("/api/me")
           initial_ac = float(me["user"]["balances"]["AC"])
+          referral_state = call("/api/referrals")
+          pool = referral_state.get("communityPool", {})
+          if pool.get("poolTC") != 10000 or pool.get("distribution") != "proportional-to-verified-activations":
+              raise RuntimeError(f"Shared referral pool configuration is missing or changed: {pool}")
+          competition_state = call("/api/competitions")
+          daily_round = next((item for item in competition_state.get("rounds", []) if item.get("slug") == "daily-sprint"), None)
+          if not daily_round or daily_round.get("payoutsEnabled") is not False:
+              raise RuntimeError(f"Persistent daily competition round or PXY payout gate is missing: {competition_state}")
+          join_result = call("/api/competitions/join", "POST", {"roundId":daily_round["id"]})
+          if join_result.get("status") != "joined":
+              raise RuntimeError(f"Competition entry was not persisted: {join_result}")
           sol_order_result = call("/api/payments/solana/order", "POST", {"packageId":"entry_5","idempotencyKey":f"sol-mainnet-{run_id}"}, (200,201))
           sol_order = sol_order_result.get("order")
           if not sol_order or not sol_order.get("id"): raise RuntimeError(f"Native SOL mainnet order was not created: {sol_order_result}")
@@ -234,6 +245,14 @@ jobs:
               raise RuntimeError(f"AI charge/execution audit evidence is missing: {types}")
           close = call("/api/trading/positions/close", "POST", {"positionId":executed["position"]["id"],"idempotencyKey":f"ci-release-{run_id}-close"})
           if close.get("closed") is not True: raise RuntimeError(f"Acceptance test position cleanup failed: {close}")
+          mission = call("/api/missions/claim", "POST", {"missionId":"community-challenge"})
+          if mission.get("status") != "paid" or mission.get("rewardTC") != 200:
+              raise RuntimeError(f"Persistent competition-entry mission reward did not settle: {mission}")
+          scored = call("/api/competitions")
+          scored_round = next((item for item in scored.get("rounds", []) if item.get("id") == daily_round["id"]), None)
+          me_row = next((item for item in (scored_round or {}).get("leaderboard", []) if item.get("isYou")), None)
+          if not scored_round or not scored_round.get("joined") or not me_row or me_row.get("score", 0) < 10:
+              raise RuntimeError(f"Closed simulated trade did not update the persistent leaderboard: {scored_round}")
           call("/api/auth/logout", "POST", {})
           print(f"PASS: live model={before.get('model')}; AC reservation 1.5; cancellation release 1.5; successful simulated execution charge 1.5; ledger/audit evidence present; test position closed; account={email}. Preview D1 only.")
           PY
