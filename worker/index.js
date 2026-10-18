@@ -970,7 +970,7 @@ async function handleApi(request, env) {
     let eligible = false;
     if (rules.prerequisite === "practice_trade") eligible = Boolean(await env.DB.prepare("SELECT id FROM trading_positions WHERE user_id=? LIMIT 1").bind(user.id).first());
     else if (rules.prerequisite === "ai_setup") eligible = Boolean(await env.DB.prepare("SELECT id FROM ai_trade_proposals WHERE user_id=? LIMIT 1").bind(user.id).first());
-    else if (rules.prerequisite === "community_challenge") eligible = Boolean(await env.DB.prepare("SELECT id FROM competition_entries WHERE user_id=? LIMIT 1").bind(user.id).first());
+    else if (rules.prerequisite === "community_challenge") eligible = Boolean(await env.DB.prepare("SELECT id FROM competition_participants WHERE user_id=? LIMIT 1").bind(user.id).first());
     else if (rules.prerequisite === "learning_complete" && typeof rules.lessonId === "string") eligible = Boolean(await env.DB.prepare("SELECT user_id FROM learning_progress WHERE user_id=? AND lesson_id=?").bind(user.id, rules.lessonId).first());
     if (!eligible) return json({ error: "Complete the required activity first. The server has not issued a reward." }, 409);
     const idempotencyKey = "mission:" + user.id + ":" + mission.id;
