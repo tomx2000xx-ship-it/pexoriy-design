@@ -58,3 +58,28 @@
 - Cloudflare confirms version 241 is deployed to 100% of traffic. This confirms deployment, not a human visual review of every screen.
 - Do not claim the new screens were visually inspected on a physical phone unless an actual browser/device review is completed.
 - Next review should focus on visible production rendering at mobile widths (360–430 px) and tablet widths; preserve this work and do not redo the UI changes during the separate D1 reconciliation phase.
+
+
+## Full action-first UX pass — 18 October 2026 (follow-up)
+
+### Direct-to-main commits
+- Mobile information architecture, dashboard balance spotlight, AI Centre removal from top-level navigation, practice-mode switch, presale discoverability, and referral activity launchpad: `75ee29e0744f27f41fb83bc9794b879c10d6714f`.
+- Mobile quick actions and active-state refinement for AI-assisted mode nested under Practice: `9aca87626dd7f0e3a45a9fbd58f6d4fba288f84a`.
+- Recorded closed-trade simulated P&L, TC allocated to open positions, and open-position count in the balance spotlight; updated the header context for AI-assisted practice: `cb7bf1f8af1283800d6e7f610ed1144adf8b0398`.
+- Balance metrics and compact mobile hero refinement: `459b86d9f90b235ea8aaa086c3150de83fbb6cfe`.
+
+### Experience changes
+- Mobile overview now leads with a large available Practice Balance and includes recorded closed-trade simulated P&L, TC allocated to open positions, open-position count, a primary Practice Trading action, Activity access, and direct AI Credit Store / PXY presale links.
+- Daily check-in and streak progress are ordered immediately after the balance. The welcome hero is compacted on mobile so it does not crowd out actionable content.
+- Removed the redundant AI Centre dashboard panel and AI Centre from primary sidebar and bottom navigation. AI-assisted practice is presented as a mode reached from the Practice Trading workspace; the Practice item remains active while that mode is open.
+- Mobile primary navigation is now Overview, Practice, Challenges, Missions, and Invite. Quick actions are Challenges, Missions, and Invite; the balance card is the main Practice Trading CTA.
+- Added a community activity launchpad on Referrals with routes to Missions, Learning, Practice, and Challenges. It explicitly distinguishes useful participation from the server-listed quests that alone count toward verified team progress/rewards.
+- Made PXY Presale Preview searchable, linked from the mobile balance spotlight, and available through Profile product resources. Presale/payment state remains unchanged.
+- Practice Trading presents a compact mode selector and prioritises the order ticket ahead of the market chart on mobile; the responsive layout reduces unnecessary scrolling.
+- Added compact recorded-performance metrics and smaller-screen adaptations at 320–430 px, plus focus/reduced-motion-aware styling.
+
+### Scope and guardrails
+- Frontend JSX/CSS only. No D1 access, migration, schema edit, ledger write, reward-rule change, trade-rule change, payment-provider change, or backend/API behavior change was performed.
+- Existing simulated-trading disclosures and server-backed trade/AI/reward gates are retained. P&L shown in the spotlight is calculated from the loaded trade-history records; it is labelled as simulated.
+- GitHub source assertions confirmed the new balance spotlight, Missions bottom-nav item, removed dashboard AI Centre card, nested AI practice label, referral activity grid, and searchable presale destination.
+- Deployment must be verified against the latest frontend commit below before reporting it live. A successful GitHub write alone is not proof of a production deployment.
