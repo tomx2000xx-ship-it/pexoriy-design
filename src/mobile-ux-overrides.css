@@ -1,0 +1,39 @@
+/* Mobile-first presentation improvements. No API, reward, or database logic. */
+@media(max-width:850px){
+.page-content{min-width:0;overflow-x:clip;padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
+.mobile-bottom-nav{min-height:62px;padding-left:max(7px,env(safe-area-inset-left));padding-right:max(7px,env(safe-area-inset-right));box-shadow:0 -8px 24px rgba(0,0,0,.18)}
+.mobile-bottom-nav button{min-height:48px;font-size:9px;line-height:1.2;-webkit-tap-highlight-color:transparent}
+.mobile-bottom-nav button svg{width:19px;height:19px}
+.mission-summary{gap:9px;margin-bottom:14px}
+.mission-summary>div{min-width:0;padding:13px;border-radius:11px}
+.mission-summary>div:first-child{grid-column:1/-1}
+.mission-summary strong,.learning-choice strong,.learning-choice small,.referral-link-box>span{overflow-wrap:anywhere}
+.mission-page-grid,.challenge-grid,.profile-page-grid{gap:11px}
+.mission-detail-card,.challenge-card,.learning-list,.learning-lesson{min-width:0}
+.mission-detail-card p,.challenge-card p,.learning-content>article p,.learning-summary{line-height:1.7}
+.mission-card-actions{width:100%;display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+.mission-card-actions .btn,.mission-detail-foot>.btn,.challenge-card .btn{min-height:42px;justify-content:center}
+.learning-layout{grid-template-columns:minmax(0,1fr);gap:12px}
+.learning-list,.learning-lesson{scroll-margin-top:14px}
+.learning-choice{min-height:58px;gap:10px;padding:12px}
+.learning-choice>span:nth-child(2){min-width:0}
+.learning-lesson h2{font-size:clamp(21px,6vw,27px);line-height:1.2}
+.learning-option{min-height:44px;padding:11px}
+}
+@media(max-width:600px){
+.page-heading h1{line-height:1.12;letter-spacing:-.035em;overflow-wrap:anywhere}
+.panel{min-width:0}
+.mission-summary>div:not(:first-child){min-height:92px}
+.challenge-hub-hero,.pyx-hero,.referral-hero{overflow:hidden}
+.challenge-quick-links{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+.challenge-quick-links .btn{min-height:42px;justify-content:center}
+}
+.learning-mobile-back{display:none}
+@media(max-width:760px){
+.learning-layout .learning-lesson{display:none}
+.learning-layout.learning-detail-open .learning-list{display:none}
+.learning-layout.learning-detail-open .learning-lesson{display:block}
+.learning-mobile-back{display:inline-flex;align-items:center;gap:8px;min-height:42px;margin:0 0 16px;padding:0 12px;border:1px solid #39402e;border-radius:9px;background:#20251a;color:var(--lime);font-size:12px;font-weight:700}
+.learning-mobile-back svg{transform:rotate(180deg)}
+}
+@media(prefers-reduced-motion:reduce){.mobile-bottom-nav *, .mission-detail-card *, .learning-choice *{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
