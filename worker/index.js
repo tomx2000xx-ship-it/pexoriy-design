@@ -997,6 +997,31 @@ async function handleApi(request, env) {
     }
   }
 
+  if (path === "/api/progress" && request.method === "GET") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const [trades, lessons, checkins, aiTrades, referrals, streak] = await Promise.all([
+      env.DB.prepare("SELECT COUNT(*) AS count FROM trading_positions WHERE user_id=? AND status='closed'").bind(user.id).first(),
+      env.DB.prepare("SELECT COUNT(*) AS count FROM learning_progress WHERE user_id=?").bind(user.id).first(),
+      env.DB.prepare("SELECT COUNT(*) AS count FROM daily_checkins WHERE user_id=? AND checkin_date>=strftime('%Y-%m-%d','now','-6 days')").bind(user.id).first(),
+      env.DB.prepare("SELECT COUNT(*) AS count FROM ai_trade_proposals WHERE user_id=? AND status='executed'").bind(user.id).first(),
+      env.DB.prepare("SELECT COUNT(*) AS count FROM referral_attributions WHERE referrer_user_id=? AND status='activated'").bind(user.id).first(),
+      env.DB.prepare("SELECT streak_days FROM daily_checkins WHERE user_id=? ORDER BY checkin_date DESC LIMIT 1").bind(user.id).first(),
+    ]);
+    const counts = { closedTrades:Number(trades?.count||0), completedLessons:Number(lessons?.count||0), checkinsLast7Days:Number(checkins?.count||0), executedAITrades:Number(aiTrades?.count||0), activatedReferrals:Number(referrals?.count||0), currentStreak:Number(streak?.streak_days||0) };
+    const xp = counts.closedTrades*25 + counts.completedLessons*100 + counts.checkinsLast7Days*10 + counts.executedAITrades*25 + counts.activatedReferrals*50;
+    const level = Math.min(50,1+Math.floor(xp/250));
+    const badges = [
+      { id:"first-trade", title:"First Practice", description:"Close your first simulated practice trade.", earned:counts.closedTrades>=1 },
+      { id:"market-learner", title:"Market Learner", description:"Complete a market-learning lesson.", earned:counts.completedLessons>=1 },
+      { id:"consistent-three", title:"Finding a Rhythm", description:"Check in on three days within the last seven days.", earned:counts.checkinsLast7Days>=3 },
+      { id:"consistent-seven", title:"Seven-Day Momentum", description:"Check in on all seven days of the current window.", earned:counts.checkinsLast7Days>=7 },
+      { id:"ai-practice", title:"AI Co-Pilot", description:"Execute an AI-assisted simulated trade.", earned:counts.executedAITrades>=1 },
+      { id:"community-builder", title:"Community Builder", description:"Activate a referred member after verification and practice.", earned:counts.activatedReferrals>=1 },
+    ];
+    return json({ xp, level, xpInLevel:level>=50?0:xp%250, xpToNextLevel:level>=50?0:250-(xp%250), maxLevel:50, progressionRule:"progress-v1", counts, badges, earnedBadges:badges.filter(badge=>badge.earned).length, totalBadges:badges.length, note:"XP and badges reflect server-verified activity. They are progression indicators, not TC, AC, PXY, cash, or competition points." });
+  }
+
   if (path === "/api/me" && request.method === "GET") {
     const user = await currentUser(request, env);
     if (!user) return json({ error: "Authentication required." }, 401);
