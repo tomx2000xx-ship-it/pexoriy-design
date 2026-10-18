@@ -111,3 +111,19 @@ Latest UI commits:
 - `fd6b08477e65c55b8b7673983f77eb02a9209d81` — compact card, trading ticket, and learning quiz styling.
 
 Production deployment list showed the latest Worker deployment on version `abede70e-6a06-4a0a-a857-a43f5486ff41` at 100% traffic, created after these commits. Automated GitHub checks were not reported for the frontend commits; the live visual review on a physical Android device remains to be completed.
+
+
+## Signature experience follow-up — custom market picker, polished quiz choices, organic growth campaigns (2026-10-18)
+
+User review identified three experience gaps. Frontend-only changes were committed directly to `main`:
+
+- Replaced the browser-native asset `select` with a Pexoriy-styled market picker. Its custom popover shows market icon, name, ticker, quote, percent move, active selection state, and keyboard/focus styling; asset selection stays inside the order ticket.
+- Refined the answer options across the Learning Center: custom circular radio controls, a clear selected-state treatment, more polished option rows, focus-visible styling, and consistent quiz presentation for all lessons.
+- Replaced generic referral-page activity shortcuts with concrete organic community growth campaigns: a tracked personal-invite squad sprint, a 30-second product demo creator challenge, a learning-to-practice story prompt, and a community onboarding hour. Campaign briefs are designed to help members coordinate and share useful, honest product content. They explicitly avoid spam and claims of real trading profit.
+- Kept tracked referral registration/activation counts separate from campaign participation. The UI states that only server-listed quests/verified referrals count for recorded progress or rewards; no new reward logic or backend campaign tracking was invented.
+
+Commits:
+- `9768a77d628f2be7320e218b81b1b3d2072e1440` — custom asset picker and community growth campaigns.
+- `aa6a03752b1088eee92b5f35560a667be240259a` — custom picker, quiz-choice and campaign card styling.
+
+Scope: `src/App.jsx` and `src/App.css` only, plus this log. No D1/database reads or writes, schema changes, migrations, API endpoints, payment behavior, or reward rules were changed. Production deployment must be checked against these latest commits before claiming they are live. Physical Android visual QA remains separate from deployment confirmation.
