@@ -461,6 +461,27 @@ test('public landing exposes the PXY pre-sale page without requiring sign-in', a
 });
 
 
+test('Invite & Grow section navigation switches content immediately and campaign CTAs stay in the right destinations', async ({ page }) => {
+  await enterApp(page);
+  await goTo(page, 'Invite & Grow');
+  const sections = page.locator('.invite-grow-nav');
+  await sections.getByRole('button', { name: 'Community feed', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Share something useful.' })).toBeVisible();
+  await sections.getByRole('button', { name: 'Group chats', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Help your own community move forward.' })).toBeVisible();
+  await sections.getByRole('button', { name: 'Growth campaigns', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Build trust before you grow numbers.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Practice together. Grow together.' })).toBeVisible();
+  await page.getByRole('button', { name: /Coordinate in group chat/i }).click();
+  await expect(page.getByRole('heading', { name: 'Help your own community move forward.' })).toBeVisible();
+  await sections.getByRole('button', { name: 'Growth campaigns', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Build trust before you grow numbers.' })).toBeVisible();
+  await page.getByRole('button', { name: /Open referrals/i }).click();
+  await expect(page.getByRole('heading', { name: /Invite friends\. Grow together\./ })).toBeVisible();
+  await sections.getByRole('button', { name: 'Weekly report', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Progress worth sharing.' })).toBeVisible();
+});
+
 test('referral progress is not fabricated in demo mode', async ({ page }) => {
   await enterApp(page);
   await goTo(page, 'Invite & Grow');
