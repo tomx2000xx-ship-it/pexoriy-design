@@ -1336,3 +1336,49 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .mobile-balance-item strong,.mobile-progress-item strong{font-size:11px}
   .mobile-bottom-nav button span{font-size:8px}
 }
+
+
+/* Persistent competition and shared-growth modules */
+.challenge-card-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:14px}
+.challenge-card-actions .btn{flex:1;min-width:150px;justify-content:center}
+.challenge-my-score{display:flex;flex-direction:column;gap:4px;padding:12px;margin-top:14px;border:1px solid rgba(183,243,74,.2);border-radius:12px;background:rgba(183,243,74,.045)}
+.challenge-my-score>span{font-size:9px;font-weight:800;letter-spacing:1px;color:var(--muted)}
+.challenge-my-score>strong{font-size:20px;color:var(--lime)}
+.challenge-my-score>small{font-size:11px;line-height:1.5;color:var(--muted)}
+.challenge-leaderboard{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.challenge-leaderboard>strong{display:block;margin-bottom:8px;font-size:12px}
+.challenge-leaderboard-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:11px}
+.challenge-leaderboard-row span{min-width:0;overflow-wrap:anywhere;color:#e5e8df}
+.challenge-leaderboard-row strong{white-space:nowrap;color:var(--lime)}
+.referral-community-pool{margin:24px 0;padding:20px}
+.referral-pool-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:20px}
+.referral-pool-heading h2{margin:8px 0;font-size:clamp(20px,3vw,27px);line-height:1.15}
+.referral-pool-heading p{max-width:620px;color:var(--muted);font-size:13px;line-height:1.6}
+.referral-pool-amount{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.referral-pool-amount strong{font-size:clamp(24px,4vw,34px);letter-spacing:-1px;color:var(--lime)}
+.referral-pool-amount span{font-size:11px;color:var(--muted)}
+.referral-pool-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0}
+.referral-pool-stats>div{display:flex;flex-direction:column;gap:6px;padding:12px;border:1px solid var(--line);border-radius:11px;background:#12140f}
+.referral-pool-stats span{font-size:10px;color:var(--muted);line-height:1.35}
+.referral-pool-stats strong{font-size:15px;overflow-wrap:anywhere}
+.referral-pool-rule{font-size:11px;line-height:1.65;color:var(--muted)}
+.referral-pool-awards{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.referral-pool-awards>strong{font-size:13px}
+.referral-pool-award-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.referral-pool-award-row>div{display:flex;flex-direction:column;gap:4px}
+.referral-pool-award-row>div>strong{font-size:14px;color:var(--lime)}
+.referral-pool-award-row small{font-size:10px;color:var(--muted)}
+.referral-award-paid{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--lime)}
+@media(max-width:760px){
+  .challenge-card-actions{align-items:stretch;flex-direction:column}
+  .challenge-card-actions .btn{width:100%;min-width:0}
+  .challenge-card-actions .text-link{justify-content:center}
+  .challenge-my-score{padding:10px}
+  .referral-community-pool{padding:15px;margin:18px 0}
+  .referral-pool-heading{flex-direction:column;gap:8px}
+  .referral-pool-amount{align-items:flex-start;flex-direction:row;gap:8px}
+  .referral-pool-stats{grid-template-columns:1fr;gap:7px}
+  .referral-pool-stats>div{padding:10px;flex-direction:row;align-items:center;justify-content:space-between}
+  .referral-pool-stats strong{text-align:right}
+  .referral-pool-award-row{align-items:flex-start;flex-direction:column}
+}
