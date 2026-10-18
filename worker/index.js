@@ -302,6 +302,93 @@ async function activateReferralForUser(env, user, requestId) {
   return { status: "activated", rewardStatus: "paid", referrerRewardTC: 250, referredRewardTC: 100 };
 }
 
+
+const COMPETITION_FORMATS = [
+  { slug: "daily-sprint", title: "24h Sprint", durationMs: 24 * 60 * 60 * 1000, prizePoolPxy: 5000 },
+  { slug: "consistency-league", title: "7-day Consistency League", durationMs: 7 * 24 * 60 * 60 * 1000, prizePoolPxy: 12000 },
+  { slug: "community-challenge", title: "14-day Challenge", durationMs: 14 * 24 * 60 * 60 * 1000, prizePoolPxy: 25000 },
+];
+
+function periodForCompetition(format, now = new Date()) {
+  const end = new Date(now);
+  let start;
+  if (format.slug === "daily-sprint") {
+    start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  } else if (format.slug === "consistency-league") {
+    const day = now.getUTCDay() || 7;
+    start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - day + 1));
+  } else {
+    const dayIndex = Math.floor(now.getTime() / 86400000);
+    start = new Date(Math.floor(dayIndex / 14) * 14 * 86400000);
+  }
+  const periodEnd = new Date(start.getTime() + format.durationMs);
+  return { start: start.toISOString(), end: periodEnd.toISOString(), id: format.slug + "-" + start.toISOString().slice(0, 10) };
+}
+
+async function ensureCompetitionRounds(env, now = new Date()) {
+  const rounds = [];
+  for (const format of COMPETITION_FORMATS) {
+    const period = periodForCompetition(format, now);
+    await env.DB.prepare("INSERT OR IGNORE INTO competition_rounds (id,slug,title,period_start,period_end,prize_pool_pxy,status,payouts_enabled) VALUES (?,?,?,?,?,?,'open',0)")
+      .bind(period.id, format.slug, format.title, period.start, period.end, format.prizePoolPxy).run();
+    const round = await env.DB.prepare("SELECT * FROM competition_rounds WHERE id=?").bind(period.id).first();
+    if (round) rounds.push(round);
+  }
+  await env.DB.prepare("UPDATE competition_rounds SET status='completed' WHERE status='open' AND period_end<=?").bind(now.toISOString()).run();
+  return rounds;
+}
+
+async function refreshCompetitionScore(env, round, userId, now = new Date()) {
+  const [trades, lessons, checkins] = await Promise.all([
+    env.DB.prepare("SELECT COUNT(*) AS count FROM trading_positions WHERE user_id=? AND status='closed' AND closed_at>=? AND closed_at<?")
+      .bind(userId, round.period_start, round.period_end).first(),
+    env.DB.prepare("SELECT COUNT(*) AS count FROM learning_progress WHERE user_id=? AND completed_at>=? AND completed_at<?")
+      .bind(userId, round.period_start, round.period_end).first(),
+    env.DB.prepare("SELECT COUNT(*) AS count FROM daily_checkins WHERE user_id=? AND checkin_date>=? AND checkin_date<?")
+      .bind(userId, round.period_start.slice(0, 10), round.period_end.slice(0, 10)).first(),
+  ]);
+  const tradeCount = Math.min(5, Number(trades?.count || 0));
+  const lessonCount = Math.min(5, Number(lessons?.count || 0));
+  const checkinCount = Math.min(Math.ceil((Date.parse(round.period_end) - Date.parse(round.period_start)) / 86400000), Number(checkins?.count || 0));
+  const score = tradeCount * 10 + lessonCount * 15 + checkinCount * 5;
+  await env.DB.prepare("UPDATE competition_participants SET score_points=?,verified_trades=?,completed_lessons=?,daily_checkins=?,last_scored_at=? WHERE round_id=? AND user_id=?")
+    .bind(score, tradeCount, lessonCount, checkinCount, now.toISOString(), round.id, userId).run();
+  return { score, tradeCount, lessonCount, checkinCount };
+}
+
+async function ensureReferralPoolRound(env, now = new Date()) {
+  const day = now.getUTCDay() || 7;
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - day + 1));
+  const end = new Date(start.getTime() + 7 * 86400000);
+  const id = "referral-pool-" + start.toISOString().slice(0, 10);
+  await env.DB.prepare("INSERT OR IGNORE INTO referral_pool_rounds (id,period_start,period_end,pool_tc,status) VALUES (?,?,?,10000,'open')")
+    .bind(id, start.toISOString(), end.toISOString()).run();
+  return env.DB.prepare("SELECT * FROM referral_pool_rounds WHERE id=?").bind(id).first();
+}
+
+async function finalizeClosedReferralPools(env, now = new Date()) {
+  const closed = await env.DB.prepare("SELECT * FROM referral_pool_rounds WHERE status='open' AND period_end<=? ORDER BY period_start")
+    .bind(now.toISOString()).all();
+  for (const round of closed.results || []) {
+    const rows = await env.DB.prepare("SELECT referrer_user_id AS user_id, COUNT(*) AS weight FROM referral_attributions WHERE status='activated' AND activated_at>=? AND activated_at<? GROUP BY referrer_user_id ORDER BY referrer_user_id")
+      .bind(round.period_start, round.period_end).all();
+    const weights = rows.results || [];
+    const totalWeight = weights.reduce((sum, row) => sum + Number(row.weight || 0), 0);
+    const awards = weights.map(row => {
+      const exact = totalWeight ? Number(round.pool_tc) * Number(row.weight) / totalWeight : 0;
+      return { userId: row.user_id, weight: Number(row.weight), amount: Math.floor(exact), remainder: exact - Math.floor(exact) };
+    });
+    let leftover = totalWeight ? Number(round.pool_tc) - awards.reduce((sum, award) => sum + award.amount, 0) : 0;
+    awards.sort((a, b) => b.remainder - a.remainder || a.userId.localeCompare(b.userId));
+    for (let i = 0; i < awards.length && leftover > 0; i++, leftover--) awards[i].amount++;
+    const statements = awards.map(award => env.DB.prepare("INSERT OR IGNORE INTO referral_pool_awards (id,round_id,user_id,verified_activations,reward_tc,status) VALUES (?,?,?,?,?,'available')")
+      .bind(crypto.randomUUID(), round.id, award.userId, award.weight, award.amount));
+    statements.push(env.DB.prepare("UPDATE referral_pool_rounds SET status='finalized',total_activations=?,finalized_at=? WHERE id=? AND status='open'")
+      .bind(totalWeight, now.toISOString(), round.id));
+    await env.DB.batch(statements);
+  }
+}
+
 async function handleApi(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
