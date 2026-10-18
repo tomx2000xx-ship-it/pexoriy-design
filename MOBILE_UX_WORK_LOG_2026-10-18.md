@@ -1,29 +1,23 @@
 # Mobile UX work log — 2026-10-18
 
-## Scope and safety
-- Frontend-only work is isolated on `scope/mobile-rewards-competition-20261018`.
-- No D1 reads/writes, schema changes, migrations, payment ledgers, or reward settlement changes were made in this session.
-- No production deployment was attempted. Do not merge/promote until the exact final commit passes validation and the production binding is verified.
+## Scope
+- Frontend-only changes on `scope/mobile-rewards-competition-20261018`.
+- No live D1 reads/writes or database migration was intentionally performed.
+- No production deployment was attempted.
 
-## Completed frontend changes
-- Added `src/mobile-ux-overrides.css` and imported it from `src/main.jsx`.
-- Responsive refinements include safe-area-aware page padding, more accessible mobile bottom-navigation touch targets, mission summary/card spacing, single-column mission action buttons, lesson-list readability/touch targets, referral-link wrapping, and reduced-motion handling.
-- Implemented a dedicated mobile Learning Center detail state: selecting a lesson opens the lesson view, the list is hidden while reading, and an explicit “All lessons” back control returns to lesson selection. This is presentation/navigation only; quiz and reward requests remain unchanged.
-- Inspected the scoped branch's current JSX: the bottom navigation already uses Overview, Practice Trading, Missions & Rewards, Community Challenges, and Referrals; AI Trading remains a separate screen and the existing Practice Trading AI bridge remains in place. Those items were already present in this branch and were not rewritten in this pass.
+## Completed
+- Added `src/mobile-ux-overrides.css` and imported it in `src/main.jsx`.
+- Improved mobile spacing, tap targets, mission card layout, lesson readability, safe-area padding, and reduced-motion handling.
+- Updated `src/App.jsx` so mobile lesson selection opens a dedicated lesson view with an “All lessons” back control.
+- Existing bottom navigation already includes Missions & Rewards and Practice Trading on this branch.
+- Updated `.github/workflows/pexoriy-validation.yml`: preview-only validation steps require the commit message marker `[db-validation]`, preventing routine frontend commits from intentionally invoking those checks.
 
-## Changed files in this session
-- `src/mobile-ux-overrides.css` — new mobile UX stylesheet plus dedicated lesson-view rules.
-- `src/main.jsx` — imports the new stylesheet.
-- `src/App.jsx` — adds mobile lesson detail/back navigation state.
-- `MOBILE_UX_WORK_LOG_2026-10-18.md` — this handover log.
+## Validation
+- Run `39121635577` reported dependency install, Worker syntax check, SQLite migration validation, unit tests, production build, and Playwright setup as successful. The desktop/mobile Playwright step was still running at last check.
+- Run `39121667304` was queued for the workflow guard commit; confirm its outcome before calling the work fully validated.
+- No production deployment or live-site visual verification has been claimed.
 
-## Validation status
-- GitHub writes succeeded on the scoped branch.
-- GitHub Actions validation was triggered by the commits. The first run for earlier CSS-only commit `dbf560074346568989968f2265615fe46f99c6fc` was observed as in progress; it does not validate the later Learning Center changes.
-- Validation of the latest commit, build, unit tests, and mobile browser checks must be confirmed from the matching run before marking this complete.
-- No claim is made that these changes are deployed or visually verified on the live site.
-
-## Tomorrow's database handover
-- Do not repeat the completed stylesheet import, responsive CSS pass, or mobile lesson detail/back navigation without checking this log and current branch first.
-- Resume D1 usage/schema/migration reconciliation from `CHECKPOINT_2026-10-18_MOBILE_COMPETITION_REFERRALS.md`.
-- Preview database retirement/consolidation remains pending. Do not migrate or delete data until schema, migration history, dependencies, and necessary data have been compared.
+## Tomorrow
+- Do not redo the stylesheet import, responsive CSS pass, or mobile lesson detail/back navigation without checking this log and the current branch first.
+- Resume database usage/schema reconciliation from `CHECKPOINT_2026-10-18_MOBILE_COMPETITION_REFERRALS.md`.
+- Do not consolidate or delete the preview database until schema, migration history, dependencies, and any needed data have been compared.
