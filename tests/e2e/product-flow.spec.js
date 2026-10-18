@@ -425,13 +425,22 @@ test('mobile layout stays within the viewport on Practice and AI Trading', async
 });
 
 
-test('community challenge preview does not pretend to save entries or pay prizes', async ({ page }) => {
+test('public competition leaderboard loads while PXY prizes remain gated', async ({ page }) => {
+  const now = new Date();
+  await page.route('**/api/competitions', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ rounds: [
+    { id: 'daily-sprint-2026-10-18', slug: 'daily-sprint', title: '24h Sprint', startsAt: now.toISOString(), endsAt: new Date(now.getTime()+86400000).toISOString(), prizePoolPXY: 5000, status: 'open', joined: false, participantCount: 1, leaderboard: [{ rank: 1, displayName: 'Community Trader', score: 20, trades: 2, lessons: 0, checkins: 0, isYou: false }] },
+    { id: 'consistency-league-2026-10-12', slug: 'consistency-league', title: '7-day Consistency League', startsAt: now.toISOString(), endsAt: new Date(now.getTime()+7*86400000).toISOString(), prizePoolPXY: 12000, status: 'open', joined: false, participantCount: 0, leaderboard: [] },
+    { id: 'community-challenge-2026-10-12', slug: 'community-challenge', title: '14-day Challenge', startsAt: now.toISOString(), endsAt: new Date(now.getTime()+14*86400000).toISOString(), prizePoolPXY: 25000, status: 'open', joined: false, participantCount: 0, leaderboard: [] }
+  ], pxyIssuanceEnabled: false }) }));
   await enterApp(page, '/', 'demo', 'demo');
   await goTo(page, 'Community Challenges');
   await expect(page.getByRole('heading', { name: /Compete together/ })).toBeVisible();
-  await expect(page.getByText(/Entries, ranking, and PXY settlement remain disabled/)).toBeVisible();
-  await expect(page.getByText('Entry opens after scoring, reserve, and launch checks are complete.').first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /Review eligibility/ }).first()).toBeVisible();
+  await expect(page.getByText(/PXY prize allocations are planned, not payable/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Sign in to join/ }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /Scoring & dates/ }).first()).toBeVisible();
+  await page.getByRole('button', { name: /Scoring & dates/ }).first().click();
+  await expect(page.getByText(/Verified participation scoring/)).toBeVisible();
+  await expect(page.getByText('Community Trader')).toBeVisible();
 });
 
 test('learning and presale preview are discoverable without enabling a sale', async ({ page }) => {
