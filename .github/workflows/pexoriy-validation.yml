@@ -144,6 +144,20 @@ jobs:
           PY
           for endpoint in /api/health /api/markets /api/competitions /api/pxy/issuance-status /api/payments/solana/config /api/payments/ton/config /api/ai/config; do check_code "$endpoint" 200; done
           for endpoint in /api/learning /api/referrals /api/checkins /api/ai/activity /api/competitions/join /api/referrals/pool/claim /api/payments/solana/orders /api/payments/ton/orders; do if [ "$endpoint" = "/api/competitions/join" ] || [ "$endpoint" = "/api/referrals/pool/claim" ]; then code="$(curl --connect-timeout 10 --max-time 25 -sS -X POST -H "content-type: application/json" -H "Origin: $base" -H "Sec-Fetch-Site: same-origin" -d "{}" -o "/tmp/pexoriy-candidate-$(echo "$endpoint" | tr '/' '_').json" -w '%{http_code}' "$base$endpoint" || true)"; echo "HTTP evidence: POST $endpoint -> $code (expected 401)"; if [ "$code" != "401" ]; then cat "/tmp/pexoriy-candidate-$(echo "$endpoint" | tr '/' '_').json" || true; exit 1; fi; else check_code "$endpoint" 401; fi; done
+          python3 - <<'PY'
+          import json
+          def read(name):
+              with open("/tmp/pexoriy-candidate-" + name + ".json", encoding="utf-8") as f: return json.load(f)
+          sol = read("_api_payments_solana_config")
+          ton = read("_api_payments_ton_config")
+          gate = read("_api_pxy_issuance-status")
+          ai = read("_api_ai_config")
+          assert sol.get("enabled") is True and sol.get("network") == "solana-mainnet", sol
+          assert ton.get("enabled") is True and ton.get("network") == "ton-mainnet" and ton.get("asset") == "GRAM", ton
+          assert gate.get("enabled") is False and gate.get("status") == "gated", gate
+          assert ai.get("providerConfigured") is True, ai
+          print("Provider/gate evidence: SOL mainnet receiver configured; native GRAM/TON mainnet receiver configured; PXY issuance gated; Workers AI binding configured.")
+          PY
           echo "Candidate HTTP smoke checks passed with explicit status-code evidence."
       - name: Live Workers AI inference and AC reserve-release-charge acceptance (isolated preview only)
         if: github.ref == 'refs/heads/scope/mobile-rewards-competition-20261018'
@@ -236,6 +250,20 @@ jobs:
           assert status.get("saleEnabled") is False, status
           assert status.get("launchState") == "disabled", status
           print("Production presale safety evidence: previewEnabled=true, saleEnabled=false, launchState=disabled.")
+          PY
+          python3 - <<'PY'
+          import json
+          def read(name):
+              with open("/tmp/pexoriy-production-" + name + ".json", encoding="utf-8") as f: return json.load(f)
+          sol = read("_api_payments_solana_config")
+          ton = read("_api_payments_ton_config")
+          gate = read("_api_pxy_issuance-status")
+          ai = read("_api_ai_config")
+          assert sol.get("enabled") is True and sol.get("network") == "solana-mainnet", sol
+          assert ton.get("enabled") is True and ton.get("network") == "ton-mainnet" and ton.get("asset") == "GRAM", ton
+          assert gate.get("enabled") is False and gate.get("status") == "gated", gate
+          assert ai.get("providerConfigured") is True, ai
+          print("Production provider/gate evidence: SOL mainnet receiver configured; native GRAM/TON mainnet receiver configured; PXY issuance gated; Workers AI binding configured.")
           PY
           echo "Production HTTPS smoke checks passed with explicit status-code evidence."
       - name: Upload Playwright diagnostics on failure
