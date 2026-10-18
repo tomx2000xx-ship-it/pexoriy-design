@@ -1466,3 +1466,17 @@ button, a { -webkit-tap-highlight-color: transparent; }
 @media(max-width:900px){.community-hub-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.community-cycle-card{grid-template-columns:1fr}.community-countdown{justify-content:start}.community-countdown small{text-align:left}.community-hub-mark{flex-basis:130px;min-height:130px}}
 @media(max-width:640px){.community-hub-page{gap:12px}.community-hub-hero{align-items:flex-start;padding:17px;gap:12px}.community-hub-hero h1{font-size:27px}.community-hub-hero p{font-size:11px}.community-hub-mark{display:none}.community-hub-actions{gap:7px}.community-hub-actions .btn{font-size:10px;min-height:38px}.community-hub-tabs{margin:0 -2px}.community-hub-tabs button{padding:10px 11px;font-size:10px}.community-cycle-card{padding:16px}.community-cycle-copy h2{font-size:18px}.community-countdown{gap:5px}.community-countdown>div{min-width:0;flex:1;padding:9px 3px}.community-countdown strong{font-size:19px}.community-countdown>i{padding-top:15px}.community-hub-stat-grid{gap:8px}.community-hub-stat-grid article{padding:12px}.community-hub-stat-grid article>strong{font-size:16px}.community-hub-two-col,.community-report-layout,.community-campaign-grid{grid-template-columns:minmax(0,1fr)}.community-panel{padding:15px}.community-panel h2,.community-campaign-intro h2{font-size:18px}.community-panel-actions{flex-direction:column}.community-panel-actions .btn{width:100%;justify-content:center}.community-report-metrics{gap:7px}.community-report-metrics>div{padding:10px}.community-trade-actions{flex-direction:column}.community-trade-actions .btn{width:100%}.community-hub-footer-note{font-size:9px}}
 @media(prefers-reduced-motion:reduce){.community-hub-tabs button{scroll-behavior:auto}}
+
+.presale-inline-note{margin-top:14px!important;color:#c3ccba!important;font-size:11px!important;line-height:1.65!important}
+.presale-sale-cta{margin-top:17px;padding-top:15px;border-top:1px solid rgba(255,255,255,.09)}
+.presale-sale-cta>strong{display:block;color:#e8eddf;font-size:12px}
+.presale-sale-cta p{margin:7px 0 12px;color:#a3ad98;font-size:10px;line-height:1.65}
+.presale-sale-cta .btn{width:100%;justify-content:center}
+.presale-benefit-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.presale-benefit-grid article{padding:17px;border:1px solid rgba(255,255,255,.08);border-radius:13px;background:#171a15}
+.presale-benefit-grid article>svg{color:#b7f34a}
+.presale-benefit-grid h3{margin:10px 0 7px;font-size:13px}
+.presale-benefit-grid p{margin:0;color:#a4ad9a;font-size:10px;line-height:1.7}
+.community-hub-card-only .community-campaign-intro{padding:0 0 3px}
+.community-hub-card-only .community-trade-card-panel{max-width:760px}
+@media(max-width:640px){.presale-benefit-grid{grid-template-columns:minmax(0,1fr)}}
