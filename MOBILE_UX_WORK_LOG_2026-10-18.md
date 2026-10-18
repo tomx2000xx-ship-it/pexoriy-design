@@ -92,3 +92,22 @@
 - Active Worker version: `2e418ac9-622a-4c7c-ab83-b71549391b53` (version 251), serving 100% of production traffic.
 - Cloudflare version metadata confirms the existing production D1 binding remains `pexoriy-core` / `3add741b-bda8-4f47-b857-538ff9a1dae8`. No database changes were performed.
 - Source assertions were re-run against the latest GitHub files. Cloudflare deployment and binding metadata were verified. A full physical-device visual pass and an independently accessible public HTTP smoke test remain unverified in this session; do not claim otherwise.
+
+
+## Follow-up refinement — compact cards, unified trade ticket, and lesson quizzes (2026-10-18)
+
+User review requested more disciplined card sizing and a more credible trading/learning workflow. UI-only changes were committed directly to `main`:
+
+- Reduced the mobile overview practice-balance spotlight: smaller balance type, less padding, compact metrics, and less decorative emphasis.
+- Rebuilt the Practice Trading balance into a trading-account summary showing available TC, TC allocated to open positions, open-position count, and closed-trade simulated P&L.
+- Removed the separate “Choose an asset to trade” panel. Asset selection now sits inside the trade ticket, alongside direction and TC allocation, so market selection and setup are one workflow. Market chart remains separate.
+- Reworked demo Missions & Rewards cards with distinct task descriptions, explicit reward previews/status, and acid-lime action buttons. The community task is titled “Join a community challenge,” not generic “Join the community.”
+- Added inline knowledge checks directly after lesson content, including short quizzes for the five preview lessons. Demo scores are local-only and never issue TC. If a signed-in lesson lacks server-configured quiz questions, the UI clearly labels its fallback quiz as preview-only and does not mark it server-complete or pay a reward.
+- No database, schema, migration, reward endpoint, or trading rules were changed. Server-verified quiz completion/reward requires configured server-side questions.
+
+Latest UI commits:
+- `4637159576b9b389f6f22b645e281e3d155028d7` — compact balance, trading account card, asset selector in ticket, mission CTA/reward clarity.
+- `842bc1f93f2c48e05871f4e89537d2fb3afb15cd` — inline lesson quizzes and verified-reward distinctions.
+- `fd6b08477e65c55b8b7673983f77eb02a9209d81` — compact card, trading ticket, and learning quiz styling.
+
+Production deployment list showed the latest Worker deployment on version `abede70e-6a06-4a0a-a857-a43f5486ff41` at 100% traffic, created after these commits. Automated GitHub checks were not reported for the frontend commits; the live visual review on a physical Android device remains to be completed.
