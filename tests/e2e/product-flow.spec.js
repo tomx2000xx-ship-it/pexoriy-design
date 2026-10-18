@@ -26,7 +26,12 @@ async function goTo(page, label) {
     await page.locator('.topbar').getByRole('button', { name: 'Activity', exact: true }).click();
     return;
   }
-  const mobileLabels = { 'Practice Trading': 'Practice', 'AI Trading': 'AI Centre', 'Community Challenges': 'Challenges', 'Referrals': 'Invite' };
+  const mobileLabels = { 'Practice Trading': 'Practice', 'Missions & Rewards': 'Missions', 'Community Challenges': 'Challenges', 'Referrals': 'Invite' };
+  if (mobile && label === 'AI Trading') {
+    await page.locator('.menu-button').click();
+    await page.locator('.sidebar').getByRole('button', { name: label, exact: true }).click();
+    return;
+  }
   if (mobile && ['Learning Center', 'PXY Presale Preview'].includes(label)) {
     await page.locator('.menu-button').click();
     await page.locator('.sidebar').getByRole('button', { name: label, exact: true }).click();
@@ -508,4 +513,17 @@ test('presale preview never appears live without a verified purchase flow', asyn
   await expect(page.getByText('Activation flag set; review required')).toBeVisible();
   await expect(page.getByText('Disabled')).toBeVisible();
   await expect(page.getByRole('button', { name: /Buy PXY|Purchase tokens|Connect wallet/i })).toHaveCount(0);
+});
+
+
+test('mobile users see balances and mission progress immediately, with missions in bottom navigation', async ({ page, isMobile }) => {
+  test.skip(!isMobile, 'Mobile-specific navigation check');
+  await enterApp(page);
+  const strip = page.getByRole('region', { name: 'Your balances and progress' });
+  await expect(strip.getByText('TC balance')).toBeVisible();
+  await expect(strip.getByText('AI Credits')).toBeVisible();
+  await expect(strip.getByText('PXY', { exact: true })).toBeVisible();
+  await expect(page.locator('.mobile-bottom-nav').getByRole('button', { name: 'Missions', exact: true })).toBeVisible();
+  await page.locator('.mobile-bottom-nav').getByRole('button', { name: 'Missions', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /Every action moves you forward/i })).toBeVisible();
 });
