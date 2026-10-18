@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pexoriy-design",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-10-16",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "pexoriy-core",
+      "database_id": "3add741b-bda8-4f47-b857-538ff9a1dae8"
+    }
+  ],
+  "send_email": [
+    { "name": "EMAIL" }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "ai": {
+    "binding": "AI"
+  }
+}
