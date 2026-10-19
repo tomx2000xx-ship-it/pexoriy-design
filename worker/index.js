@@ -972,12 +972,12 @@ async function handleApi(request, env) {
     const body=await readJson(request);
     const packId=typeof body?.packId==="string"?body.packId.trim():"";
     const title=typeof body?.title==="string"?body.title.trim():"";
-    const price=Number(body?.priceGramAtoms),credits=Number(body?.aiCredits),pxy=Number(body?.pxyAmount||0);
-    if(!/^[a-z0-9][a-z0-9_-]{2,39}$/.test(packId)||!title||title.length>80||!Number.isSafeInteger(price)||price<1||!Number.isSafeInteger(credits)||credits<0||!Number.isSafeInteger(pxy)||pxy<0||pxy>50000)return json({error:"Invalid pack settings. PXY per pack must be between 0 and 50,000."},400);
+    const price=Number(body?.priceGramAtoms),usdCents=Number(body?.usdEquivalentCents),credits=Number(body?.aiCredits),pxy=Number(body?.pxyAmount||0);
+    if(!/^[a-z0-9][a-z0-9_-]{2,39}$/.test(packId)||!title||title.length>80||!Number.isSafeInteger(price)||price<1||!Number.isSafeInteger(usdCents)||usdCents<1||!Number.isSafeInteger(credits)||credits<0||!Number.isSafeInteger(pxy)||pxy<0||pxy>50000)return json({error:"Invalid pack settings. Provide GRAM price, USD reference value, AI Credits, and PXY between 0 and 50,000."},400);
     const existing=await env.DB.prepare("SELECT pack_id FROM pxy_pack_catalog WHERE pack_id=?").bind(packId).first();
-    if(existing)await env.DB.prepare("UPDATE pxy_pack_catalog SET title=?,price_gram_atoms=?,ai_credits=?,pxy_amount=?,active=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE pack_id=?").bind(title,price,credits,pxy,body.active===false?0:1,packId).run();
-    else await env.DB.prepare("INSERT INTO pxy_pack_catalog(pack_id,title,price_gram_atoms,ai_credits,pxy_amount,active) VALUES (?,?,?,?,?,?)").bind(packId,title,price,credits,pxy,body.active===false?0:1).run();
-    await appendAudit(env,{actorUserId:user.id,eventType:"pxy_pack.configured",entityType:"pxy_pack",entityId:packId,requestId,details:{priceGramAtoms:price,aiCredits:credits,pxyAmount:pxy,active:body.active!==false}});
+    if(existing)await env.DB.prepare("UPDATE pxy_pack_catalog SET title=?,price_gram_atoms=?,usd_equivalent_cents=?,ai_credits=?,pxy_amount=?,active=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE pack_id=?").bind(title,price,usdCents,credits,pxy,body.active===false?0:1,packId).run();
+    else await env.DB.prepare("INSERT INTO pxy_pack_catalog(pack_id,title,price_gram_atoms,usd_equivalent_cents,ai_credits,pxy_amount,active) VALUES (?,?,?,?,?,?,?)").bind(packId,title,price,usdCents,credits,pxy,body.active===false?0:1).run();
+    await appendAudit(env,{actorUserId:user.id,eventType:"pxy_pack.configured",entityType:"pxy_pack",entityId:packId,requestId,details:{priceGramAtoms:price,usdEquivalentCents:usdCents,aiCredits:credits,pxyAmount:pxy,active:body.active!==false}});
     return json({saved:true,packId,issuanceEnabled:false,message:"Pack configuration saved. PXY issuance remains separately gated."});
   }
 
@@ -1013,12 +1013,15 @@ async function handleApi(request, env) {
     const gate=await env.DB.prepare("SELECT issuance_enabled,reserve_verified,launch_approved,approval_reference FROM pxy_pack_reserve WHERE id=1").first();
     const globalGate=await env.DB.prepare("SELECT issuance_enabled,reserves_verified,launch_approved,approval_reference FROM pxy_issuance_controls WHERE id=1").first();
     if(!gate?.issuance_enabled||!gate?.reserve_verified||!gate?.launch_approved||!gate?.approval_reference||!globalGate?.issuance_enabled||!globalGate?.reserves_verified||!globalGate?.launch_approved||!globalGate?.approval_reference)return json({error:"PXY issuance is locked until reserve and launch safeguards are approved."},423);
-    const prior=await env.DB.prepare("SELECT id,status,pxy_amount FROM pxy_pack_issuances WHERE payment_order_id=?").bind(orderId).first();
+    const prior=await env.DB.prepare("SELECT id,status,pxy_amount,pack_id,user_id FROM pxy_pack_issuances WHERE payment_order_id=?").bind(orderId).first();
     if(prior?.status==="issued")return json({status:"issued",issuedPxy:Number(prior.pxy_amount),duplicate:true});
-    if(prior)return json({status:"reserved",issuedPxy:0,duplicate:true,message:"Pack allocation is reserved and needs safe settlement retry."},202);
-    const issuanceId=crypto.randomUUID();
-    try{await env.DB.prepare("INSERT INTO pxy_pack_issuances(id,pack_id,user_id,payment_order_id,pxy_amount,status) VALUES (?,?,?,?,?,'reserved')").bind(issuanceId,packId,user.id,orderId,Number(pack.pxy_amount)).run();}
-    catch(error){const latest=await env.DB.prepare("SELECT id,status,pxy_amount FROM pxy_pack_issuances WHERE payment_order_id=?").bind(orderId).first();if(latest?.status==="issued")return json({status:"issued",issuedPxy:Number(latest.pxy_amount),duplicate:true});return json({error:String(error?.message||"PXY reserve cap or allocation conflict.").includes("PXY_PACK_RESERVE_CAP_EXCEEDED")?"The 50,000 PXY pack reserve is fully reserved.":"This pack allocation could not be reserved."},409);}
+    if(prior&&prior.status!=="reserved")return json({error:"This pack allocation is under review and cannot be issued automatically."},409);
+    if(prior&&(prior.pack_id!==packId||prior.user_id!==user.id||Number(prior.pxy_amount)!==Number(pack.pxy_amount)))return json({error:"The existing pack reservation does not match this pack configuration."},409);
+    const issuanceId=prior?.id||crypto.randomUUID();
+    if(!prior){
+      try{await env.DB.prepare("INSERT INTO pxy_pack_issuances(id,pack_id,user_id,payment_order_id,pxy_amount,status) VALUES (?,?,?,?,?,'reserved')").bind(issuanceId,packId,user.id,orderId,Number(pack.pxy_amount)).run();}
+      catch(error){const latest=await env.DB.prepare("SELECT id,status,pxy_amount FROM pxy_pack_issuances WHERE payment_order_id=?").bind(orderId).first();if(latest?.status==="issued")return json({status:"issued",issuedPxy:Number(latest.pxy_amount),duplicate:true});return json({error:String(error?.message||"PXY reserve cap or allocation conflict.").includes("PXY_PACK_RESERVE_CAP_EXCEEDED")?"The 50,000 PXY pack reserve is fully reserved.":"This pack allocation could not be reserved."},409);}
+    }
     let ledger;
     try{ledger=await postLedgerTransaction(env.DB,{id:crypto.randomUUID(),idempotencyKey:"pxy-pack:"+orderId,userId:user.id,eventType:"pxy.pack_issued",metadata:{packId,orderId,issuanceId,approvalReference:gate.approval_reference},postings:[{accountKey:"user:"+user.id+":PXY",currency:"PXY",amountAtoms:Number(pack.pxy_amount)},{accountKey:"system:issuance:PXY",currency:"PXY",amountAtoms:-Number(pack.pxy_amount)}]});}
     catch{return json({status:"reserved",issuedPxy:0,message:"The pack is safely reserved. PXY ledger settlement will retry without issuing twice."},202);}
@@ -1663,8 +1666,11 @@ async function handleApi(request, env) {
     const body = await readJson(request);
     const packageId = typeof body?.packageId === "string" ? body.packageId : "";
     const clientKey = typeof body?.idempotencyKey === "string" ? body.idempotencyKey.trim() : "";
-    const pack = AI_CREDIT_PACKAGES[packageId];
-    if (!pack) return json({ error: "Choose an available AI Credit package." }, 400);
+    const catalogPack = await env.DB.prepare("SELECT pack_id,title,price_gram_atoms,usd_equivalent_cents,ai_credits FROM pxy_pack_catalog WHERE pack_id=? AND active=1").bind(packageId).first().catch(()=>null);
+    const staticPack = AI_CREDIT_PACKAGES[packageId];
+    const pack = catalogPack ? { id:catalogPack.pack_id,title:catalogPack.title,aiCredits:Number(catalogPack.ai_credits),usdCents:Number(catalogPack.usd_equivalent_cents),priceGramAtoms:Number(catalogPack.price_gram_atoms),dynamic:true } : staticPack;
+    if (!pack || !Number.isSafeInteger(Number(pack.aiCredits)) || Number(pack.aiCredits)<0) return json({ error: "Choose an available AI Credit pack." }, 400);
+    if(catalogPack&&(!Number.isSafeInteger(Number(catalogPack.price_gram_atoms))||Number(catalogPack.price_gram_atoms)<1||!Number.isSafeInteger(Number(catalogPack.usd_equivalent_cents))||Number(catalogPack.usd_equivalent_cents)<1))return json({error:"This pack's GRAM price configuration is incomplete."},503);
     if (!/^[a-zA-Z0-9:_-]{8,160}$/.test(clientKey)) return json({ error: "A valid idempotency key is required." }, 400);
     const idempotencyKey = "ton:" + user.id + ":" + clientKey;
     const recipient = (env.TON_RECEIVE_ADDRESS || TON_RECEIVE_ADDRESS).trim();
@@ -1686,16 +1692,21 @@ async function handleApi(request, env) {
 
     let tonUsdPrice;
     let expectedNanoTon;
-    try {
-      const quoteResponse = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd", { headers: { accept: "application/json" } });
-      if (!quoteResponse.ok) throw new Error("TON_PRICE_UNAVAILABLE");
-      const quote = await quoteResponse.json();
-      tonUsdPrice = Number(quote?.["the-open-network"]?.usd);
-      if (!Number.isFinite(tonUsdPrice) || tonUsdPrice <= 0) throw new Error("TON_PRICE_INVALID");
-      expectedNanoTon = Math.round((pack.usdCents / 100 / tonUsdPrice) * 1_000_000_000);
-      if (!Number.isSafeInteger(expectedNanoTon) || expectedNanoTon <= 0) throw new Error("TON_AMOUNT_INVALID");
-    } catch {
-      return json({ error: "A live GRAM (TON) quote is unavailable. Please retry shortly; no payment order was created." }, 503);
+    if(catalogPack){
+      expectedNanoTon=Number(catalogPack.price_gram_atoms);
+      tonUsdPrice=(Number(pack.usdCents)/100)/(expectedNanoTon/1_000_000_000);
+    }else{
+      try {
+        const quoteResponse = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd", { headers: { accept: "application/json" } });
+        if (!quoteResponse.ok) throw new Error("TON_PRICE_UNAVAILABLE");
+        const quote = await quoteResponse.json();
+        tonUsdPrice = Number(quote?.["the-open-network"]?.usd);
+        if (!Number.isFinite(tonUsdPrice) || tonUsdPrice <= 0) throw new Error("TON_PRICE_INVALID");
+        expectedNanoTon = Math.round((pack.usdCents / 100 / tonUsdPrice) * 1_000_000_000);
+        if (!Number.isSafeInteger(expectedNanoTon) || expectedNanoTon <= 0) throw new Error("TON_AMOUNT_INVALID");
+      } catch {
+        return json({ error: "A live GRAM (TON) quote is unavailable. Please retry shortly; no payment order was created." }, 503);
+      }
     }
 
     const orderId = crypto.randomUUID();
