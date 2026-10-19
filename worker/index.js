@@ -1669,6 +1669,13 @@ async function handleApi(request, env) {
     const catalogPack = await env.DB.prepare("SELECT pack_id,title,price_gram_atoms,usd_equivalent_cents,ai_credits FROM pxy_pack_catalog WHERE pack_id=? AND active=1").bind(packageId).first().catch(()=>null);
     const staticPack = AI_CREDIT_PACKAGES[packageId];
     const pack = catalogPack ? { id:catalogPack.pack_id,title:catalogPack.title,aiCredits:Number(catalogPack.ai_credits),usdCents:Number(catalogPack.usd_equivalent_cents),priceGramAtoms:Number(catalogPack.price_gram_atoms),dynamic:true } : staticPack;
+    if(catalogPack&&Number(catalogPack.pxy_amount)>0){
+      const [packGate,globalGate]=await Promise.all([
+        env.DB.prepare("SELECT issuance_enabled,reserve_verified,launch_approved,approval_reference FROM pxy_pack_reserve WHERE id=1").first(),
+        env.DB.prepare("SELECT issuance_enabled,reserves_verified,launch_approved,approval_reference FROM pxy_issuance_controls WHERE id=1").first()
+      ]);
+      if(!packGate?.issuance_enabled||!packGate?.reserve_verified||!packGate?.launch_approved||!packGate?.approval_reference||!globalGate?.issuance_enabled||!globalGate?.reserves_verified||!globalGate?.launch_approved||!globalGate?.approval_reference)return json({error:"This PXY-containing pack is not available for purchase until token reserve and launch safeguards are approved."},423);
+    }
     if (!pack || !Number.isSafeInteger(Number(pack.aiCredits)) || Number(pack.aiCredits)<0) return json({ error: "Choose an available AI Credit pack." }, 400);
     if(catalogPack&&(!Number.isSafeInteger(Number(catalogPack.price_gram_atoms))||Number(catalogPack.price_gram_atoms)<1||!Number.isSafeInteger(Number(catalogPack.usd_equivalent_cents))||Number(catalogPack.usd_equivalent_cents)<1))return json({error:"This pack's GRAM price configuration is incomplete."},503);
     if (!/^[a-zA-Z0-9:_-]{8,160}$/.test(clientKey)) return json({ error: "A valid idempotency key is required." }, 400);
