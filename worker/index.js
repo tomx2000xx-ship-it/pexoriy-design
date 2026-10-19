@@ -764,16 +764,35 @@ async function handleApi(request, env) {
         "INSERT OR IGNORE INTO competition_rounds (id,slug,title,period_start,period_end,prize_pool_pxy,status,payouts_enabled) VALUES (?,?,?,?,?,?,'open',0)"
       ).bind(round.slug + ":" + round.start.toISOString().slice(0,10), round.slug, round.title, round.start.toISOString(), end.toISOString(), round.prize).run();
     }
+    await refreshCompetitionScoresForUser(env,user.id);
     const result = await env.DB.prepare(
-      "SELECT r.id,r.slug,r.title,r.period_start,r.period_end,r.prize_pool_pxy,r.status,r.payouts_enabled,p.id AS participant_id,p.score_points,p.verified_trades,p.completed_lessons,p.daily_checkins FROM competition_rounds r LEFT JOIN competition_participants p ON p.round_id=r.id AND p.user_id=? WHERE r.period_end>? ORDER BY r.period_start ASC"
+      "SELECT r.id,r.slug,r.title,r.period_start,r.period_end,r.prize_pool_pxy,r.status,r.payouts_enabled,p.id AS participant_id,p.score_points,p.risk_adjusted_score,p.return_bps,p.max_drawdown_bps,p.verified_trades,p.completed_lessons,p.daily_checkins FROM competition_rounds r LEFT JOIN competition_participants p ON p.round_id=r.id AND p.user_id=? WHERE r.period_end>? ORDER BY r.period_start ASC"
     ).bind(user.id, now.toISOString()).all();
     return json({ competitions: (result.results || []).map(row => ({
       id: row.id, slug: row.slug, title: row.title, startsAt: row.period_start, endsAt: row.period_end,
       prizePoolPXY: Number(row.prize_pool_pxy), status: row.status, joined: Boolean(row.participant_id),
-      scorePoints: Number(row.score_points || 0), verifiedTrades: Number(row.verified_trades || 0),
-      completedLessons: Number(row.completed_lessons || 0), dailyCheckins: Number(row.daily_checkins || 0),
+      scorePoints: Number(row.score_points || 0), riskAdjustedScore: Number(row.risk_adjusted_score || 0),
+      returnBps: row.return_bps===null?null:Number(row.return_bps), maxDrawdownBps:Number(row.max_drawdown_bps||0),
+      verifiedTrades: Number(row.verified_trades || 0), completedLessons: Number(row.completed_lessons || 0), dailyCheckins: Number(row.daily_checkins || 0),
       prizeStatus: row.payouts_enabled ? "approved" : "gated",
     })), scoring: "Scores are updated only from verified server-side activity; PXY awards remain gated pending final review." });
+  }
+
+  if (path === "/api/competitions/leaderboard" && request.method === "GET") {
+    const user=await currentUser(request,env);
+    if(!user)return json({error:"Authentication required."},401);
+    const roundId=url.searchParams.get("roundId")||"";
+    if(!roundId||roundId.length>100)return json({error:"Choose a valid competition round."},400);
+    const round=await env.DB.prepare("SELECT id,title,period_start,period_end,status,prize_pool_pxy,payouts_enabled FROM competition_rounds WHERE id=?").bind(roundId).first();
+    if(!round)return json({error:"Competition round not found."},404);
+    if(round.status==="open"&&round.period_end>new Date().toISOString()){
+      const participants=await env.DB.prepare("SELECT id,user_id,joined_at,starting_equity_tc,peak_equity_tc,max_drawdown_bps FROM competition_participants WHERE round_id=? ORDER BY joined_at LIMIT 500").bind(roundId).all();
+      for(const participant of participants.results||[])await refreshCompetitionParticipant(env,round,participant);
+    }
+    const result=await env.DB.prepare("SELECT p.user_id,u.display_name,p.score_points,p.risk_adjusted_score,p.return_bps,p.max_drawdown_bps,p.verified_trades,p.completed_lessons,p.daily_checkins,p.joined_at,p.starting_equity_tc,p.last_equity_tc,p.settled_at FROM competition_participants p JOIN users u ON u.id=p.user_id WHERE p.round_id=? ORDER BY p.score_points DESC,p.return_bps DESC,p.max_drawdown_bps ASC,p.verified_trades DESC,p.joined_at ASC LIMIT 100").bind(roundId).all();
+    const entries=(result.results||[]).map((row,index)=>({rank:index+1,userId:row.user_id,displayName:row.display_name||"Pexoriy member",scorePoints:Number(row.score_points||0),riskAdjustedScore:Number(row.risk_adjusted_score||0),returnBps:row.return_bps===null?null:Number(row.return_bps),maxDrawdownBps:Number(row.max_drawdown_bps||0),verifiedTrades:Number(row.verified_trades||0),completedLessons:Number(row.completed_lessons||0),dailyCheckins:Number(row.daily_checkins||0),joinedAt:row.joined_at,startingEquityTC:Number(row.starting_equity_tc||0),currentEquityTC:row.last_equity_tc===null?null:Number(row.last_equity_tc),isYou:row.user_id===user.id}));
+    const awardResult=await env.DB.prepare("SELECT rank,prize_pxy,status FROM competition_awards WHERE round_id=? ORDER BY rank").bind(roundId).all();
+    return json({round:{id:round.id,title:round.title,startsAt:round.period_start,endsAt:round.period_end,status:round.status,prizePoolPXY:Number(round.prize_pool_pxy),payoutsEnabled:Boolean(round.payouts_enabled)},leaderboard:entries,awards:(awardResult.results||[]).map(a=>({rank:Number(a.rank),prizePXY:Number(a.prize_pxy),status:a.status})),scoring:{version:"risk-aware-v1",formula:"return (bps) - 75% of maximum drawdown (bps) + bounded verified-trade, check-in, and lesson bonuses; minimum 3 verified trades for award eligibility",awardsGated:true}});
   }
 
   if (path === "/api/competitions/join" && request.method === "POST") {
@@ -788,18 +807,19 @@ async function handleApi(request, env) {
     if (!round || round.status !== "open" || round.period_start > now || round.period_end <= now) return json({ error: "This competition is not open for entry." }, 409);
     const already = await env.DB.prepare("SELECT id FROM competition_participants WHERE round_id=? AND user_id=?").bind(roundId,user.id).first();
     if (already) return json({ status: "joined", duplicate: true, roundId });
-    const balance = await getLedgerBalance(env.DB, "user:" + user.id + ":TC");
-    const startingEquity = Math.max(1, Math.floor(balance));
+    const startingEquity = await getCompetitionEquity(env,user.id);
+    if(!Number.isSafeInteger(startingEquity)||startingEquity<=0)return json({error:"You need positive TC equity before entering this competition."},409);
     try {
-      await env.DB.prepare("INSERT INTO competition_participants (id,round_id,user_id,score_points,verified_trades,completed_lessons,daily_checkins) VALUES (?,?,?,0,0,0,0)")
-        .bind(crypto.randomUUID(), roundId, user.id).run();
+      await env.DB.prepare("INSERT INTO competition_participants (id,round_id,user_id,starting_equity_tc,peak_equity_tc,last_equity_tc,score_points,verified_trades,completed_lessons,daily_checkins) VALUES (?,?,?,?,?,?,0,0,0,0)")
+        .bind(crypto.randomUUID(), roundId, user.id, startingEquity, startingEquity, startingEquity).run();
     } catch (error) {
       const winner = await env.DB.prepare("SELECT id FROM competition_participants WHERE round_id=? AND user_id=?").bind(roundId,user.id).first();
       if (winner) return json({ status: "joined", duplicate: true, roundId });
       throw error;
     }
     await appendAudit(env, { actorUserId: user.id, eventType: "competition.joined", entityType: "competition_round", entityId: roundId, requestId, details: { title: round.title, scoringVersion: "risk-aware-v1" } });
-    return json({ status: "joined", duplicate: false, roundId, message: "Entry recorded. Scores and prizes remain subject to server verification and published rules." }, 201);
+    await refreshCompetitionScoresForUser(env,user.id);
+    return json({ status: "joined", duplicate: false, roundId, startingEquityTC:startingEquity, scoringVersion:"risk-aware-v1", message: "Entry recorded. Risk-adjusted scoring is active; PXY awards remain gated until reserve and launch approval." }, 201);
   }
 
   if (path === "/api/referrals" && request.method === "GET") {
