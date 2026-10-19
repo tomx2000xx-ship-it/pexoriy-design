@@ -12,7 +12,8 @@
     {
       "binding": "DB",
       "database_name": "pexoriy-core",
-      "database_id": "3add741b-bda8-4f47-b857-538ff9a1dae8"
+      "database_id": "3add741b-bda8-4f47-b857-538ff9a1dae8",
+      "migrations_dir": "migrations"
     }
   ],
   "send_email": [
