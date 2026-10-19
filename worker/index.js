@@ -1244,7 +1244,7 @@ async function handleApi(request, env) {
       env.DB.prepare("SELECT COUNT(*) AS completed FROM mission_journey_days WHERE user_id=? AND status='completed'").bind(user.id).first()
     ]);
     const claimed=new Map((claims.results||[]).map(row=>[row.mission_id,row]));
-    return json({journey:{startedAt:journey.started_at,currentDay,status:journey.status,completed:Number(journeyStats?.completed||0),totalDays:MISSION_JOURNEY_LENGTH},missions:(missions.results||[]).map(row=>({id:row.id,title:row.title,rewardCurrency:row.reward_currency,rewardAmount:Number(row.reward_amount),rules:JSON.parse(row.rules_json||"{}"),day:Number(row.day_number),unlockAt:row.unlock_at,dayStatus:row.day_status,available:row.day_status==="available",completedAt:row.completed_at,claim:claimed.get(row.id)||null}))});
+    return json({journey:{startedAt:journey.started_at,currentDay,status:journey.status,completed:Number(journeyStats?.completed||0),totalDays:MISSION_JOURNEY_LENGTH,complete:Number(journeyStats?.completed||0)>=MISSION_JOURNEY_LENGTH},missions:(missions.results||[]).map(row=>({id:row.id,title:row.title,rewardCurrency:row.reward_currency,rewardAmount:Number(row.reward_amount),rules:JSON.parse(row.rules_json||"{}"),day:Number(row.day_number),unlockAt:row.unlock_at,dayStatus:row.day_status,available:row.day_status==="available",completedAt:row.completed_at,claim:claimed.get(row.id)||null}))});
   }
 
   if (path === "/api/missions/claim" && request.method === "POST") {
