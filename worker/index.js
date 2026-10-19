@@ -2,6 +2,7 @@ import { postLedgerTransaction, getLedgerBalance } from "./ledger.js";
 import { TON_NETWORK, TON_RECEIVE_ADDRESS, normalizeTonAddress, formatNanoTon, makeTonComment, validateTonIncomingTransaction } from "./ton-payments.js";
 import { calculateRealizedSettlement, calculateUnrealizedPnlTc, isFreshValidatedQuote, calculateSimulatedFillPrice, calculateTakerFeeTc, SIMULATION_MODEL_VERSION, MAX_OPEN_POSITIONS, MAX_POSITION_EQUITY_BPS, MAX_TOTAL_EXPOSURE_EQUITY_BPS } from "./trading.js";
 import { calculateRiskAdjustedScore, calculateReturnBps, calculateMaxDrawdownBps } from "./competition-scoring.js";
+import { calculateMissionCurrentDay, MISSION_JOURNEY_LENGTH } from "./mission-journey.js";
 import { normalizeMarketQuote } from "./market-feed.js";
 import {
   AI_CREDIT_PACKAGES,
@@ -1232,10 +1233,9 @@ async function handleApi(request, env) {
     await env.DB.prepare("INSERT OR IGNORE INTO mission_journeys(user_id,started_at) SELECT id,created_at FROM users WHERE id=?").bind(user.id).run();
     const journey=await env.DB.prepare("SELECT user_id,started_at,status FROM mission_journeys WHERE user_id=?").bind(user.id).first();
     if(!journey)return json({error:"Mission journey could not be initialized."},503);
-    const startedDate=String(journey.started_at).slice(0,10);
     const today=new Date().toISOString().slice(0,10);
-    const currentDay=Math.max(1,Math.min(30,Math.floor((Date.parse(today+"T00:00:00Z")-Date.parse(startedDate+"T00:00:00Z"))/86400000)+1));
-    await env.DB.prepare("WITH RECURSIVE days(day) AS (SELECT 1 UNION ALL SELECT day+1 FROM days WHERE day<30) INSERT OR IGNORE INTO mission_journey_days(user_id,day_number,mission_id,unlock_at,status) SELECT ?,day,'journey-'||printf('%02d',day),datetime(?,'+'||(day-1)||' days'),CASE WHEN day<=? THEN 'available' ELSE 'locked' END FROM days").bind(user.id,journey.started_at,currentDay).run();
+    const currentDay=calculateMissionCurrentDay(journey.started_at,new Date());
+    await env.DB.prepare("WITH RECURSIVE days(day) AS (SELECT 1 UNION ALL SELECT day+1 FROM days WHERE day<?) INSERT OR IGNORE INTO mission_journey_days(user_id,day_number,mission_id,unlock_at,status) SELECT ?,day,'journey-'||printf('%02d',day),datetime(?,'+'||(day-1)||' days'),CASE WHEN day<=? THEN 'available' ELSE 'locked' END FROM days").bind(MISSION_JOURNEY_LENGTH,user.id,journey.started_at,currentDay).run();
     await env.DB.prepare("UPDATE mission_journey_days SET status='available' WHERE user_id=? AND day_number<=? AND status='locked'").bind(user.id,currentDay).run();
     await env.DB.prepare("UPDATE mission_journey_days SET status='locked' WHERE user_id=? AND day_number>? AND status='available'").bind(user.id,currentDay).run();
     const [missions,claims,journeyStats]=await Promise.all([
@@ -1244,7 +1244,7 @@ async function handleApi(request, env) {
       env.DB.prepare("SELECT COUNT(*) AS completed FROM mission_journey_days WHERE user_id=? AND status='completed'").bind(user.id).first()
     ]);
     const claimed=new Map((claims.results||[]).map(row=>[row.mission_id,row]));
-    return json({journey:{startedAt:journey.started_at,currentDay,status:journey.status,completed:Number(journeyStats?.completed||0),totalDays:30},missions:(missions.results||[]).map(row=>({id:row.id,title:row.title,rewardCurrency:row.reward_currency,rewardAmount:Number(row.reward_amount),rules:JSON.parse(row.rules_json||"{}"),day:Number(row.day_number),unlockAt:row.unlock_at,dayStatus:row.day_status,available:row.day_status==="available",completedAt:row.completed_at,claim:claimed.get(row.id)||null}))});
+    return json({journey:{startedAt:journey.started_at,currentDay,status:journey.status,completed:Number(journeyStats?.completed||0),totalDays:MISSION_JOURNEY_LENGTH},missions:(missions.results||[]).map(row=>({id:row.id,title:row.title,rewardCurrency:row.reward_currency,rewardAmount:Number(row.reward_amount),rules:JSON.parse(row.rules_json||"{}"),day:Number(row.day_number),unlockAt:row.unlock_at,dayStatus:row.day_status,available:row.day_status==="available",completedAt:row.completed_at,claim:claimed.get(row.id)||null}))});
   }
 
   if (path === "/api/missions/claim" && request.method === "POST") {
