@@ -906,6 +906,7 @@ async function handleApi(request, env) {
       return json({ passed: true, score, total: keys.length, rewardStatus: "retrying", message: "Lesson completed. Your TC reward is being reconciled safely." }, 202);
     }
     await appendAudit(env, { actorUserId: user.id, eventType: "learning.lesson_completed", entityType: "learning_lesson", entityId: lessonId, requestId, details: { score, total: keys.length, rewardTC: Number(lesson.reward_tc), duplicateReward: rewardResult.duplicate } });
+    try { await refreshCompetitionScoresForUser(env,user.id); } catch (error) { console.error(JSON.stringify({event:"competition.score_refresh_failed",userId:user.id,message:String(error?.message||"unknown")})); }
     return json({ passed: true, score, total: keys.length, rewardTC: Number(lesson.reward_tc), duplicate: Boolean(progress?.reward_transaction_id || rewardResult.duplicate) });
   }
 
