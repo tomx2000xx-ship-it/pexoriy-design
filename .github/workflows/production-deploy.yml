@@ -1,0 +1,46 @@
+name: Verify and deploy Pexoriy production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: pexoriy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run unit tests
+        run: bun run test:unit
+
+      - name: Build production assets
+        run: bun run build
+
+      - name: Deploy to Cloudflare production
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: d32bdd328cd93240b713302d90ad7b8e
+          command: deploy --keep-vars
+
+      - name: Report missing production credential
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN == '' }}
+        run: echo "Build and tests completed; Cloudflare deployment skipped because CLOUDFLARE_API_TOKEN is not configured in repository Actions secrets."
