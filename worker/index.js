@@ -449,6 +449,44 @@ async function runCompetitionMaintenance(env) {
   }
 }
 
+async function settlePxyPackOrder(env, user, orderId, packId, requestId = null) {
+  const order=await env.DB.prepare("SELECT id,user_id,status,package_id,credited_ac,pack_pxy_amount FROM payment_orders WHERE id=? AND user_id=?").bind(orderId,user.id).first();
+  if(!order)return {status:"error",httpStatus:404,error:"Payment order not found."};
+  if(order.status!=="credited")return {status:"not_credited",httpStatus:409,error:"PXY can only be issued after the payment is verified and credited."};
+  if(order.package_id!==packId)return {status:"error",httpStatus:409,error:"This payment does not match the requested pack."};
+  const pxyAmount=Number(order.pack_pxy_amount||0);
+  if(pxyAmount<=0)return {status:"no_pxy_component",issuedPxy:0,aiCreditsAlreadySettled:Number(order.credited_ac)};
+  const prior=await env.DB.prepare("SELECT id,status,pxy_amount,pack_id,user_id FROM pxy_pack_issuances WHERE payment_order_id=?").bind(orderId).first();
+  if(prior?.status==="issued")return {status:"issued",issuedPxy:Number(prior.pxy_amount),duplicate:true,aiCreditsAlreadySettled:Number(order.credited_ac)};
+  if(prior&&prior.status!=="reserved")return {status:"review",httpStatus:409,error:"This pack allocation is under review and cannot be issued automatically."};
+  if(prior&&(prior.pack_id!==packId||prior.user_id!==user.id||Number(prior.pxy_amount)!==pxyAmount))return {status:"review",httpStatus:409,error:"The existing pack reservation does not match the purchased pack snapshot."};
+  const pack=await env.DB.prepare("SELECT pack_id,title FROM pxy_pack_catalog WHERE pack_id=?").bind(packId).first();
+  if(!pack)return {status:"error",httpStatus:409,error:"The purchased PXY pack record is missing; support review is required."};
+  const gate=await env.DB.prepare("SELECT issuance_enabled,reserve_verified,launch_approved,approval_reference FROM pxy_pack_reserve WHERE id=1").first();
+  if(!gate?.issuance_enabled||!gate?.reserve_verified||!gate?.launch_approved||!gate?.approval_reference)return {status:"pending_approval",httpStatus:423,issuedPxy:0,aiCreditsAlreadySettled:Number(order.credited_ac),message:"AI Credits are settled; the PXY component remains locked until its reserve and launch safeguards are approved."};
+  const issuanceId=prior?.id||crypto.randomUUID();
+  if(!prior){
+    try{await env.DB.prepare("INSERT INTO pxy_pack_issuances(id,pack_id,user_id,payment_order_id,pxy_amount,status) VALUES (?,?,?,?,?,'reserved')").bind(issuanceId,packId,user.id,orderId,pxyAmount).run();}
+    catch(error){const latest=await env.DB.prepare("SELECT id,status,pxy_amount FROM pxy_pack_issuances WHERE payment_order_id=?").bind(orderId).first();if(latest?.status==="issued")return {status:"issued",issuedPxy:Number(latest.pxy_amount),duplicate:true,aiCreditsAlreadySettled:Number(order.credited_ac)};const cap=String(error?.message||"").includes("PXY_PACK_RESERVE_CAP_EXCEEDED");return {status:cap?"cap_reached":"reservation_failed",httpStatus:409,issuedPxy:0,error:cap?"The 50,000 PXY pack reserve is fully reserved.":"This PXY pack allocation could not be reserved."};}
+  }
+  let ledger;
+  try{ledger=await postLedgerTransaction(env.DB,{id:crypto.randomUUID(),idempotencyKey:"pxy-pack:"+orderId,userId:user.id,eventType:"pxy.pack_issued",metadata:{packId,orderId,issuanceId,approvalReference:gate.approval_reference},postings:[{accountKey:"user:"+user.id+":PXY",currency:"PXY",amountAtoms:pxyAmount},{accountKey:"system:issuance:PXY",currency:"PXY",amountAtoms:-pxyAmount}]});}
+  catch{return {status:"reserved",httpStatus:202,issuedPxy:0,aiCreditsAlreadySettled:Number(order.credited_ac),message:"The PXY amount is reserved. Ledger settlement will retry safely without issuing twice."};}
+  await env.DB.prepare("UPDATE pxy_pack_issuances SET status='issued',ledger_transaction_id=?,issued_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND status='reserved'").bind(ledger.transactionId,issuanceId).run();
+  await appendAudit(env,{actorUserId:user.id,eventType:"pxy.pack_issued",entityType:"pxy_pack_issuance",entityId:issuanceId,requestId,details:{packId,orderId,pxyAmount,ledgerTransactionId:ledger.transactionId,duplicate:ledger.duplicate}});
+  return {status:"issued",issuedPxy:pxyAmount,aiCreditsAlreadySettled:Number(order.credited_ac),duplicate:Boolean(ledger.duplicate)};
+}
+
+async function runPxyPackIssuanceMaintenance(env) {
+  const gate=await env.DB.prepare("SELECT issuance_enabled,reserve_verified,launch_approved,approval_reference FROM pxy_pack_reserve WHERE id=1").first();
+  if(!gate?.issuance_enabled||!gate?.reserve_verified||!gate?.launch_approved||!gate?.approval_reference)return;
+  const result=await env.DB.prepare("SELECT o.id,o.user_id,o.package_id FROM payment_orders o LEFT JOIN pxy_pack_issuances i ON i.payment_order_id=o.id WHERE o.status='credited' AND o.pack_pxy_amount>0 AND (i.id IS NULL OR i.status='reserved') ORDER BY o.created_at LIMIT 100").all();
+  for(const order of result.results||[]){
+    try{await settlePxyPackOrder(env,{id:order.user_id},order.id,order.package_id,null);}
+    catch(error){console.error(JSON.stringify({event:"pxy.pack_maintenance_retry_failed",orderId:order.id,message:String(error?.message||"unknown")}));}
+  }
+}
+
 async function handleApi(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
