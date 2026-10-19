@@ -1694,7 +1694,7 @@ async function handleApi(request, env) {
     try { normalizeTonAddress(recipient); } catch { return json({ error: "The TON receiving wallet is not valid. No payment order was created." }, 503); }
 
     const prior = await env.DB.prepare(
-      "SELECT id, status, reference_key, expected_amount_atoms, credited_ac, expires_at, recipient_address, package_id, created_at FROM payment_orders WHERE idempotency_key = ? AND user_id = ?",
+      "SELECT id, status, reference_key, expected_amount_atoms, credited_ac, expires_at, recipient_address, package_id, pack_pxy_amount, created_at FROM payment_orders WHERE idempotency_key = ? AND user_id = ?",
     ).bind(idempotencyKey, user.id).first();
     if (prior) {
       const priorPack = AI_CREDIT_PACKAGES[prior.package_id] || pack;
@@ -1747,20 +1747,21 @@ async function handleApi(request, env) {
         "SELECT id, status, reference_key, expected_amount_atoms, credited_ac, expires_at, recipient_address, package_id, created_at FROM payment_orders WHERE idempotency_key = ? AND user_id = ?",
       ).bind(idempotencyKey, user.id).first();
       if (!raced) throw error;
+      if(raced.package_id!==packageId)return json({error:"This idempotency key already belongs to a different pack."},409);
       const racedPack = AI_CREDIT_PACKAGES[raced.package_id] || pack;
       return json({ order: {
-        id: raced.id, status: raced.status, asset: "GRAM", network: TON_NETWORK,
+        id: raced.id, status: raced.status, asset: "GRAM", network: TON_NETWORK, packageId: raced.package_id,
         expectedAmountAtoms: Number(raced.expected_amount_atoms), amountGram: formatNanoTon(Number(raced.expected_amount_atoms)),
-        amountUsd: (racedPack.usdCents / 100).toFixed(2), aiCredits: Number(raced.credited_ac || racedPack.aiCredits),
+        amountUsd: (racedPack.usdCents / 100).toFixed(2), aiCredits: Number(raced.credited_ac || racedPack.aiCredits), pxyAmount:Number(raced.pack_pxy_amount||0),
         expiresAt: raced.expires_at, recipientAddress: raced.recipient_address || recipient,
         referenceKey: raced.reference_key, createdAt: raced.created_at,
       }, reused: true });
     }
     return json({ order: {
-      id: orderId, status: "created", asset: "GRAM", network: TON_NETWORK,
+      id: orderId, status: "created", asset: "GRAM", network: TON_NETWORK, packageId: pack.id,
       expectedAmountAtoms: expectedNanoTon, amountGram: formatNanoTon(expectedNanoTon),
       amountUsd: (pack.usdCents / 100).toFixed(2), quotedGramUsd: tonUsdPrice,
-      aiCredits: pack.aiCredits, expiresAt, recipientAddress: recipient, referenceKey: reference,
+      aiCredits: pack.aiCredits, pxyAmount:Number(catalogPack?.pxy_amount||0), expiresAt, recipientAddress: recipient, referenceKey: reference,
       createdAt: new Date().toISOString(),
     }, instructions: "Use the connected TON wallet to send the exact native GRAM amount with the order comment. Credits are added only after server-side chain verification." }, 201);
   }
@@ -1894,7 +1895,7 @@ async function handleApi(request, env) {
     const user = await currentUser(request, env);
     if (!user) return json({ error: "Authentication required." }, 401);
     const result = await env.DB.prepare(
-      "SELECT id, network, asset, expected_amount_atoms, credited_ac, status, expires_at, tx_hash, created_at, reference_key, recipient_address, package_id FROM payment_orders WHERE user_id = ? AND network = ? ORDER BY created_at DESC LIMIT 25",
+      "SELECT id, network, asset, expected_amount_atoms, credited_ac, status, expires_at, tx_hash, created_at, reference_key, recipient_address, package_id, pack_pxy_amount FROM payment_orders WHERE user_id = ? AND network = ? ORDER BY created_at DESC LIMIT 25",
     ).bind(user.id, TON_NETWORK).all();
     const orders = (result.results || []).map((row) => {
       const pack = AI_CREDIT_PACKAGES[row.package_id];
@@ -1902,7 +1903,7 @@ async function handleApi(request, env) {
         id: row.id, network: row.network, asset: row.asset, status: row.status,
         expectedAmountAtoms: Number(row.expected_amount_atoms), amountGram: formatNanoTon(Number(row.expected_amount_atoms)),
         aiCredits: Number(row.credited_ac || pack?.aiCredits || 0), expiresAt: row.expires_at, txHash: row.tx_hash,
-        createdAt: row.created_at, recipientAddress: row.recipient_address, referenceKey: row.reference_key,
+        createdAt: row.created_at, recipientAddress: row.recipient_address, referenceKey: row.reference_key, packageId: row.package_id, pxyAmount: Number(row.pack_pxy_amount||0),
       };
     });
     return json({ orders });
