@@ -2442,4 +2442,11 @@ export default {
     }
     return env.ASSETS.fetch(request);
   },
+  async scheduled(controller, env) {
+    try {
+      await runCompetitionMaintenance(env);
+    } catch (error) {
+      console.error(JSON.stringify({event:"competition.maintenance_failed",scheduledTime:controller?.scheduledTime||null,message:String(error?.message||"unknown")}));
+    }
+  },
 };
