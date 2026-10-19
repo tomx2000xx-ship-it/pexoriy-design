@@ -1970,7 +1970,11 @@ async function handleApi(request, env) {
     const order = await env.DB.prepare("SELECT * FROM payment_orders WHERE id = ? AND user_id = ? AND network = ?")
       .bind(orderId, user.id, TON_NETWORK).first();
     if (!order) return json({ error: "TON payment order not found." }, 404);
-    if (order.status === "credited") return json({ status: "credited", aiCredits: Number(order.credited_ac), duplicate: true });
+    if (order.status === "credited") {
+      let pxyResult;
+      try{pxyResult=await settlePxyPackOrder(env,user,order.id,order.package_id,requestId)}catch(error){pxyResult={status:"retrying",issuedPxy:0,message:"PXY settlement is queued for a safe retry."};console.error(JSON.stringify({event:"pxy.pack_settlement_retry",orderId:order.id,message:String(error?.message||"unknown")}))}
+      return json({status:"credited",aiCredits:Number(order.credited_ac),duplicate:true,pxyStatus:pxyResult.status,pxyIssued:Number(pxyResult.issuedPxy||0),pxyMessage:pxyResult.message||pxyResult.error||null});
+    }
     if (["underpaid", "overpaid", "review", "refunded", "reversed"].includes(order.status)) {
       return json({ status: order.status, message: "This payment needs support review. No AI Credits were added." }, 409);
     }
@@ -2043,7 +2047,11 @@ async function handleApi(request, env) {
       await env.DB.prepare("UPDATE payment_orders SET status = 'review' WHERE id = ? AND tx_hash IS NULL AND status <> 'credited'").bind(order.id).run();
       return json({ status: "review", message: "This transaction is already associated with another order or requires support review." }, 409);
     }
-    if (confirmed.status === "credited") return json({ status: "credited", aiCredits: Number(order.credited_ac), duplicate: true });
+    if (confirmed.status === "credited") {
+      let pxyResult;
+      try{pxyResult=await settlePxyPackOrder(env,user,order.id,order.package_id,requestId)}catch(error){pxyResult={status:"retrying",issuedPxy:0,message:"PXY settlement is queued for a safe retry."};console.error(JSON.stringify({event:"pxy.pack_settlement_retry",orderId:order.id,message:String(error?.message||"unknown")}))}
+      return json({status:"credited",aiCredits:Number(order.credited_ac),duplicate:true,pxyStatus:pxyResult.status,pxyIssued:Number(pxyResult.issuedPxy||0),pxyMessage:pxyResult.message||pxyResult.error||null});
+    }
     if (confirmed.status !== "confirmed") return json({ status: "review", message: "Payment is verified but needs support review before crediting." }, 409);
 
     const ledgerIdempotencyKey = "ton-native-payment:" + order.id + ":ai-credits";
@@ -2072,7 +2080,11 @@ async function handleApi(request, env) {
       ).bind(postedLedger.id, order.id, match.hash).run();
       if (Number(update.meta?.changes || 0) !== 1) {
         const latest = await env.DB.prepare("SELECT status, credited_ac FROM payment_orders WHERE id = ?").bind(order.id).first();
-        if (latest?.status === "credited") return json({ status: "credited", aiCredits: Number(latest.credited_ac), duplicate: true });
+        if (latest?.status === "credited") {
+          let pxyResult;
+          try{pxyResult=await settlePxyPackOrder(env,user,order.id,order.package_id,requestId)}catch(error){pxyResult={status:"retrying",issuedPxy:0,message:"PXY settlement is queued for a safe retry."};console.error(JSON.stringify({event:"pxy.pack_settlement_retry",orderId:order.id,message:String(error?.message||"unknown")}))}
+          return json({status:"credited",aiCredits:Number(latest.credited_ac),duplicate:true,pxyStatus:pxyResult.status,pxyIssued:Number(pxyResult.issuedPxy||0),pxyMessage:pxyResult.message||pxyResult.error||null});
+        }
         return json({ status: "review", message: "Payment is verified but order state changed during crediting. Please contact support." }, 409);
       }
     } catch {
@@ -2083,7 +2095,9 @@ async function handleApi(request, env) {
       "INSERT OR IGNORE INTO payment_events (id, payment_order_id, provider_event_id, event_type, payload_hash, processing_status, processed_at) VALUES (?, ?, ?, ?, ?, 'processed', strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
     ).bind(crypto.randomUUID(), order.id, "ton:" + match.hash, "transaction.ton_credited", payloadHash).run();
     await appendAudit(env, { actorUserId: user.id, eventType: "payment.ton_credited", entityType: "payment_order", entityId: order.id, requestId, details: { txHash: match.hash, aiCredits: Number(order.credited_ac) } });
-    return json({ status: "credited", aiCredits: Number(order.credited_ac), txHash: match.hash });
+    let pxyResult={status:"no_pxy_component",issuedPxy:0};
+    try{pxyResult=await settlePxyPackOrder(env,user,order.id,order.package_id,requestId)}catch(error){pxyResult={status:"retrying",issuedPxy:0,message:"PXY settlement is queued for a safe retry."};console.error(JSON.stringify({event:"pxy.pack_settlement_retry",orderId:order.id,message:String(error?.message||"unknown")}))}
+    return json({status:"credited",aiCredits:Number(order.credited_ac),txHash:match.hash,pxyStatus:pxyResult.status,pxyIssued:Number(pxyResult.issuedPxy||0),pxyMessage:pxyResult.message||pxyResult.error||null});
   }
 
   if (path === "/api/payments/ton/orders" && request.method === "GET") {
