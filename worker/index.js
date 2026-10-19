@@ -1854,7 +1854,7 @@ async function handleApi(request, env) {
     const body = await readJson(request);
     const packageId = typeof body?.packageId === "string" ? body.packageId : "";
     const clientKey = typeof body?.idempotencyKey === "string" ? body.idempotencyKey.trim() : "";
-    const catalogPack = await env.DB.prepare("SELECT pack_id,title,price_gram_atoms,usd_equivalent_cents,ai_credits FROM pxy_pack_catalog WHERE pack_id=? AND active=1").bind(packageId).first().catch(()=>null);
+    const catalogPack = await env.DB.prepare("SELECT pack_id,title,price_gram_atoms,usd_equivalent_cents,ai_credits,pxy_amount FROM pxy_pack_catalog WHERE pack_id=? AND active=1").bind(packageId).first().catch(()=>null);
     const staticPack = AI_CREDIT_PACKAGES[packageId];
     const pack = catalogPack ? { id:catalogPack.pack_id,title:catalogPack.title,aiCredits:Number(catalogPack.ai_credits),usdCents:Number(catalogPack.usd_equivalent_cents),priceGramAtoms:Number(catalogPack.price_gram_atoms),dynamic:true } : staticPack;
     if(catalogPack&&Number(catalogPack.pxy_amount)>0){
@@ -1872,11 +1872,12 @@ async function handleApi(request, env) {
       "SELECT id, status, reference_key, expected_amount_atoms, credited_ac, expires_at, recipient_address, package_id, pack_pxy_amount, created_at FROM payment_orders WHERE idempotency_key = ? AND user_id = ?",
     ).bind(idempotencyKey, user.id).first();
     if (prior) {
+      if(prior.package_id!==packageId)return json({error:"This idempotency key already belongs to a different pack."},409);
       const priorPack = AI_CREDIT_PACKAGES[prior.package_id] || pack;
       return json({ order: {
-        id: prior.id, status: prior.status, asset: "GRAM", network: TON_NETWORK,
+        id: prior.id, status: prior.status, asset: "GRAM", network: TON_NETWORK, packageId:prior.package_id,
         expectedAmountAtoms: Number(prior.expected_amount_atoms), amountGram: formatNanoTon(Number(prior.expected_amount_atoms)),
-        amountUsd: (priorPack.usdCents / 100).toFixed(2), aiCredits: Number(prior.credited_ac || priorPack.aiCredits),
+        amountUsd: (priorPack.usdCents / 100).toFixed(2), aiCredits: Number(prior.credited_ac || priorPack.aiCredits), pxyAmount:Number(prior.pack_pxy_amount||0),
         expiresAt: prior.expires_at, recipientAddress: prior.recipient_address || recipient,
         referenceKey: prior.reference_key, createdAt: prior.created_at,
       }, reused: true });
