@@ -7,7 +7,8 @@ test("every member starts on Day 1 on their own signup date", () => {
 });
 
 test("the same 30-day sequence unlocks one day at a time from the member's start date", () => {
-  assert.equal(calculateMissionCurrentDay("2026-10-01T18:00:00.000Z", new Date("2026-10-02T00:10:00.000Z")), 2);
+  assert.equal(calculateMissionCurrentDay("2026-10-01T18:00:00.000Z", new Date("2026-10-02T00:10:00.000Z")), 1);
+  assert.equal(calculateMissionCurrentDay("2026-10-01T18:00:00.000Z", new Date("2026-10-02T18:00:00.000Z")), 2);
   assert.equal(calculateMissionCurrentDay("2026-10-01T18:00:00.000Z", new Date("2026-10-30T18:00:00.000Z")), 30);
   assert.equal(MISSION_JOURNEY_LENGTH, 30);
 });
