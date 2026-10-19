@@ -30,4 +30,5 @@ test("verified activity bonuses are bounded", () => {
 test("a losing result cannot be rescued by unbounded negative or malformed values", () => {
   assert.equal(calculateRiskAdjustedScore({ returnBps: -500, maxDrawdownBps: 1000 }), 0);
   assert.equal(calculateRiskAdjustedScore({ returnBps: 0, maxDrawdownBps: 0, verifiedTrades: -100, dailyCheckins: NaN, completedLessons: Infinity }), 0);
+  assert.equal(calculateRiskAdjustedScore({ returnBps: Infinity }), 0);
 });
