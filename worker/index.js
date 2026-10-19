@@ -1096,7 +1096,7 @@ async function handleApi(request, env) {
     else if (rules.prerequisite === "market_viewed") eligible = Boolean(await env.DB.prepare("SELECT id FROM mission_activity_events WHERE user_id=? AND event_type='market_viewed' AND created_at>=? LIMIT 1").bind(user.id,mission.unlock_at).first());
     else if (rules.prerequisite === "community_post") eligible = Boolean(await env.DB.prepare("SELECT id FROM community_posts WHERE user_id=? AND status='published' AND created_at>=? LIMIT 1").bind(user.id,mission.unlock_at).first());
     else if (rules.prerequisite === "group_message") eligible = Boolean(await env.DB.prepare("SELECT id FROM community_messages WHERE user_id=? AND status='published' AND created_at>=? LIMIT 1").bind(user.id,mission.unlock_at).first());
-    else if (rules.prerequisite === "journey_review") eligible = Boolean(await env.DB.prepare("SELECT id FROM mission_activity_events WHERE user_id=? AND event_type='journey_review' AND created_at>=? LIMIT 1").bind(user.id,mission.unlock_at).first());
+    else if (rules.prerequisite === "journey_review") eligible = Number((await env.DB.prepare("SELECT COUNT(*) AS n FROM mission_journey_days WHERE user_id=? AND day_number<29 AND status='completed'").bind(user.id).first())?.n||0)>=28;
     else if (rules.prerequisite === "journey_complete") eligible = Number((await env.DB.prepare("SELECT COUNT(*) AS n FROM mission_journey_days WHERE user_id=? AND day_number<30 AND status='completed'").bind(user.id).first())?.n||0)>=29;
     if (!eligible) return json({ error: "Complete the required activity first. The server has not issued a reward." }, 409);
     const idempotencyKey = "mission:" + user.id + ":" + mission.id;
