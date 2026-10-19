@@ -21,5 +21,6 @@ export function calculateRiskAdjustedScore({ returnBps = 0, maxDrawdownBps = 0, 
   const checkins = safe(dailyCheckins);
   const lessons = safe(completedLessons);
   const activityBonus = Math.min(trades, 20) * 10 + Math.min(checkins, 14) * 5 + Math.min(lessons, 10) * 5;
-  return Math.max(0, Math.round(Number(returnBps || 0) - Math.round(drawdown * 0.75) + activityBonus));
+  const safeReturn = Number.isFinite(Number(returnBps)) ? Math.round(Number(returnBps)) : 0;
+  return Math.max(0, Math.round(safeReturn - Math.round(drawdown * 0.75) + activityBonus));
 }
