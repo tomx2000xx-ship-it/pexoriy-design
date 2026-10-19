@@ -605,6 +605,62 @@ async function handleApi(request, env) {
   }
 
 
+  if (path === "/api/competitions" && request.method === "GET") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const now = new Date();
+    const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const weekStart = new Date(dayStart);
+    weekStart.setUTCDate(weekStart.getUTCDate() - ((weekStart.getUTCDay() + 6) % 7));
+    const rounds = [
+      { slug: "daily-sprint", title: "24h Sprint", start: dayStart, days: 1, prize: 5000 },
+      { slug: "consistency-league", title: "7-day Consistency League", start: weekStart, days: 7, prize: 12000 },
+      { slug: "community-challenge", title: "14-day Challenge", start: new Date(Date.UTC(weekStart.getUTCFullYear(), weekStart.getUTCMonth(), weekStart.getUTCDate() - 7)), days: 14, prize: 25000 },
+    ];
+    for (const round of rounds) {
+      const end = new Date(round.start.getTime() + round.days * 86400000);
+      await env.DB.prepare(
+        "INSERT OR IGNORE INTO competition_rounds (id,slug,title,period_start,period_end,prize_pool_pxy,status,payouts_enabled) VALUES (?,?,?,?,?,?,'open',0)"
+      ).bind(round.slug + ":" + round.start.toISOString().slice(0,10), round.slug, round.title, round.start.toISOString(), end.toISOString(), round.prize).run();
+    }
+    const result = await env.DB.prepare(
+      "SELECT r.id,r.slug,r.title,r.period_start,r.period_end,r.prize_pool_pxy,r.status,r.payouts_enabled,p.id AS participant_id,p.score_points,p.verified_trades,p.completed_lessons,p.daily_checkins FROM competition_rounds r LEFT JOIN competition_participants p ON p.round_id=r.id AND p.user_id=? WHERE r.period_end>? ORDER BY r.period_start ASC"
+    ).bind(user.id, now.toISOString()).all();
+    return json({ competitions: (result.results || []).map(row => ({
+      id: row.id, slug: row.slug, title: row.title, startsAt: row.period_start, endsAt: row.period_end,
+      prizePoolPXY: Number(row.prize_pool_pxy), status: row.status, joined: Boolean(row.participant_id),
+      scorePoints: Number(row.score_points || 0), verifiedTrades: Number(row.verified_trades || 0),
+      completedLessons: Number(row.completed_lessons || 0), dailyCheckins: Number(row.daily_checkins || 0),
+      prizeStatus: row.payouts_enabled ? "approved" : "gated",
+    })), scoring: "Scores are updated only from verified server-side activity; PXY awards remain gated pending final review." });
+  }
+
+  if (path === "/api/competitions/join" && request.method === "POST") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    if (!(await consumeAuthRateLimit(request, env, "competition-join", user.id, 10, 3600))) return json({ error: "Too many join attempts. Try again later." }, 429);
+    const body = await readJson(request);
+    const roundId = typeof body?.roundId === "string" ? body.roundId.trim() : "";
+    if (!roundId || roundId.length > 100) return json({ error: "Choose a valid competition." }, 400);
+    const round = await env.DB.prepare("SELECT id,title,period_start,period_end,status FROM competition_rounds WHERE id=?").bind(roundId).first();
+    const now = new Date().toISOString();
+    if (!round || round.status !== "open" || round.period_start > now || round.period_end <= now) return json({ error: "This competition is not open for entry." }, 409);
+    const already = await env.DB.prepare("SELECT id FROM competition_participants WHERE round_id=? AND user_id=?").bind(roundId,user.id).first();
+    if (already) return json({ status: "joined", duplicate: true, roundId });
+    const balance = await getLedgerBalance(env.DB, "user:" + user.id + ":TC");
+    const startingEquity = Math.max(1, Math.floor(balance));
+    try {
+      await env.DB.prepare("INSERT INTO competition_participants (id,round_id,user_id,score_points,verified_trades,completed_lessons,daily_checkins) VALUES (?,?,?,0,0,0,0)")
+        .bind(crypto.randomUUID(), roundId, user.id).run();
+    } catch (error) {
+      const winner = await env.DB.prepare("SELECT id FROM competition_participants WHERE round_id=? AND user_id=?").bind(roundId,user.id).first();
+      if (winner) return json({ status: "joined", duplicate: true, roundId });
+      throw error;
+    }
+    await appendAudit(env, { actorUserId: user.id, eventType: "competition.joined", entityType: "competition_round", entityId: roundId, requestId, details: { title: round.title, scoringVersion: "risk-aware-v1" } });
+    return json({ status: "joined", duplicate: false, roundId, message: "Entry recorded. Scores and prizes remain subject to server verification and published rules." }, 201);
+  }
+
   if (path === "/api/referrals" && request.method === "GET") {
     const user = await currentUser(request, env);
     if (!user) return json({ error: "Authentication required." }, 401);
