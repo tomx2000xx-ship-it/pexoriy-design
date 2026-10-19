@@ -427,6 +427,12 @@ async function finalizeCompetitionRound(env, round) {
   await env.DB.prepare("UPDATE competition_rounds SET status='completed',payouts_enabled=0 WHERE id=? AND status='open'").bind(round.id).run();
 }
 
+async function finalizeExpiredCompetitionRounds(env) {
+  const now=new Date().toISOString();
+  const result=await env.DB.prepare("SELECT id,slug,title,period_start,period_end,prize_pool_pxy,status,payouts_enabled FROM competition_rounds WHERE status='open' AND period_end<=? ORDER BY period_end LIMIT 20").bind(now).all();
+  for(const round of result.results||[])await finalizeCompetitionRound(env,round);
+}
+
 async function runCompetitionMaintenance(env) {
   const now=new Date().toISOString();
   const result=await env.DB.prepare("SELECT id,slug,title,period_start,period_end,prize_pool_pxy,status,payouts_enabled FROM competition_rounds WHERE status='open' ORDER BY period_end LIMIT 100").all();
@@ -1471,6 +1477,7 @@ async function handleApi(request, env) {
   if (path === "/api/trading/positions/close" && request.method === "POST") {
     const user = await currentUser(request, env);
     if (!user) return json({ error: "Authentication required." }, 401);
+    try { await finalizeExpiredCompetitionRounds(env); } catch (error) { console.error(JSON.stringify({event:"competition.end_settlement_pending",userId:user.id,message:String(error?.message||"unknown")})); return json({error:"A competition round is being settled. Retry closing this position shortly."},503); }
     const body = await readJson(request);
     const positionId = typeof body?.positionId === "string" ? body.positionId : "";
     const idempotencyKey = typeof body?.idempotencyKey === "string" ? body.idempotencyKey.trim() : "";
