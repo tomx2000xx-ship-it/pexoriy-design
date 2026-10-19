@@ -332,9 +332,10 @@ async function refreshCompetitionParticipant(env, round, participant) {
   const priorDrawdown = Number(participant.max_drawdown_bps || 0);
   const drawdown = peak > 0 ? Math.max(priorDrawdown, Math.min(10000, Math.max(0, Math.round(((peak - equity) / peak) * 10000)))) : 10000;
   const returnBps = Math.round(((equity - startingEquity) / startingEquity) * 10000);
+  const checkinStart=[String(round.period_start).slice(0,10),String(participant.joined_at).slice(0,10)].sort().at(-1);
   const [trades, checkins, lessons] = await Promise.all([
     env.DB.prepare("SELECT COUNT(*) AS n FROM trading_positions WHERE user_id=? AND opened_at>=? AND opened_at<=? AND status IN ('closed','liquidated')").bind(userId, participant.joined_at, round.period_end).first(),
-    env.DB.prepare("SELECT COUNT(DISTINCT checkin_date) AS n FROM daily_checkins WHERE user_id=? AND checkin_date>=? AND checkin_date<?").bind(userId, String(round.period_start).slice(0,10), String(round.period_end).slice(0,10)).first(),
+    env.DB.prepare("SELECT COUNT(DISTINCT checkin_date) AS n FROM daily_checkins WHERE user_id=? AND checkin_date>=? AND checkin_date<?").bind(userId, checkinStart, String(round.period_end).slice(0,10)).first(),
     env.DB.prepare("SELECT COUNT(DISTINCT lesson_id) AS n FROM learning_progress WHERE user_id=? AND completed_at>=? AND completed_at<=?").bind(userId, participant.joined_at, round.period_end).first(),
   ]);
   const verifiedTrades = Number(trades?.n || 0);
