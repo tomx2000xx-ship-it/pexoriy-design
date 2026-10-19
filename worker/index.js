@@ -355,7 +355,10 @@ async function refreshCompetitionScoresForUser(env, userId) {
 async function settleCompetitionPosition(env, round, position) {
   if (!["open","closing"].includes(position.status)) return;
   const allocation = Number(position.reserved_tc || 0);
-  const quotePrice = Number(position.mark_price_micros);
+  const snapshot=await env.DB.prepare("SELECT price_micros,provider_timestamp_ms,provider FROM market_snapshots WHERE symbol=? AND validation_status='valid' ORDER BY provider_timestamp_ms DESC LIMIT 1").bind(position.symbol).first();
+  const freshQuote=snapshot?normalizeMarketQuote({price:Number(snapshot.price_micros)/1000000,timestamp:Number(snapshot.provider_timestamp_ms),provider:snapshot.provider},Date.now(),90000):null;
+  const quotePrice = Number(freshQuote?.priceMicros||position.mark_price_micros);
+  const quoteSource=freshQuote?"fresh_validated_market_snapshot":"last_validated_position_mark";
   if (allocation < 1 || !Number.isSafeInteger(quotePrice) || quotePrice <= 0) return;
   const exitPrice = calculateSimulatedFillPrice({quotePriceMicros:quotePrice,action:position.side==="long"?"sell":"buy"});
   const beforeFee = calculateRealizedSettlement({allocationTc:allocation,side:position.side,entryPriceMicros:Number(position.entry_price_micros),exitPriceMicros:exitPrice});
@@ -390,7 +393,7 @@ async function settleCompetitionPosition(env, round, position) {
   ).bind(exitPrice,settlement.realizedPnlTc,settlement.returnedTc,transactionId,position.id,position.user_id).run();
   await env.DB.prepare(
     "INSERT INTO audit_events(id,actor_user_id,event_type,entity_type,entity_id,request_id,details_json) VALUES (?,?,'competition.position_settled','trading_position',?,NULL,?)"
-  ).bind(crypto.randomUUID(),position.user_id,position.id,JSON.stringify({roundId:round.id,exitPriceMicros:exitPrice,realizedPnlTc:settlement.realizedPnlTc,reason:"standardized_competition_end_settlement"})).run();
+  ).bind(crypto.randomUUID(),position.user_id,position.id,JSON.stringify({roundId:round.id,exitPriceMicros:exitPrice,realizedPnlTc:settlement.realizedPnlTc,quoteSource,reason:"standardized_competition_end_settlement"})).run();
 }
 
 async function finalizeCompetitionRound(env, round) {
