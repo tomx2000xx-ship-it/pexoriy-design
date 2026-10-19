@@ -968,6 +968,19 @@ async function handleApi(request, env) {
     return json({packs:(result.results||[]).map(p=>({...p,packId:p.pack_id,priceGramAtoms:Number(p.price_gram_atoms),usdEquivalentCents:Number(p.usd_equivalent_cents||0),aiCredits:Number(p.ai_credits),pxyAmount:Number(p.pxy_amount)})),reserve:{capPxy:Number(reserve?.cap_pxy||50000),reservedPxy:Number(totals?.reserved||0),remainingPxy:Math.max(0,Number(reserve?.cap_pxy||50000)-Number(totals?.reserved||0)),issuanceEnabled}});
   }
 
+  if (path === "/api/admin/packs" && request.method === "GET") {
+    const user=await currentUser(request,env);
+    if(!user)return json({error:"Authentication required."},401);
+    const admins=String(env.PXY_PACK_ADMIN_USER_IDS||"").split(",").map(v=>v.trim()).filter(Boolean);
+    if(!admins.includes(user.id))return json({error:"Pack administration is not enabled for this account."},403);
+    const [packs,reserve,totals]=await Promise.all([
+      env.DB.prepare("SELECT pack_id,title,price_gram_atoms,usd_equivalent_cents,ai_credits,pxy_amount,active,updated_at FROM pxy_pack_catalog ORDER BY updated_at DESC").all(),
+      env.DB.prepare("SELECT * FROM pxy_pack_reserve WHERE id=1").first(),
+      env.DB.prepare("SELECT COALESCE(SUM(pxy_amount),0) AS reserved,COALESCE(SUM(CASE WHEN status='issued' THEN pxy_amount ELSE 0 END),0) AS issued FROM pxy_pack_issuances WHERE status IN ('reserved','issued')").first()
+    ]);
+    return json({admin:true,packs:(packs.results||[]).map(p=>({...p,priceGramAtoms:Number(p.price_gram_atoms),usdEquivalentCents:Number(p.usd_equivalent_cents||0),aiCredits:Number(p.ai_credits),pxyAmount:Number(p.pxy_amount),active:Boolean(p.active)})),reserve:{capPxy:Number(reserve?.cap_pxy||50000),reservedPxy:Number(totals?.reserved||0),issuedPxy:Number(totals?.issued||0),remainingPxy:Math.max(0,50000-Number(totals?.reserved||0)),reserveVerified:Boolean(reserve?.reserve_verified),launchApproved:Boolean(reserve?.launch_approved),issuanceEnabled:Boolean(reserve?.issuance_enabled),approvalReference:reserve?.approval_reference||""}});
+  }
+
   if (path === "/api/admin/packs" && request.method === "POST") {
     const user=await currentUser(request,env);
     if(!user)return json({error:"Authentication required."},401);
