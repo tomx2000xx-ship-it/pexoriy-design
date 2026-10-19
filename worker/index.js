@@ -1457,6 +1457,7 @@ async function handleApi(request, env) {
     }
     let referralActivation = null;
     try { referralActivation = await activateReferralForUser(env, user, requestId); } catch {}
+    try { await refreshCompetitionScoresForUser(env,user.id); } catch (error) { console.error(JSON.stringify({event:"competition.score_refresh_failed",userId:user.id,message:String(error?.message||"unknown")})); }
     return json({ order: { id: orderId, duplicate: false }, position: {
       id: positionId, symbol, market: symbol, side, direction: side === "long" ? "Long" : "Short",
       status: "open", leverage: 1, quantity_atoms: quantityAtoms, quantityAtoms,
@@ -1542,6 +1543,7 @@ async function handleApi(request, env) {
       if (current?.status === "closed") return json({ error: "This position has already been closed. Refresh your trade history." }, 409);
       return json({ error: "The position could not be closed. No settlement was applied." }, 500);
     }
+    try { await refreshCompetitionScoresForUser(env,user.id); } catch (error) { console.error(JSON.stringify({event:"competition.score_refresh_failed",userId:user.id,message:String(error?.message||"unknown")})); }
     return json({ closed: true, duplicate: false, position: { id: positionId, symbol: position.symbol, market: position.symbol,
       side: position.side, direction: position.side === "long" ? "Long" : "Short", status: "closed",
       reserved_tc: allocation, amount: allocation, entry_price_micros: entryPriceMicros,
