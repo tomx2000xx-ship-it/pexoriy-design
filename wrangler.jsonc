@@ -31,6 +31,9 @@
   "ai": {
     "binding": "AI"
   },
+  "triggers": {
+    "crons": ["*/15 * * * *"]
+  },
   "previews": {
     "d1_databases": [
       {
