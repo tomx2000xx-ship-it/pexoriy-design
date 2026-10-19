@@ -963,6 +963,7 @@ async function handleApi(request, env) {
     const recorded = await env.DB.prepare("SELECT streak_days,reward_tc FROM daily_checkins WHERE user_id=? AND checkin_date=?").bind(user.id, today).first();
     if (!recorded) return json({ error: "The reward was recorded and the check-in record is reconciling. Please retry shortly." }, 202);
     await appendAudit(env, { actorUserId: user.id, eventType: "daily.checkin_recorded", entityType: "daily_checkin", entityId: user.id + ":" + today, requestId, details: { checkinDate: today, streakDays: Number(recorded.streak_days), rewardTC: Number(recorded.reward_tc), duplicate: Boolean(ledgerResult.duplicate) } });
+    try { await refreshCompetitionScoresForUser(env,user.id); } catch (error) { console.error(JSON.stringify({event:"competition.score_refresh_failed",userId:user.id,message:String(error?.message||"unknown")})); }
     return json({ status: "checked_in", duplicate: Boolean(ledgerResult.duplicate), checkedInToday: true, streakDays: Number(recorded.streak_days), rewardTC: Number(recorded.reward_tc) });
   }
 
