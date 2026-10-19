@@ -834,6 +834,38 @@ async function handleApi(request, env) {
     return json({ joined:true, communityId });
   }
 
+  if (path === "/api/community/comments" && request.method === "GET") {
+    const user=await currentUser(request,env);
+    if(!user)return json({error:"Authentication required."},401);
+    const postId=url.searchParams.get("postId")||"";
+    const post=await env.DB.prepare("SELECT community_id FROM community_posts WHERE id=? AND status='published'").bind(postId).first();
+    if(!post)return json({error:"Post not found."},404);
+    const member=await env.DB.prepare("SELECT 1 AS ok FROM community_memberships WHERE community_id=? AND user_id=?").bind(post.community_id,user.id).first();
+    if(!member)return json({error:"Join this community to read comments."},403);
+    const result=await env.DB.prepare("SELECT c.id,c.post_id,c.user_id,c.body,c.created_at,u.display_name FROM community_post_comments c JOIN users u ON u.id=c.user_id WHERE c.post_id=? AND c.status='published' ORDER BY c.created_at ASC LIMIT 100").bind(postId).all();
+    return json({comments:result.results||[]});
+  }
+
+  if (path === "/api/community/comments" && request.method === "POST") {
+    const user=await currentUser(request,env);
+    if(!user)return json({error:"Authentication required."},401);
+    if(!(await consumeAuthRateLimit(request,env,"community-comment",user.id,30,3600)))return json({error:"You're commenting too quickly. Please try again later."},429);
+    const body=await readJson(request);
+    const postId=typeof body?.postId==="string"?body.postId.trim():"";
+    const text=typeof body?.body==="string"?body.body.trim():"";
+    if(!text||text.length>1000)return json({error:"Comments must contain 1–1,000 characters."},400);
+    if(/https?:\/\/|www\.|\b\d{7,}\b/i.test(text))return json({error:"For member safety, links and phone-number-like strings are not allowed in comments."},400);
+    const post=await env.DB.prepare("SELECT community_id FROM community_posts WHERE id=? AND status='published'").bind(postId).first();
+    if(!post)return json({error:"Post not found."},404);
+    const member=await env.DB.prepare("SELECT muted_until FROM community_memberships WHERE community_id=? AND user_id=?").bind(post.community_id,user.id).first();
+    if(!member)return json({error:"Join this community to comment."},403);
+    if(member.muted_until&&Date.parse(member.muted_until)>Date.now())return json({error:"Commenting is temporarily paused for this account in this community."},403);
+    const id=crypto.randomUUID();
+    await env.DB.prepare("INSERT INTO community_post_comments(id,post_id,user_id,body) VALUES (?,?,?,?)").bind(id,postId,user.id,text).run();
+    await appendAudit(env,{actorUserId:user.id,eventType:"community.comment_created",entityType:"community_comment",entityId:id,requestId,details:{postId,characters:text.length}});
+    return json({comment:{id,postId,userId:user.id,displayName:user.display_name,body:text,createdAt:new Date().toISOString()}},201);
+  }
+
   if (path === "/api/community/posts" && request.method === "GET") {
     const user = await currentUser(request, env);
     if (!user) return json({ error: "Authentication required." }, 401);
