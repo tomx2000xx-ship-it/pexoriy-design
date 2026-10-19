@@ -308,11 +308,13 @@ async function getCompetitionEquity(env, userId, startingEquityTc, joinedAt, per
   if(!Number.isSafeInteger(starting)||starting<0||!joinedAt||!periodEnd)return 0;
   const [closed,open]=await Promise.all([
     env.DB.prepare("SELECT COALESCE(SUM(realized_pnl_tc),0) AS pnl FROM trading_positions WHERE user_id=? AND opened_at>=? AND opened_at<=? AND status IN ('closed','liquidated')").bind(userId,joinedAt,periodEnd).first(),
-    env.DB.prepare("SELECT side,entry_price_micros,mark_price_micros,open_fee_tc,reserved_tc,status FROM trading_positions WHERE user_id=? AND opened_at>=? AND opened_at<=? AND status IN ('open','closing')").bind(userId,joinedAt,periodEnd).all(),
+    env.DB.prepare("SELECT t.side,t.entry_price_micros,t.mark_price_micros,t.open_fee_tc,t.reserved_tc,(SELECT m.price_micros FROM market_snapshots m WHERE m.symbol=t.symbol AND m.validation_status='valid' ORDER BY m.provider_timestamp_ms DESC,m.received_at DESC LIMIT 1) AS snapshot_price,(SELECT m.provider_timestamp_ms FROM market_snapshots m WHERE m.symbol=t.symbol AND m.validation_status='valid' ORDER BY m.provider_timestamp_ms DESC,m.received_at DESC LIMIT 1) AS snapshot_timestamp,(SELECT m.provider FROM market_snapshots m WHERE m.symbol=t.symbol AND m.validation_status='valid' ORDER BY m.provider_timestamp_ms DESC,m.received_at DESC LIMIT 1) AS snapshot_provider FROM trading_positions t WHERE t.user_id=? AND t.opened_at>=? AND t.opened_at<=? AND t.status IN ('open','closing')").bind(userId,joinedAt,periodEnd).all(),
   ]);
   let equity=starting+Number(closed?.pnl||0);
   for(const position of open.results||[]){
-    equity+=calculateUnrealizedPnlTc({allocationTc:Number(position.reserved_tc),side:position.side,entryPriceMicros:Number(position.entry_price_micros),markQuotePriceMicros:Number(position.mark_price_micros)})-Number(position.open_fee_tc||0);
+    const fresh=position.snapshot_price?normalizeMarketQuote({price:Number(position.snapshot_price)/1000000,timestamp:Number(position.snapshot_timestamp),provider:position.snapshot_provider},Date.now(),90000):null;
+    const markPrice=Number(fresh?.priceMicros||position.mark_price_micros);
+    equity+=calculateUnrealizedPnlTc({allocationTc:Number(position.reserved_tc),side:position.side,entryPriceMicros:Number(position.entry_price_micros),markQuotePriceMicros:markPrice})-Number(position.open_fee_tc||0);
   }
   return Math.max(0,Math.floor(equity));
 }
