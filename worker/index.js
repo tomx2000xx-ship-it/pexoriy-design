@@ -303,32 +303,25 @@ async function activateReferralForUser(env, user, requestId) {
   return { status: "activated", rewardStatus: "paid", referrerRewardTC: 250, referredRewardTC: 100 };
 }
 
-async function getCompetitionEquity(env, userId) {
-  const availableTc = Number(await getLedgerBalance(env.DB, "user:" + userId + ":TC") || 0);
-  const result = await env.DB.prepare(
-    "SELECT reserved_tc,side,entry_price_micros,mark_price_micros,status FROM trading_positions WHERE user_id=? AND status IN ('open','closing')"
-  ).bind(userId).all();
-  let equity = availableTc;
-  for (const position of result.results || []) {
-    const allocation = Number(position.reserved_tc || 0);
-    equity += allocation;
-    if (allocation > 0) {
-      equity += calculateUnrealizedPnlTc({
-        allocationTc: allocation,
-        side: position.side,
-        entryPriceMicros: Number(position.entry_price_micros),
-        markQuotePriceMicros: Number(position.mark_price_micros),
-      });
-    }
+async function getCompetitionEquity(env, userId, startingEquityTc, joinedAt, periodEnd) {
+  const starting=Number(startingEquityTc);
+  if(!Number.isSafeInteger(starting)||starting<0||!joinedAt||!periodEnd)return 0;
+  const [closed,open]=await Promise.all([
+    env.DB.prepare("SELECT COALESCE(SUM(realized_pnl_tc),0) AS pnl FROM trading_positions WHERE user_id=? AND opened_at>=? AND opened_at<=? AND status IN ('closed','liquidated')").bind(userId,joinedAt,periodEnd).first(),
+    env.DB.prepare("SELECT side,entry_price_micros,mark_price_micros,open_fee_tc,status FROM trading_positions WHERE user_id=? AND opened_at>=? AND opened_at<=? AND status IN ('open','closing')").bind(userId,joinedAt,periodEnd).all(),
+  ]);
+  let equity=starting+Number(closed?.pnl||0);
+  for(const position of open.results||[]){
+    equity+=calculateUnrealizedPnlTc({side:position.side,entryPriceMicros:Number(position.entry_price_micros),markQuotePriceMicros:Number(position.mark_price_micros)})-Number(position.open_fee_tc||0);
   }
-  return Math.max(0, Math.floor(equity));
+  return Math.max(0,Math.floor(equity));
 }
 
 async function refreshCompetitionParticipant(env, round, participant) {
   const userId = participant.user_id;
   const startingEquity = Number(participant.starting_equity_tc || 0);
   if (!startingEquity) return null;
-  const equity = await getCompetitionEquity(env, userId);
+  const equity = await getCompetitionEquity(env, userId, startingEquity, participant.joined_at, round.period_end);
   const peak = Math.max(startingEquity, Number(participant.peak_equity_tc || startingEquity), equity);
   const priorDrawdown = Number(participant.max_drawdown_bps || 0);
   const drawdown = calculateMaxDrawdownBps(peak,equity,priorDrawdown);
@@ -808,7 +801,9 @@ async function handleApi(request, env) {
     if (!round || round.status !== "open" || round.period_start > now || round.period_end <= now) return json({ error: "This competition is not open for entry." }, 409);
     const already = await env.DB.prepare("SELECT id FROM competition_participants WHERE round_id=? AND user_id=?").bind(roundId,user.id).first();
     if (already) return json({ status: "joined", duplicate: true, roundId });
-    const startingEquity = await getCompetitionEquity(env,user.id);
+    const openPositions=await env.DB.prepare("SELECT COUNT(*) AS n FROM trading_positions WHERE user_id=? AND status IN ('open','closing')").bind(user.id).first();
+    if(Number(openPositions?.n||0)>0)return json({error:"Close your existing open positions before entering. This freezes a clean starting equity for risk-aware scoring."},409);
+    const startingEquity=Number(await getLedgerBalance(env.DB,"user:"+user.id+":TC")||0);
     if(!Number.isSafeInteger(startingEquity)||startingEquity<=0)return json({error:"You need positive TC equity before entering this competition."},409);
     try {
       await env.DB.prepare("INSERT INTO competition_participants (id,round_id,user_id,starting_equity_tc,peak_equity_tc,last_equity_tc,score_points,verified_trades,completed_lessons,daily_checkins) VALUES (?,?,?,?,?,?,0,0,0,0)")
