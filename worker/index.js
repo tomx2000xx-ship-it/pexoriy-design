@@ -2492,5 +2492,10 @@ export default {
     } catch (error) {
       console.error(JSON.stringify({event:"competition.maintenance_failed",scheduledTime:controller?.scheduledTime||null,message:String(error?.message||"unknown")}));
     }
+    try {
+      await runPxyPackIssuanceMaintenance(env);
+    } catch (error) {
+      console.error(JSON.stringify({event:"pxy.pack_maintenance_failed",scheduledTime:controller?.scheduledTime||null,message:String(error?.message||"unknown")}));
+    }
   },
 };
