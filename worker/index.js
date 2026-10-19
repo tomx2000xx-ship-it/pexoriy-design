@@ -958,10 +958,14 @@ async function handleApi(request, env) {
   }
 
   if (path === "/api/packs" && request.method === "GET") {
-    const result=await env.DB.prepare("SELECT pack_id,title,price_gram_atoms,ai_credits,pxy_amount FROM pxy_pack_catalog WHERE active=1 ORDER BY price_gram_atoms").all();
-    const reserve=await env.DB.prepare("SELECT cap_pxy,issuance_enabled,reserve_verified,launch_approved,approval_reference FROM pxy_pack_reserve WHERE id=1").first();
-    const totals=await env.DB.prepare("SELECT COALESCE(SUM(pxy_amount),0) AS reserved FROM pxy_pack_issuances WHERE status IN ('reserved','issued')").first();
-    return json({packs:(result.results||[]).map(p=>({...p,priceGramAtoms:Number(p.price_gram_atoms),aiCredits:Number(p.ai_credits),pxyAmount:Number(p.pxy_amount)})),reserve:{capPxy:Number(reserve?.cap_pxy||50000),reservedPxy:Number(totals?.reserved||0),remainingPxy:Math.max(0,Number(reserve?.cap_pxy||50000)-Number(totals?.reserved||0)),issuanceEnabled:Boolean(reserve?.issuance_enabled&&reserve?.reserve_verified&&reserve?.launch_approved&&reserve?.approval_reference)}});
+    const [reserve,globalGate,totals]=await Promise.all([
+      env.DB.prepare("SELECT cap_pxy,issuance_enabled,reserve_verified,launch_approved,approval_reference FROM pxy_pack_reserve WHERE id=1").first(),
+      env.DB.prepare("SELECT issuance_enabled,reserves_verified,launch_approved,approval_reference FROM pxy_issuance_controls WHERE id=1").first(),
+      env.DB.prepare("SELECT COALESCE(SUM(pxy_amount),0) AS reserved FROM pxy_pack_issuances WHERE status IN ('reserved','issued')").first()
+    ]);
+    const issuanceEnabled=Boolean(reserve?.issuance_enabled&&reserve?.reserve_verified&&reserve?.launch_approved&&reserve?.approval_reference&&globalGate?.issuance_enabled&&globalGate?.reserves_verified&&globalGate?.launch_approved&&globalGate?.approval_reference);
+    const result=await env.DB.prepare("SELECT pack_id,title,price_gram_atoms,usd_equivalent_cents,ai_credits,pxy_amount FROM pxy_pack_catalog WHERE active=1 AND (pxy_amount=0 OR ?=1) ORDER BY price_gram_atoms").bind(Number(issuanceEnabled)).all();
+    return json({packs:(result.results||[]).map(p=>({...p,packId:p.pack_id,priceGramAtoms:Number(p.price_gram_atoms),usdEquivalentCents:Number(p.usd_equivalent_cents||0),aiCredits:Number(p.ai_credits),pxyAmount:Number(p.pxy_amount)})),reserve:{capPxy:Number(reserve?.cap_pxy||50000),reservedPxy:Number(totals?.reserved||0),remainingPxy:Math.max(0,Number(reserve?.cap_pxy||50000)-Number(totals?.reserved||0)),issuanceEnabled}});
   }
 
   if (path === "/api/admin/packs" && request.method === "POST") {
