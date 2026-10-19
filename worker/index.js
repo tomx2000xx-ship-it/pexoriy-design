@@ -1008,7 +1008,7 @@ async function handleApi(request, env) {
     if(reserveVerified&&launchApproved&&!approvalReference)return json({error:"An approval reference is required before enabling PXY issuance."},400);
     const enabled=reserveVerified&&launchApproved&&Boolean(approvalReference)&&body?.issuanceEnabled===true;
     if(!enabled){
-      const outstanding=await env.DB.prepare("SELECT COUNT(*) AS n FROM payment_orders o LEFT JOIN pxy_pack_issuances i ON i.payment_order_id=o.id WHERE o.pack_pxy_amount>0 AND (o.status='credited' OR (o.status IN ('created','submitted','confirming','confirmed') AND o.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))) AND (i.id IS NULL OR i.status<>'issued')").first();
+      const outstanding=await env.DB.prepare("SELECT COUNT(*) AS n FROM payment_orders o LEFT JOIN pxy_pack_issuances i ON i.payment_order_id=o.id WHERE o.pack_pxy_amount>0 AND (o.status='credited' OR (o.status IN ('created','pending','confirmed') AND o.expires_at>strftime('%Y-%m-%dT%H:%M:%fZ','now'))) AND (i.id IS NULL OR i.status<>'issued')").first();
       if(Number(outstanding?.n||0)>0)return json({error:"Finish or expire outstanding PXY pack payment orders before disabling issuance. You can deactivate individual packs to stop new sales."},409);
     }
     await env.DB.prepare("UPDATE pxy_pack_reserve SET reserve_verified=?,launch_approved=?,approval_reference=?,issuance_enabled=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=1").bind(Number(reserveVerified),Number(launchApproved),approvalReference||null,Number(enabled)).run();
