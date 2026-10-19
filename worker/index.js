@@ -1,6 +1,7 @@
 import { postLedgerTransaction, getLedgerBalance } from "./ledger.js";
 import { TON_NETWORK, TON_RECEIVE_ADDRESS, normalizeTonAddress, formatNanoTon, makeTonComment, validateTonIncomingTransaction } from "./ton-payments.js";
 import { calculateRealizedSettlement, calculateUnrealizedPnlTc, isFreshValidatedQuote, calculateSimulatedFillPrice, calculateTakerFeeTc, SIMULATION_MODEL_VERSION, MAX_OPEN_POSITIONS, MAX_POSITION_EQUITY_BPS, MAX_TOTAL_EXPOSURE_EQUITY_BPS } from "./trading.js";
+import { calculateRiskAdjustedScore, calculateReturnBps, calculateMaxDrawdownBps } from "./competition-scoring.js";
 import { normalizeMarketQuote } from "./market-feed.js";
 import {
   AI_CREDIT_PACKAGES,
@@ -330,8 +331,8 @@ async function refreshCompetitionParticipant(env, round, participant) {
   const equity = await getCompetitionEquity(env, userId);
   const peak = Math.max(startingEquity, Number(participant.peak_equity_tc || startingEquity), equity);
   const priorDrawdown = Number(participant.max_drawdown_bps || 0);
-  const drawdown = peak > 0 ? Math.max(priorDrawdown, Math.min(10000, Math.max(0, Math.round(((peak - equity) / peak) * 10000)))) : 10000;
-  const returnBps = Math.round(((equity - startingEquity) / startingEquity) * 10000);
+  const drawdown = calculateMaxDrawdownBps(peak,equity,priorDrawdown);
+  const returnBps = calculateReturnBps(equity,startingEquity);
   const checkinStart=[String(round.period_start).slice(0,10),String(participant.joined_at).slice(0,10)].sort().at(-1);
   const [trades, checkins, lessons] = await Promise.all([
     env.DB.prepare("SELECT COUNT(*) AS n FROM trading_positions WHERE user_id=? AND opened_at>=? AND opened_at<=? AND status IN ('closed','liquidated')").bind(userId, participant.joined_at, round.period_end).first(),
@@ -341,8 +342,7 @@ async function refreshCompetitionParticipant(env, round, participant) {
   const verifiedTrades = Number(trades?.n || 0);
   const dailyCheckins = Number(checkins?.n || 0);
   const completedLessons = Number(lessons?.n || 0);
-  const activityBonus = Math.min(verifiedTrades,20)*10 + Math.min(dailyCheckins,14)*5 + Math.min(completedLessons,10)*5;
-  const score = Math.max(0, Math.round(returnBps - Math.round(drawdown*0.75) + activityBonus));
+  const score = calculateRiskAdjustedScore({returnBps,maxDrawdownBps:drawdown,verifiedTrades,dailyCheckins,completedLessons});
   await env.DB.prepare(
     "UPDATE competition_participants SET peak_equity_tc=?,last_equity_tc=?,return_bps=?,max_drawdown_bps=?,risk_adjusted_score=?,score_points=?,verified_trades=?,completed_lessons=?,daily_checkins=?,scoring_version='risk-aware-v1',last_scored_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND round_id=?"
   ).bind(peak,equity,returnBps,drawdown,score,score,verifiedTrades,completedLessons,dailyCheckins,participant.id,round.id).run();
