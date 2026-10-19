@@ -432,7 +432,7 @@ async function runCompetitionMaintenance(env) {
       await finalizeCompetitionRound(env,round);
       continue;
     }
-    const participants=await env.DB.prepare("SELECT id,user_id,joined_at,starting_equity_tc,peak_equity_tc,max_drawdown_bps FROM competition_participants WHERE round_id=? ORDER BY joined_at LIMIT 500").bind(round.id).all();
+    const participants=await env.DB.prepare("SELECT p.id,p.user_id,p.joined_at,p.starting_equity_tc,p.peak_equity_tc,p.max_drawdown_bps FROM competition_participants p WHERE p.round_id=? AND EXISTS (SELECT 1 FROM trading_positions t WHERE t.user_id=p.user_id AND t.status IN ('open','closing')) ORDER BY p.joined_at LIMIT 500").bind(round.id).all();
     for (const participant of participants.results || []) await refreshCompetitionParticipant(env,round,participant);
   }
 }
@@ -779,10 +779,7 @@ async function handleApi(request, env) {
     if(!roundId||roundId.length>100)return json({error:"Choose a valid competition round."},400);
     const round=await env.DB.prepare("SELECT id,title,period_start,period_end,status,prize_pool_pxy,payouts_enabled FROM competition_rounds WHERE id=?").bind(roundId).first();
     if(!round)return json({error:"Competition round not found."},404);
-    if(round.status==="open"&&round.period_end>new Date().toISOString()){
-      const participants=await env.DB.prepare("SELECT id,user_id,joined_at,starting_equity_tc,peak_equity_tc,max_drawdown_bps FROM competition_participants WHERE round_id=? ORDER BY joined_at LIMIT 500").bind(roundId).all();
-      for(const participant of participants.results||[])await refreshCompetitionParticipant(env,round,participant);
-    }
+    if(round.status==="open"&&round.period_end>new Date().toISOString())await refreshCompetitionScoresForUser(env,user.id);
     const result=await env.DB.prepare("SELECT p.user_id,u.display_name,p.score_points,p.risk_adjusted_score,p.return_bps,p.max_drawdown_bps,p.verified_trades,p.completed_lessons,p.daily_checkins,p.joined_at,p.starting_equity_tc,p.last_equity_tc,p.settled_at FROM competition_participants p JOIN users u ON u.id=p.user_id WHERE p.round_id=? ORDER BY p.score_points DESC,p.return_bps DESC,p.max_drawdown_bps ASC,p.verified_trades DESC,p.joined_at ASC LIMIT 100").bind(roundId).all();
     const entries=(result.results||[]).map((row,index)=>({rank:index+1,userId:row.user_id,displayName:row.display_name||"Pexoriy member",scorePoints:Number(row.score_points||0),riskAdjustedScore:Number(row.risk_adjusted_score||0),returnBps:row.return_bps===null?null:Number(row.return_bps),maxDrawdownBps:Number(row.max_drawdown_bps||0),verifiedTrades:Number(row.verified_trades||0),completedLessons:Number(row.completed_lessons||0),dailyCheckins:Number(row.daily_checkins||0),joinedAt:row.joined_at,startingEquityTC:Number(row.starting_equity_tc||0),currentEquityTC:row.last_equity_tc===null?null:Number(row.last_equity_tc),isYou:row.user_id===user.id}));
     const awardResult=await env.DB.prepare("SELECT rank,prize_pxy,status FROM competition_awards WHERE round_id=? ORDER BY rank").bind(roundId).all();
