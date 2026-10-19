@@ -812,15 +812,219 @@ async function handleApi(request, env) {
     return json({ status: "checked_in", duplicate: Boolean(ledgerResult.duplicate), checkedInToday: true, streakDays: Number(recorded.streak_days), rewardTC: Number(recorded.reward_tc) });
   }
 
+  if (path === "/api/community" && request.method === "GET") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    await env.DB.prepare("INSERT OR IGNORE INTO community_memberships (community_id,user_id,role) VALUES ('community-general',?,'member')").bind(user.id).run();
+    const result = await env.DB.prepare(
+      "SELECT c.id,c.slug,c.name,c.description,c.visibility,c.posting_policy,COUNT(DISTINCT m.user_id) AS member_count,MAX(CASE WHEN mine.user_id IS NULL THEN 0 ELSE 1 END) AS joined FROM communities c LEFT JOIN community_memberships m ON m.community_id=c.id LEFT JOIN community_memberships mine ON mine.community_id=c.id AND mine.user_id=? WHERE c.active=1 AND (c.visibility='public' OR mine.user_id IS NOT NULL) GROUP BY c.id ORDER BY CASE c.slug WHEN 'general' THEN 0 WHEN 'trading-lab' THEN 1 WHEN 'learning-lounge' THEN 2 ELSE 3 END"
+    ).bind(user.id).all();
+    return json({ communities: (result.results || []).map(row => ({ ...row, memberCount: Number(row.member_count), joined: Boolean(row.joined) })) });
+  }
+
+  if (path === "/api/community/join" && request.method === "POST") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const body = await readJson(request);
+    const communityId = typeof body?.communityId === "string" ? body.communityId.trim() : "";
+    const community = await env.DB.prepare("SELECT id,visibility FROM communities WHERE id=? AND active=1").bind(communityId).first();
+    if (!community || community.visibility !== "public") return json({ error: "That community is not available to join." }, 404);
+    await env.DB.prepare("INSERT OR IGNORE INTO community_memberships (community_id,user_id,role) VALUES (?,?,'member')").bind(communityId,user.id).run();
+    await appendAudit(env, { actorUserId:user.id,eventType:"community.joined",entityType:"community",entityId:communityId,requestId });
+    return json({ joined:true, communityId });
+  }
+
+  if (path === "/api/community/posts" && request.method === "GET") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const communityId = url.searchParams.get("communityId") || "community-general";
+    const member = await env.DB.prepare("SELECT 1 AS ok FROM community_memberships WHERE community_id=? AND user_id=?").bind(communityId,user.id).first();
+    if (!member) return json({ error: "Join this community to view its posts." }, 403);
+    const result = await env.DB.prepare(
+      "SELECT p.id,p.community_id,p.user_id,p.body,p.created_at,p.edited_at,u.display_name,(SELECT COUNT(*) FROM community_post_comments c WHERE c.post_id=p.id AND c.status='published') AS comment_count,(SELECT COUNT(*) FROM community_post_reactions r WHERE r.post_id=p.id) AS reaction_count,EXISTS(SELECT 1 FROM community_post_reactions r WHERE r.post_id=p.id AND r.user_id=? AND r.reaction='like') AS liked FROM community_posts p JOIN users u ON u.id=p.user_id WHERE p.community_id=? AND p.status='published' ORDER BY p.created_at DESC LIMIT 50"
+    ).bind(user.id,communityId).all();
+    return json({ posts:(result.results||[]).map(row=>({...row,commentCount:Number(row.comment_count),reactionCount:Number(row.reaction_count),liked:Boolean(row.liked)})) });
+  }
+
+  if (path === "/api/community/posts" && request.method === "POST") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    if (!(await consumeAuthRateLimit(request,env,"community-post",user.id,10,3600))) return json({ error:"You're posting too quickly. Please try again later." },429);
+    const body = await readJson(request);
+    const communityId = typeof body?.communityId === "string" ? body.communityId.trim() : "community-general";
+    const text = typeof body?.body === "string" ? body.body.trim() : "";
+    if (!text || text.length > 2000) return json({ error:"Posts must contain 1–2,000 characters." },400);
+    if (/https?:\/\/|www\.|\b\d{7,}\b/i.test(text)) return json({ error:"For member safety, links and phone-number-like strings are not allowed in community posts." },400);
+    const member = await env.DB.prepare("SELECT role,muted_until FROM community_memberships WHERE community_id=? AND user_id=?").bind(communityId,user.id).first();
+    if (!member) return json({ error:"Join this community before posting." },403);
+    if (member.muted_until && Date.parse(member.muted_until)>Date.now()) return json({ error:"Posting is temporarily paused for this account in this community." },403);
+    const community = await env.DB.prepare("SELECT posting_policy FROM communities WHERE id=? AND active=1").bind(communityId).first();
+    if (!community) return json({ error:"Community not found." },404);
+    if (community.posting_policy==="moderators" && !["owner","moderator"].includes(member.role)) return json({ error:"Only community moderators can post here." },403);
+    const id=crypto.randomUUID();
+    await env.DB.prepare("INSERT INTO community_posts (id,community_id,user_id,body) VALUES (?,?,?,?)").bind(id,communityId,user.id,text).run();
+    await appendAudit(env,{actorUserId:user.id,eventType:"community.post_created",entityType:"community_post",entityId:id,requestId,details:{communityId,characters:text.length}});
+    return json({ post:{id,communityId,userId:user.id,displayName:user.display_name,body:text,createdAt:new Date().toISOString(),commentCount:0,reactionCount:0,liked:false} },201);
+  }
+
+  if (path === "/api/community/messages" && request.method === "GET") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    const communityId = url.searchParams.get("communityId") || "community-general";
+    const member = await env.DB.prepare("SELECT 1 AS ok FROM community_memberships WHERE community_id=? AND user_id=?").bind(communityId,user.id).first();
+    if (!member) return json({ error:"Join this community to access its group chat." },403);
+    const result=await env.DB.prepare("SELECT m.id,m.community_id,m.user_id,m.body,m.created_at,u.display_name FROM community_messages m JOIN users u ON u.id=m.user_id WHERE m.community_id=? AND m.status='published' ORDER BY m.created_at DESC LIMIT 100").bind(communityId).all();
+    return json({ messages:(result.results||[]).reverse() });
+  }
+
+  if (path === "/api/community/messages" && request.method === "POST") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    if (!(await consumeAuthRateLimit(request,env,"community-message",user.id,30,60))) return json({ error:"You're sending messages too quickly. Please slow down." },429);
+    const body=await readJson(request);
+    const communityId=typeof body?.communityId==="string"?body.communityId.trim():"community-general";
+    const text=typeof body?.body==="string"?body.body.trim():"";
+    if(!text||text.length>1500)return json({error:"Messages must contain 1–1,500 characters."},400);
+    if(/https?:\/\/|www\.|\b\d{7,}\b/i.test(text))return json({error:"For member safety, links and phone-number-like strings are not allowed in group chat."},400);
+    const member=await env.DB.prepare("SELECT muted_until FROM community_memberships WHERE community_id=? AND user_id=?").bind(communityId,user.id).first();
+    if(!member)return json({error:"Join this community before sending messages."},403);
+    if(member.muted_until&&Date.parse(member.muted_until)>Date.now())return json({error:"Messaging is temporarily paused for this account in this community."},403);
+    const id=crypto.randomUUID();
+    await env.DB.prepare("INSERT INTO community_messages (id,community_id,user_id,body) VALUES (?,?,?,?)").bind(id,communityId,user.id,text).run();
+    await appendAudit(env,{actorUserId:user.id,eventType:"community.message_sent",entityType:"community_message",entityId:id,requestId,details:{communityId,characters:text.length}});
+    return json({message:{id,communityId,userId:user.id,displayName:user.display_name,body:text,createdAt:new Date().toISOString()}},201);
+  }
+
+  if (path === "/api/community/react" && request.method === "POST") {
+    const user=await currentUser(request,env);
+    if(!user)return json({error:"Authentication required."},401);
+    const body=await readJson(request);
+    const postId=typeof body?.postId==="string"?body.postId.trim():"";
+    const reaction=["like","insightful","support"].includes(body?.reaction)?body.reaction:"like";
+    const post=await env.DB.prepare("SELECT community_id FROM community_posts WHERE id=? AND status='published'").bind(postId).first();
+    if(!post)return json({error:"Post not found."},404);
+    const member=await env.DB.prepare("SELECT 1 AS ok FROM community_memberships WHERE community_id=? AND user_id=?").bind(post.community_id,user.id).first();
+    if(!member)return json({error:"Join this community to react."},403);
+    const prior=await env.DB.prepare("SELECT 1 AS ok FROM community_post_reactions WHERE post_id=? AND user_id=? AND reaction=?").bind(postId,user.id,reaction).first();
+    if(prior)await env.DB.prepare("DELETE FROM community_post_reactions WHERE post_id=? AND user_id=? AND reaction=?").bind(postId,user.id,reaction).run();
+    else await env.DB.prepare("INSERT OR IGNORE INTO community_post_reactions(post_id,user_id,reaction) VALUES (?,?,?)").bind(postId,user.id,reaction).run();
+    return json({reacted:!prior,postId,reaction});
+  }
+
+  if (path === "/api/community/report" && request.method === "POST") {
+    const user=await currentUser(request,env);
+    if(!user)return json({error:"Authentication required."},401);
+    const body=await readJson(request);
+    const contentType=["post","comment","message"].includes(body?.contentType)?body.contentType:"";
+    const contentId=typeof body?.contentId==="string"?body.contentId.trim():"";
+    const reason=["spam","harassment","scam","unsafe","other"].includes(body?.reason)?body.reason:"other";
+    const details=typeof body?.details==="string"?body.details.trim().slice(0,500):"";
+    if(!contentType||!contentId)return json({error:"Choose a community item to report."},400);
+    const id=crypto.randomUUID();
+    await env.DB.prepare("INSERT OR IGNORE INTO community_moderation_reports(id,reporter_user_id,content_type,content_id,reason,details) VALUES (?,?,?,?,?,?)").bind(id,user.id,contentType,contentId,reason,details).run();
+    return json({reported:true});
+  }
+
+  if (path === "/api/packs" && request.method === "GET") {
+    const result=await env.DB.prepare("SELECT pack_id,title,price_gram_atoms,ai_credits,pxy_amount FROM pxy_pack_catalog WHERE active=1 ORDER BY price_gram_atoms").all();
+    const reserve=await env.DB.prepare("SELECT cap_pxy,issuance_enabled,reserve_verified,launch_approved,approval_reference FROM pxy_pack_reserve WHERE id=1").first();
+    const totals=await env.DB.prepare("SELECT COALESCE(SUM(pxy_amount),0) AS reserved FROM pxy_pack_issuances WHERE status IN ('reserved','issued')").first();
+    return json({packs:(result.results||[]).map(p=>({...p,priceGramAtoms:Number(p.price_gram_atoms),aiCredits:Number(p.ai_credits),pxyAmount:Number(p.pxy_amount)})),reserve:{capPxy:Number(reserve?.cap_pxy||50000),reservedPxy:Number(totals?.reserved||0),remainingPxy:Math.max(0,Number(reserve?.cap_pxy||50000)-Number(totals?.reserved||0)),issuanceEnabled:Boolean(reserve?.issuance_enabled&&reserve?.reserve_verified&&reserve?.launch_approved&&reserve?.approval_reference)}});
+  }
+
+  if (path === "/api/admin/packs" && request.method === "POST") {
+    const user=await currentUser(request,env);
+    if(!user)return json({error:"Authentication required."},401);
+    const admins=String(env.PXY_PACK_ADMIN_USER_IDS||"").split(",").map(v=>v.trim()).filter(Boolean);
+    if(!admins.includes(user.id))return json({error:"Pack administration is not enabled for this account."},403);
+    const body=await readJson(request);
+    const packId=typeof body?.packId==="string"?body.packId.trim():"";
+    const title=typeof body?.title==="string"?body.title.trim():"";
+    const price=Number(body?.priceGramAtoms),credits=Number(body?.aiCredits),pxy=Number(body?.pxyAmount||0);
+    if(!/^[a-z0-9][a-z0-9_-]{2,39}$/.test(packId)||!title||title.length>80||!Number.isSafeInteger(price)||price<1||!Number.isSafeInteger(credits)||credits<0||!Number.isSafeInteger(pxy)||pxy<0||pxy>50000)return json({error:"Invalid pack settings. PXY per pack must be between 0 and 50,000."},400);
+    const existing=await env.DB.prepare("SELECT pack_id FROM pxy_pack_catalog WHERE pack_id=?").bind(packId).first();
+    if(existing)await env.DB.prepare("UPDATE pxy_pack_catalog SET title=?,price_gram_atoms=?,ai_credits=?,pxy_amount=?,active=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE pack_id=?").bind(title,price,credits,pxy,body.active===false?0:1,packId).run();
+    else await env.DB.prepare("INSERT INTO pxy_pack_catalog(pack_id,title,price_gram_atoms,ai_credits,pxy_amount,active) VALUES (?,?,?,?,?,?)").bind(packId,title,price,credits,pxy,body.active===false?0:1).run();
+    await appendAudit(env,{actorUserId:user.id,eventType:"pxy_pack.configured",entityType:"pxy_pack",entityId:packId,requestId,details:{priceGramAtoms:price,aiCredits:credits,pxyAmount:pxy,active:body.active!==false}});
+    return json({saved:true,packId,issuanceEnabled:false,message:"Pack configuration saved. PXY issuance remains separately gated."});
+  }
+
+  if (path === "/api/admin/packs/reserve" && request.method === "POST") {
+    const user=await currentUser(request,env);
+    if(!user)return json({error:"Authentication required."},401);
+    const admins=String(env.PXY_PACK_ADMIN_USER_IDS||"").split(",").map(v=>v.trim()).filter(Boolean);
+    if(!admins.includes(user.id))return json({error:"Pack reserve administration is not enabled for this account."},403);
+    const body=await readJson(request);
+    const reserveVerified=body?.reserveVerified===true,launchApproved=body?.launchApproved===true;
+    const approvalReference=typeof body?.approvalReference==="string"?body.approvalReference.trim().slice(0,120):"";
+    if(reserveVerified&&launchApproved&&!approvalReference)return json({error:"An approval reference is required before enabling PXY issuance."},400);
+    const enabled=reserveVerified&&launchApproved&&Boolean(approvalReference)&&body?.issuanceEnabled===true;
+    await env.DB.batch([
+      env.DB.prepare("UPDATE pxy_pack_reserve SET reserve_verified=?,launch_approved=?,approval_reference=?,issuance_enabled=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=1").bind(Number(reserveVerified),Number(launchApproved),approvalReference||null,Number(enabled)),
+      env.DB.prepare("UPDATE pxy_issuance_controls SET reserves_verified=?,launch_approved=?,approval_reference=?,issuance_enabled=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=1").bind(Number(reserveVerified),Number(launchApproved),approvalReference||null,Number(enabled))
+    ]);
+    await appendAudit(env,{actorUserId:user.id,eventType:"pxy_pack.reserve_gate_updated",entityType:"pxy_pack_reserve",entityId:"1",requestId,details:{reserveVerified,launchApproved,issuanceEnabled:enabled,approvalReference:approvalReference||null}});
+    return json({saved:true,issuanceEnabled:enabled,capPxy:50000});
+  }
+
+  if (path === "/api/packs/issue" && request.method === "POST") {
+    const user=await currentUser(request,env);
+    if(!user)return json({error:"Authentication required."},401);
+    const body=await readJson(request);
+    const packId=typeof body?.packId==="string"?body.packId.trim():"";
+    const orderId=typeof body?.orderId==="string"?body.orderId.trim():"";
+    if(!packId||!orderId)return json({error:"A verified pack and payment order are required."},400);
+    const pack=await env.DB.prepare("SELECT * FROM pxy_pack_catalog WHERE pack_id=? AND active=1").bind(packId).first();
+    const order=await env.DB.prepare("SELECT id,user_id,status,package_id,credited_ac,asset FROM payment_orders WHERE id=? AND user_id=?").bind(orderId,user.id).first();
+    if(!pack||!order||order.status!=="credited"||order.package_id!==packId||Number(order.credited_ac)!==Number(pack.ai_credits))return json({error:"This payment does not match an active, verified pack. No PXY was issued."},409);
+    if(Number(pack.pxy_amount)<=0)return json({status:"no_pxy_component",issuedPxy:0,aiCreditsAlreadySettled:Number(order.credited_ac)});
+    const gate=await env.DB.prepare("SELECT issuance_enabled,reserve_verified,launch_approved,approval_reference FROM pxy_pack_reserve WHERE id=1").first();
+    const globalGate=await env.DB.prepare("SELECT issuance_enabled,reserves_verified,launch_approved,approval_reference FROM pxy_issuance_controls WHERE id=1").first();
+    if(!gate?.issuance_enabled||!gate?.reserve_verified||!gate?.launch_approved||!gate?.approval_reference||!globalGate?.issuance_enabled||!globalGate?.reserves_verified||!globalGate?.launch_approved||!globalGate?.approval_reference)return json({error:"PXY issuance is locked until reserve and launch safeguards are approved."},423);
+    const prior=await env.DB.prepare("SELECT id,status,pxy_amount FROM pxy_pack_issuances WHERE payment_order_id=?").bind(orderId).first();
+    if(prior?.status==="issued")return json({status:"issued",issuedPxy:Number(prior.pxy_amount),duplicate:true});
+    if(prior)return json({status:"reserved",issuedPxy:0,duplicate:true,message:"Pack allocation is reserved and needs safe settlement retry."},202);
+    const issuanceId=crypto.randomUUID();
+    try{await env.DB.prepare("INSERT INTO pxy_pack_issuances(id,pack_id,user_id,payment_order_id,pxy_amount,status) VALUES (?,?,?,?,?,'reserved')").bind(issuanceId,packId,user.id,orderId,Number(pack.pxy_amount)).run();}
+    catch(error){const latest=await env.DB.prepare("SELECT id,status,pxy_amount FROM pxy_pack_issuances WHERE payment_order_id=?").bind(orderId).first();if(latest?.status==="issued")return json({status:"issued",issuedPxy:Number(latest.pxy_amount),duplicate:true});return json({error:String(error?.message||"PXY reserve cap or allocation conflict.").includes("PXY_PACK_RESERVE_CAP_EXCEEDED")?"The 50,000 PXY pack reserve is fully reserved.":"This pack allocation could not be reserved."},409);}
+    let ledger;
+    try{ledger=await postLedgerTransaction(env.DB,{id:crypto.randomUUID(),idempotencyKey:"pxy-pack:"+orderId,userId:user.id,eventType:"pxy.pack_issued",metadata:{packId,orderId,issuanceId,approvalReference:gate.approval_reference},postings:[{accountKey:"user:"+user.id+":PXY",currency:"PXY",amountAtoms:Number(pack.pxy_amount)},{accountKey:"system:issuance:PXY",currency:"PXY",amountAtoms:-Number(pack.pxy_amount)}]});}
+    catch{return json({status:"reserved",issuedPxy:0,message:"The pack is safely reserved. PXY ledger settlement will retry without issuing twice."},202);}
+    await env.DB.prepare("UPDATE pxy_pack_issuances SET status='issued',ledger_transaction_id=?,issued_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND status='reserved'").bind(ledger.transactionId,issuanceId).run();
+    await appendAudit(env,{actorUserId:user.id,eventType:"pxy.pack_issued",entityType:"pxy_pack_issuance",entityId:issuanceId,requestId,details:{packId,orderId,pxyAmount:Number(pack.pxy_amount),ledgerTransactionId:ledger.transactionId,duplicate:ledger.duplicate}});
+    return json({status:"issued",issuedPxy:Number(pack.pxy_amount),aiCreditsAlreadySettled:Number(order.credited_ac),duplicate:ledger.duplicate},201);
+  }
+
+  if (path === "/api/missions/activity" && request.method === "POST") {
+    const user=await currentUser(request,env);
+    if(!user)return json({error:"Authentication required."},401);
+    const body=await readJson(request);
+    const eventType=["market_viewed","journey_review"].includes(body?.eventType)?body.eventType:"";
+    const idempotencyKey=typeof body?.idempotencyKey==="string"?body.idempotencyKey.trim():"";
+    if(!eventType||!/^[a-zA-Z0-9:_-]{8,160}$/.test(idempotencyKey))return json({error:"A supported activity and idempotency key are required."},400);
+    await env.DB.prepare("INSERT OR IGNORE INTO mission_activity_events(id,user_id,event_type,idempotency_key,metadata_json) VALUES (?,?,?,?,?)").bind(crypto.randomUUID(),user.id,eventType,idempotencyKey,JSON.stringify({source:"authenticated-client"})).run();
+    return json({recorded:true,eventType});
+  }
+
   if (path === "/api/missions" && request.method === "GET") {
     const user = await currentUser(request, env);
     if (!user) return json({ error: "Authentication required." }, 401);
-    const [missions, claims] = await Promise.all([
-      env.DB.prepare("SELECT id, title, reward_currency, reward_amount, rules_json FROM mission_definitions WHERE active=1 ORDER BY id").all(),
-      env.DB.prepare("SELECT mission_id, status, ledger_transaction_id, created_at FROM mission_claims WHERE user_id=? ORDER BY created_at DESC").bind(user.id).all(),
+    await env.DB.prepare("INSERT OR IGNORE INTO mission_journeys(user_id,started_at) SELECT id,created_at FROM users WHERE id=?").bind(user.id).run();
+    const journey=await env.DB.prepare("SELECT user_id,started_at,status FROM mission_journeys WHERE user_id=?").bind(user.id).first();
+    if(!journey)return json({error:"Mission journey could not be initialized."},503);
+    const startedDate=String(journey.started_at).slice(0,10);
+    const today=new Date().toISOString().slice(0,10);
+    const currentDay=Math.max(1,Math.min(30,Math.floor((Date.parse(today+"T00:00:00Z")-Date.parse(startedDate+"T00:00:00Z"))/86400000)+1));
+    await env.DB.prepare("WITH RECURSIVE days(day) AS (SELECT 1 UNION ALL SELECT day+1 FROM days WHERE day<30) INSERT OR IGNORE INTO mission_journey_days(user_id,day_number,mission_id,unlock_at,status) SELECT ?,day,'journey-'||printf('%02d',day),datetime(?,'+'||(day-1)||' days'),CASE WHEN day<=? THEN 'available' ELSE 'locked' END FROM days").bind(user.id,journey.started_at,currentDay).run();
+    await env.DB.prepare("UPDATE mission_journey_days SET status='available' WHERE user_id=? AND day_number<=? AND status='locked'").bind(user.id,currentDay).run();
+    await env.DB.prepare("UPDATE mission_journey_days SET status='locked' WHERE user_id=? AND day_number>? AND status='available'").bind(user.id,currentDay).run();
+    const [missions,claims,journeyStats]=await Promise.all([
+      env.DB.prepare("SELECT d.id,d.title,d.reward_currency,d.reward_amount,d.rules_json,j.day_number,j.unlock_at,j.status AS day_status,j.completed_at FROM mission_journey_days j JOIN mission_definitions d ON d.id=j.mission_id WHERE j.user_id=? ORDER BY j.day_number").bind(user.id).all(),
+      env.DB.prepare("SELECT mission_id,status,ledger_transaction_id,created_at FROM mission_claims WHERE user_id=? ORDER BY created_at DESC").bind(user.id).all(),
+      env.DB.prepare("SELECT COUNT(*) AS completed FROM mission_journey_days WHERE user_id=? AND status='completed'").bind(user.id).first()
     ]);
-    const claimed = new Map((claims.results || []).map(row => [row.mission_id, row]));
-    return json({ missions: (missions.results || []).map(row => ({ id: row.id, title: row.title, rewardCurrency: row.reward_currency, rewardAmount: Number(row.reward_amount), rules: JSON.parse(row.rules_json || "{}"), claim: claimed.get(row.id) || null })) });
+    const claimed=new Map((claims.results||[]).map(row=>[row.mission_id,row]));
+    return json({journey:{startedAt:journey.started_at,currentDay,status:journey.status,completed:Number(journeyStats?.completed||0),totalDays:30},missions:(missions.results||[]).map(row=>({id:row.id,title:row.title,rewardCurrency:row.reward_currency,rewardAmount:Number(row.reward_amount),rules:JSON.parse(row.rules_json||"{}"),day:Number(row.day_number),unlockAt:row.unlock_at,dayStatus:row.day_status,available:row.day_status==="available",completedAt:row.completed_at,claim:claimed.get(row.id)||null}))});
   }
 
   if (path === "/api/missions/claim" && request.method === "POST") {
@@ -829,14 +1033,23 @@ async function handleApi(request, env) {
     if (!(await consumeAuthRateLimit(request, env, "mission-claim", user.id, 20, 3600))) return json({ error: "Too many reward claims. Try again later." }, 429);
     const body = await readJson(request);
     const missionId = typeof body?.missionId === "string" ? body.missionId.trim() : "";
-    const mission = await env.DB.prepare("SELECT id, reward_currency, reward_amount, rules_json FROM mission_definitions WHERE id=? AND active=1").bind(missionId).first();
+    const mission = await env.DB.prepare("SELECT d.id,d.reward_currency,d.reward_amount,d.rules_json,j.day_number,j.status AS day_status FROM mission_definitions d JOIN mission_journey_days j ON j.mission_id=d.id AND j.user_id=? WHERE d.id=? AND d.active=1").bind(user.id,missionId).first();
     if (!mission || mission.reward_currency !== "TC" || Number(mission.reward_amount) <= 0) return json({ error: "This reward is not currently claimable." }, 404);
+    if(mission.day_status==="completed")return json({status:"paid",missionId,duplicate:true,message:"This day's reward is already recorded."});
+    if(mission.day_status!=="available")return json({error:"This mission unlocks on Day "+Number(mission.day_number)+". Complete the current day's mission first."},409);
     const rules = JSON.parse(mission.rules_json || "{}");
     let eligible = false;
     if (rules.prerequisite === "practice_trade") eligible = Boolean(await env.DB.prepare("SELECT id FROM trading_positions WHERE user_id=? LIMIT 1").bind(user.id).first());
     else if (rules.prerequisite === "ai_setup") eligible = Boolean(await env.DB.prepare("SELECT id FROM ai_trade_proposals WHERE user_id=? LIMIT 1").bind(user.id).first());
     else if (rules.prerequisite === "community_challenge") eligible = Boolean(await env.DB.prepare("SELECT id FROM competition_entries WHERE user_id=? LIMIT 1").bind(user.id).first());
-    else if (rules.prerequisite === "learning_complete" && typeof rules.lessonId === "string") eligible = Boolean(await env.DB.prepare("SELECT user_id FROM learning_progress WHERE user_id=? AND lesson_id=?").bind(user.id, rules.lessonId).first());
+    else if (rules.prerequisite === "learning_complete") eligible = Boolean(await env.DB.prepare(typeof rules.lessonId==="string"?"SELECT user_id FROM learning_progress WHERE user_id=? AND lesson_id=?":"SELECT user_id FROM learning_progress WHERE user_id=? LIMIT 1").bind(...(typeof rules.lessonId==="string"?[user.id,rules.lessonId]:[user.id])).first());
+    else if (rules.prerequisite === "quiz_passed") eligible = Boolean(await env.DB.prepare("SELECT id FROM learning_attempts WHERE user_id=? AND passed=1 LIMIT 1").bind(user.id).first());
+    else if (rules.prerequisite === "checkin_today") eligible = Boolean(await env.DB.prepare("SELECT id FROM daily_checkins WHERE user_id=? AND checkin_date=?").bind(user.id,new Date().toISOString().slice(0,10)).first());
+    else if (rules.prerequisite === "market_viewed") eligible = Boolean(await env.DB.prepare("SELECT id FROM mission_activity_events WHERE user_id=? AND event_type='market_viewed' LIMIT 1").bind(user.id).first());
+    else if (rules.prerequisite === "community_post") eligible = Boolean(await env.DB.prepare("SELECT id FROM community_posts WHERE user_id=? AND status='published' LIMIT 1").bind(user.id).first());
+    else if (rules.prerequisite === "group_message") eligible = Boolean(await env.DB.prepare("SELECT id FROM community_messages WHERE user_id=? AND status='published' LIMIT 1").bind(user.id).first());
+    else if (rules.prerequisite === "journey_review") eligible = Boolean(await env.DB.prepare("SELECT id FROM mission_activity_events WHERE user_id=? AND event_type='journey_review' LIMIT 1").bind(user.id).first());
+    else if (rules.prerequisite === "journey_complete") eligible = Number((await env.DB.prepare("SELECT COUNT(*) AS n FROM mission_journey_days WHERE user_id=? AND day_number<30 AND status='completed'").bind(user.id).first())?.n||0)>=29;
     if (!eligible) return json({ error: "Complete the required activity first. The server has not issued a reward." }, 409);
     const idempotencyKey = "mission:" + user.id + ":" + mission.id;
     await env.DB.prepare("INSERT OR IGNORE INTO mission_claims (id,user_id,mission_id,idempotency_key,status,evidence_json) VALUES (?,?,?,?,'approved',?)").bind(crypto.randomUUID(), user.id, mission.id, idempotencyKey, JSON.stringify({ prerequisite: rules.prerequisite })).run();
@@ -846,6 +1059,9 @@ async function handleApi(request, env) {
     try {
       rewardResult = await postLedgerTransaction(env.DB, { id: crypto.randomUUID(), idempotencyKey, userId: user.id, eventType: "mission.tc_reward", metadata: { missionId: mission.id }, postings: [{ accountKey: "user:" + user.id + ":TC", currency: "TC", amountAtoms: Number(mission.reward_amount) }, { accountKey: "system:issuance:TC", currency: "TC", amountAtoms: -Number(mission.reward_amount) }] });
       await env.DB.prepare("UPDATE mission_claims SET status='paid', ledger_transaction_id=? WHERE user_id=? AND mission_id=? AND status IN ('approved','paid')").bind(rewardResult.transactionId, user.id, mission.id).run();
+      await env.DB.prepare("UPDATE mission_journey_days SET status='completed',completed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id=? AND mission_id=? AND status='available'").bind(user.id,mission.id).run();
+      const remaining=await env.DB.prepare("SELECT COUNT(*) AS n FROM mission_journey_days WHERE user_id=? AND status<>'completed'").bind(user.id).first();
+      if(Number(remaining?.n||0)===0)await env.DB.prepare("UPDATE mission_journeys SET status='completed',updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id=?").bind(user.id).run();
     } catch {
       return json({ status: "approved", rewardStatus: "retrying", message: "Eligibility is recorded. Reward delivery will retry safely." }, 202);
     }
