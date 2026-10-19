@@ -958,12 +958,11 @@ async function handleApi(request, env) {
   }
 
   if (path === "/api/packs" && request.method === "GET") {
-    const [reserve,globalGate,totals]=await Promise.all([
+    const [reserve,totals]=await Promise.all([
       env.DB.prepare("SELECT cap_pxy,issuance_enabled,reserve_verified,launch_approved,approval_reference FROM pxy_pack_reserve WHERE id=1").first(),
-      env.DB.prepare("SELECT issuance_enabled,reserves_verified,launch_approved,approval_reference FROM pxy_issuance_controls WHERE id=1").first(),
       env.DB.prepare("SELECT COALESCE(SUM(pxy_amount),0) AS reserved FROM pxy_pack_issuances WHERE status IN ('reserved','issued')").first()
     ]);
-    const issuanceEnabled=Boolean(reserve?.issuance_enabled&&reserve?.reserve_verified&&reserve?.launch_approved&&reserve?.approval_reference&&globalGate?.issuance_enabled&&globalGate?.reserves_verified&&globalGate?.launch_approved&&globalGate?.approval_reference);
+    const issuanceEnabled=Boolean(reserve?.issuance_enabled&&reserve?.reserve_verified&&reserve?.launch_approved&&reserve?.approval_reference);
     const result=await env.DB.prepare("SELECT pack_id,title,price_gram_atoms,usd_equivalent_cents,ai_credits,pxy_amount FROM pxy_pack_catalog WHERE active=1 AND (pxy_amount=0 OR ?=1) ORDER BY price_gram_atoms").bind(Number(issuanceEnabled)).all();
     return json({packs:(result.results||[]).map(p=>({...p,packId:p.pack_id,priceGramAtoms:Number(p.price_gram_atoms),usdEquivalentCents:Number(p.usd_equivalent_cents||0),aiCredits:Number(p.ai_credits),pxyAmount:Number(p.pxy_amount)})),reserve:{capPxy:Number(reserve?.cap_pxy||50000),reservedPxy:Number(totals?.reserved||0),remainingPxy:Math.max(0,Number(reserve?.cap_pxy||50000)-Number(totals?.reserved||0)),issuanceEnabled}});
   }
@@ -1008,10 +1007,7 @@ async function handleApi(request, env) {
     const approvalReference=typeof body?.approvalReference==="string"?body.approvalReference.trim().slice(0,120):"";
     if(reserveVerified&&launchApproved&&!approvalReference)return json({error:"An approval reference is required before enabling PXY issuance."},400);
     const enabled=reserveVerified&&launchApproved&&Boolean(approvalReference)&&body?.issuanceEnabled===true;
-    await env.DB.batch([
-      env.DB.prepare("UPDATE pxy_pack_reserve SET reserve_verified=?,launch_approved=?,approval_reference=?,issuance_enabled=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=1").bind(Number(reserveVerified),Number(launchApproved),approvalReference||null,Number(enabled)),
-      env.DB.prepare("UPDATE pxy_issuance_controls SET reserves_verified=?,launch_approved=?,approval_reference=?,issuance_enabled=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=1").bind(Number(reserveVerified),Number(launchApproved),approvalReference||null,Number(enabled))
-    ]);
+    await env.DB.prepare("UPDATE pxy_pack_reserve SET reserve_verified=?,launch_approved=?,approval_reference=?,issuance_enabled=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=1").bind(Number(reserveVerified),Number(launchApproved),approvalReference||null,Number(enabled)).run();
     await appendAudit(env,{actorUserId:user.id,eventType:"pxy_pack.reserve_gate_updated",entityType:"pxy_pack_reserve",entityId:"1",requestId,details:{reserveVerified,launchApproved,issuanceEnabled:enabled,approvalReference:approvalReference||null}});
     return json({saved:true,issuanceEnabled:enabled,capPxy:50000});
   }
@@ -1028,8 +1024,7 @@ async function handleApi(request, env) {
     if(!pack||!order||order.status!=="credited"||order.package_id!==packId||Number(order.credited_ac)!==Number(pack.ai_credits))return json({error:"This payment does not match an active, verified pack. No PXY was issued."},409);
     if(Number(pack.pxy_amount)<=0)return json({status:"no_pxy_component",issuedPxy:0,aiCreditsAlreadySettled:Number(order.credited_ac)});
     const gate=await env.DB.prepare("SELECT issuance_enabled,reserve_verified,launch_approved,approval_reference FROM pxy_pack_reserve WHERE id=1").first();
-    const globalGate=await env.DB.prepare("SELECT issuance_enabled,reserves_verified,launch_approved,approval_reference FROM pxy_issuance_controls WHERE id=1").first();
-    if(!gate?.issuance_enabled||!gate?.reserve_verified||!gate?.launch_approved||!gate?.approval_reference||!globalGate?.issuance_enabled||!globalGate?.reserves_verified||!globalGate?.launch_approved||!globalGate?.approval_reference)return json({error:"PXY issuance is locked until reserve and launch safeguards are approved."},423);
+    if(!gate?.issuance_enabled||!gate?.reserve_verified||!gate?.launch_approved||!gate?.approval_reference)return json({error:"PXY pack issuance is locked until the dedicated pack reserve and launch safeguards are approved."},423);
     const prior=await env.DB.prepare("SELECT id,status,pxy_amount,pack_id,user_id FROM pxy_pack_issuances WHERE payment_order_id=?").bind(orderId).first();
     if(prior?.status==="issued")return json({status:"issued",issuedPxy:Number(prior.pxy_amount),duplicate:true});
     if(prior&&prior.status!=="reserved")return json({error:"This pack allocation is under review and cannot be issued automatically."},409);
@@ -1687,11 +1682,8 @@ async function handleApi(request, env) {
     const staticPack = AI_CREDIT_PACKAGES[packageId];
     const pack = catalogPack ? { id:catalogPack.pack_id,title:catalogPack.title,aiCredits:Number(catalogPack.ai_credits),usdCents:Number(catalogPack.usd_equivalent_cents),priceGramAtoms:Number(catalogPack.price_gram_atoms),dynamic:true } : staticPack;
     if(catalogPack&&Number(catalogPack.pxy_amount)>0){
-      const [packGate,globalGate]=await Promise.all([
-        env.DB.prepare("SELECT issuance_enabled,reserve_verified,launch_approved,approval_reference FROM pxy_pack_reserve WHERE id=1").first(),
-        env.DB.prepare("SELECT issuance_enabled,reserves_verified,launch_approved,approval_reference FROM pxy_issuance_controls WHERE id=1").first()
-      ]);
-      if(!packGate?.issuance_enabled||!packGate?.reserve_verified||!packGate?.launch_approved||!packGate?.approval_reference||!globalGate?.issuance_enabled||!globalGate?.reserves_verified||!globalGate?.launch_approved||!globalGate?.approval_reference)return json({error:"This PXY-containing pack is not available for purchase until token reserve and launch safeguards are approved."},423);
+      const packGate=await env.DB.prepare("SELECT issuance_enabled,reserve_verified,launch_approved,approval_reference FROM pxy_pack_reserve WHERE id=1").first();
+      if(!packGate?.issuance_enabled||!packGate?.reserve_verified||!packGate?.launch_approved||!packGate?.approval_reference)return json({error:"This PXY-containing pack is not available for purchase until its dedicated pack reserve and launch safeguards are approved."},423);
     }
     if (!pack || !Number.isSafeInteger(Number(pack.aiCredits)) || Number(pack.aiCredits)<0) return json({ error: "Choose an available AI Credit pack." }, 400);
     if(catalogPack&&(!Number.isSafeInteger(Number(catalogPack.price_gram_atoms))||Number(catalogPack.price_gram_atoms)<1||!Number.isSafeInteger(Number(catalogPack.usd_equivalent_cents))||Number(catalogPack.usd_equivalent_cents)<1))return json({error:"This pack's GRAM price configuration is incomplete."},503);
