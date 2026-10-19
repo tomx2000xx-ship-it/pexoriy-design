@@ -632,6 +632,7 @@ async function handleApi(request, env) {
       const tcTx=crypto.randomUUID(),acTx=crypto.randomUUID();
       await env.DB.batch([
         env.DB.prepare("INSERT INTO users (id,email,display_name,password_salt,password_hash,email_verified_at) VALUES (?,?,?,?,?,?)").bind(userId,email,displayName,salt,hash,testBypass?new Date().toISOString():null),
+        env.DB.prepare("INSERT OR IGNORE INTO mission_journeys (user_id,started_at,status) VALUES (?,strftime('%Y-%m-%dT%H:%M:%fZ','now'),'active')").bind(userId),
         ...(referralSchema ? [env.DB.prepare("INSERT INTO referral_codes (user_id, code) VALUES (?, ?)").bind(userId, randomHex(6).toUpperCase())] : []),
         ...(referralOwner && referralOwner.user_id !== userId ? [env.DB.prepare("INSERT INTO referral_attributions (id, referrer_user_id, referred_user_id, referral_code, status) VALUES (?, ?, ?, ?, 'pending')").bind(crypto.randomUUID(), referralOwner.user_id, userId, referralCode)] : []),
         env.DB.prepare("INSERT INTO ledger_accounts (account_key,owner_user_id,currency,account_type) VALUES (?,?,'TC','user'),(?,?,'AC','user'),(?,?,'PXY','user')").bind("user:"+userId+":TC",userId,"user:"+userId+":AC",userId,"user:"+userId+":PXY",userId),
