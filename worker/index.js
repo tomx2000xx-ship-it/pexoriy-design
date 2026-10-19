@@ -302,6 +302,147 @@ async function activateReferralForUser(env, user, requestId) {
   return { status: "activated", rewardStatus: "paid", referrerRewardTC: 250, referredRewardTC: 100 };
 }
 
+async function getCompetitionEquity(env, userId) {
+  const availableTc = Number(await getLedgerBalance(env.DB, "user:" + userId + ":TC") || 0);
+  const result = await env.DB.prepare(
+    "SELECT reserved_tc,side,entry_price_micros,mark_price_micros,status FROM trading_positions WHERE user_id=? AND status IN ('open','closing')"
+  ).bind(userId).all();
+  let equity = availableTc;
+  for (const position of result.results || []) {
+    const allocation = Number(position.reserved_tc || 0);
+    equity += allocation;
+    if (allocation > 0) {
+      equity += calculateUnrealizedPnlTc({
+        allocationTc: allocation,
+        side: position.side,
+        entryPriceMicros: Number(position.entry_price_micros),
+        markQuotePriceMicros: Number(position.mark_price_micros),
+      });
+    }
+  }
+  return Math.max(0, Math.floor(equity));
+}
+
+async function refreshCompetitionParticipant(env, round, participant) {
+  const userId = participant.user_id;
+  const startingEquity = Number(participant.starting_equity_tc || 0);
+  if (!startingEquity) return null;
+  const equity = await getCompetitionEquity(env, userId);
+  const peak = Math.max(startingEquity, Number(participant.peak_equity_tc || startingEquity), equity);
+  const priorDrawdown = Number(participant.max_drawdown_bps || 0);
+  const drawdown = peak > 0 ? Math.max(priorDrawdown, Math.min(10000, Math.max(0, Math.round(((peak - equity) / peak) * 10000)))) : 10000;
+  const returnBps = Math.round(((equity - startingEquity) / startingEquity) * 10000);
+  const [trades, checkins, lessons] = await Promise.all([
+    env.DB.prepare("SELECT COUNT(*) AS n FROM trading_positions WHERE user_id=? AND opened_at>=? AND opened_at<=? AND status IN ('closed','liquidated')").bind(userId, participant.joined_at, round.period_end).first(),
+    env.DB.prepare("SELECT COUNT(DISTINCT checkin_date) AS n FROM daily_checkins WHERE user_id=? AND checkin_date>=? AND checkin_date<?").bind(userId, String(round.period_start).slice(0,10), String(round.period_end).slice(0,10)).first(),
+    env.DB.prepare("SELECT COUNT(DISTINCT lesson_id) AS n FROM learning_progress WHERE user_id=? AND completed_at>=? AND completed_at<=?").bind(userId, participant.joined_at, round.period_end).first(),
+  ]);
+  const verifiedTrades = Number(trades?.n || 0);
+  const dailyCheckins = Number(checkins?.n || 0);
+  const completedLessons = Number(lessons?.n || 0);
+  const activityBonus = Math.min(verifiedTrades,20)*10 + Math.min(dailyCheckins,14)*5 + Math.min(completedLessons,10)*5;
+  const score = Math.max(0, Math.round(returnBps - Math.round(drawdown*0.75) + activityBonus));
+  await env.DB.prepare(
+    "UPDATE competition_participants SET peak_equity_tc=?,last_equity_tc=?,return_bps=?,max_drawdown_bps=?,risk_adjusted_score=?,score_points=?,verified_trades=?,completed_lessons=?,daily_checkins=?,scoring_version='risk-aware-v1',last_scored_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND round_id=?"
+  ).bind(peak,equity,returnBps,drawdown,score,score,verifiedTrades,completedLessons,dailyCheckins,participant.id,round.id).run();
+  return {equity,startingEquity,returnBps,maxDrawdownBps:drawdown,scorePoints:score,verifiedTrades,completedLessons,dailyCheckins};
+}
+
+async function refreshCompetitionScoresForUser(env, userId) {
+  const now = new Date().toISOString();
+  const result = await env.DB.prepare(
+    "SELECT r.id,r.period_start,r.period_end,r.status,p.id AS participant_id,p.user_id,p.joined_at,p.starting_equity_tc,p.peak_equity_tc,p.max_drawdown_bps FROM competition_rounds r JOIN competition_participants p ON p.round_id=r.id WHERE p.user_id=? AND r.status='open' AND r.period_start<=? AND r.period_end>?"
+  ).bind(userId,now,now).all();
+  for (const row of result.results || []) {
+    await refreshCompetitionParticipant(env,{id:row.id,period_start:row.period_start,period_end:row.period_end},{id:row.participant_id,user_id:row.user_id,joined_at:row.joined_at,starting_equity_tc:row.starting_equity_tc,peak_equity_tc:row.peak_equity_tc,max_drawdown_bps:row.max_drawdown_bps});
+  }
+}
+
+async function settleCompetitionPosition(env, round, position) {
+  if (!["open","closing"].includes(position.status)) return;
+  const allocation = Number(position.reserved_tc || 0);
+  const quotePrice = Number(position.mark_price_micros);
+  if (allocation < 1 || !Number.isSafeInteger(quotePrice) || quotePrice <= 0) return;
+  const exitPrice = calculateSimulatedFillPrice({quotePriceMicros:quotePrice,action:position.side==="long"?"sell":"buy"});
+  const beforeFee = calculateRealizedSettlement({allocationTc:allocation,side:position.side,entryPriceMicros:Number(position.entry_price_micros),exitPriceMicros:exitPrice});
+  const settlement = calculateRealizedSettlement({
+    allocationTc:allocation,
+    side:position.side,
+    entryPriceMicros:Number(position.entry_price_micros),
+    exitPriceMicros:exitPrice,
+    openFeeTc:Number(position.open_fee_tc||0),
+    closeFeeTc:calculateTakerFeeTc(beforeFee.grossReturnedTc),
+  });
+  const idempotencyKey="competition-end-settle:"+round.id+":"+position.id;
+  let transactionId=null;
+  if (settlement.postings.length) {
+    const postings=settlement.postings.map(item=>({
+      accountKey:item.account==="user"?"user:"+position.user_id+":TC":item.account==="reserve"?"system:reserve:TC":"system:fees:TC",
+      currency:"TC",
+      amountAtoms:item.amount,
+    }));
+    const posted=await postLedgerTransaction(env.DB,{
+      id:crypto.randomUUID(),
+      idempotencyKey,
+      userId:position.user_id,
+      eventType:"competition.position_settled",
+      metadata:{roundId:round.id,positionId:position.id,exitPriceMicros:exitPrice,realizedPnlTc:settlement.realizedPnlTc,closeFeeTc:settlement.closeFeeTc,modelVersion:SIMULATION_MODEL_VERSION},
+      postings,
+    });
+    transactionId=posted.transactionId;
+  }
+  await env.DB.prepare(
+    "UPDATE trading_positions SET status='closed',mark_price_micros=?,realized_pnl_tc=?,close_return_tc=?,close_transaction_id=?,closed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND user_id=? AND status IN ('open','closing')"
+  ).bind(exitPrice,settlement.realizedPnlTc,settlement.returnedTc,transactionId,position.id,position.user_id).run();
+  await env.DB.prepare(
+    "INSERT INTO audit_events(id,actor_user_id,event_type,entity_type,entity_id,request_id,details_json) VALUES (?,?,'competition.position_settled','trading_position',?,NULL,?)"
+  ).bind(crypto.randomUUID(),position.user_id,position.id,JSON.stringify({roundId:round.id,exitPriceMicros:exitPrice,realizedPnlTc:settlement.realizedPnlTc,reason:"standardized_competition_end_settlement"})).run();
+}
+
+async function finalizeCompetitionRound(env, round) {
+  if (round.status==="completed") return;
+  const entrants=await env.DB.prepare(
+    "SELECT id,user_id,joined_at,starting_equity_tc,peak_equity_tc,max_drawdown_bps FROM competition_participants WHERE round_id=? ORDER BY joined_at LIMIT 500"
+  ).bind(round.id).all();
+  for (const participant of entrants.results || []) {
+    const open=await env.DB.prepare(
+      "SELECT id,user_id,side,status,entry_price_micros,mark_price_micros,reserved_tc,open_fee_tc,opened_at FROM trading_positions WHERE user_id=? AND status IN ('open','closing') AND opened_at<=?"
+    ).bind(participant.user_id,round.period_end).all();
+    for (const position of open.results || []) await settleCompetitionPosition(env,round,position);
+    await refreshCompetitionParticipant(env,round,participant);
+  }
+  const eligible=await env.DB.prepare(
+    "SELECT id,user_id,score_points,return_bps,max_drawdown_bps,verified_trades,joined_at,last_equity_tc FROM competition_participants WHERE round_id=? AND starting_equity_tc>0 AND verified_trades>=3 ORDER BY score_points DESC,return_bps DESC,max_drawdown_bps ASC,verified_trades DESC,joined_at ASC LIMIT 3"
+  ).bind(round.id).all();
+  if ((eligible.results||[]).length>=3) {
+    const pool=Number(round.prize_pool_pxy);
+    const amounts=[Math.floor(pool*0.5),Math.floor(pool*0.3),pool-Math.floor(pool*0.5)-Math.floor(pool*0.3)];
+    for (let i=0;i<3;i++) {
+      const winner=eligible.results[i];
+      await env.DB.prepare(
+        "INSERT OR IGNORE INTO competition_awards(id,round_id,user_id,rank,prize_pxy,status) VALUES (?,?,?,?,?,'gated')"
+      ).bind(crypto.randomUUID(),round.id,winner.user_id,i+1,amounts[i]).run();
+    }
+  }
+  await env.DB.prepare(
+    "UPDATE competition_participants SET ending_equity_tc=last_equity_tc,settled_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE round_id=?"
+  ).bind(round.id).run();
+  await env.DB.prepare("UPDATE competition_rounds SET status='completed',payouts_enabled=0 WHERE id=? AND status='open'").bind(round.id).run();
+}
+
+async function runCompetitionMaintenance(env) {
+  const now=new Date().toISOString();
+  const result=await env.DB.prepare("SELECT id,slug,title,period_start,period_end,prize_pool_pxy,status,payouts_enabled FROM competition_rounds WHERE status='open' ORDER BY period_end LIMIT 100").all();
+  for (const round of result.results || []) {
+    if (round.period_end<=now) {
+      await finalizeCompetitionRound(env,round);
+      continue;
+    }
+    const participants=await env.DB.prepare("SELECT id,user_id,joined_at,starting_equity_tc,peak_equity_tc,max_drawdown_bps FROM competition_participants WHERE round_id=? ORDER BY joined_at LIMIT 500").bind(round.id).all();
+    for (const participant of participants.results || []) await refreshCompetitionParticipant(env,round,participant);
+  }
+}
+
 async function handleApi(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
