@@ -1641,3 +1641,19 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .community-reward-guide-foot svg{flex-shrink:0;color:var(--lime);margin-top:1px}
 @media(max-width:760px){.community-reward-guide{padding:15px 12px}.community-reward-guide-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.community-reward-guide-grid>div{padding:11px}.community-reward-guide-grid>div>strong{font-size:18px}}
 @media(max-width:380px){.community-reward-guide-grid{grid-template-columns:1fr}}
+
+/* Persistent community UX */
+.community-space-switcher{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;padding:12px 14px;margin-bottom:14px;border:1px solid var(--border,#30352b);border-radius:14px;background:var(--surface-2,#171b15)}
+.community-space-switcher label{display:flex;flex:1;min-width:180px;flex-direction:column;gap:6px;font-size:12px;color:var(--muted,#a4aa9b)}
+.community-space-switcher select{width:100%;min-height:42px;padding:9px 12px;border:1px solid var(--border,#394131);border-radius:10px;background:var(--surface,#10130f);color:var(--text,#f2f4ed)}
+.community-space-switcher>span{font-size:12px;color:var(--muted,#a4aa9b);padding:10px 0}
+.community-post-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.community-comment-thread{margin-top:12px;padding:12px;border-radius:12px;background:var(--surface-2,#171b15);border:1px solid var(--border,#30352b)}
+.community-comment{padding:8px 0;border-bottom:1px solid var(--border,#30352b)}
+.community-comment strong{font-size:12px;color:var(--text,#f2f4ed)}
+.community-comment p{margin:4px 0;font-size:13px;overflow-wrap:anywhere}
+.community-comment-thread form{display:flex;gap:8px;margin-top:10px}
+.community-comment-thread input{flex:1;min-width:0;padding:10px 12px;border-radius:10px;border:1px solid var(--border,#394131);background:var(--surface,#10130f);color:var(--text,#f2f4ed)}
+.mission-locked{opacity:.72}
+.mission-state.locked{color:var(--muted,#a4aa9b)}
+@media(max-width:560px){.community-space-switcher{align-items:stretch}.community-space-switcher>span{padding:0}.community-comment-thread form{flex-wrap:wrap}.community-comment-thread form input{flex-basis:100%}}
