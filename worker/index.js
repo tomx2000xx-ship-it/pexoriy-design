@@ -1019,27 +1019,28 @@ async function handleApi(request, env) {
     const packId=typeof body?.packId==="string"?body.packId.trim():"";
     const orderId=typeof body?.orderId==="string"?body.orderId.trim():"";
     if(!packId||!orderId)return json({error:"A verified pack and payment order are required."},400);
-    const pack=await env.DB.prepare("SELECT * FROM pxy_pack_catalog WHERE pack_id=? AND active=1").bind(packId).first();
-    const order=await env.DB.prepare("SELECT id,user_id,status,package_id,credited_ac,asset FROM payment_orders WHERE id=? AND user_id=?").bind(orderId,user.id).first();
-    if(!pack||!order||order.status!=="credited"||order.package_id!==packId||Number(order.credited_ac)!==Number(pack.ai_credits))return json({error:"This payment does not match an active, verified pack. No PXY was issued."},409);
-    if(Number(pack.pxy_amount)<=0)return json({status:"no_pxy_component",issuedPxy:0,aiCreditsAlreadySettled:Number(order.credited_ac)});
+    const pack=await env.DB.prepare("SELECT pack_id,title FROM pxy_pack_catalog WHERE pack_id=?").bind(packId).first();
+    const order=await env.DB.prepare("SELECT id,user_id,status,package_id,credited_ac,asset,pack_pxy_amount FROM payment_orders WHERE id=? AND user_id=?").bind(orderId,user.id).first();
+    if(!pack||!order||order.status!=="credited"||order.package_id!==packId)return json({error:"This payment does not match a verified pack order. No PXY was issued."},409);
+    const pxyAmount=Number(order.pack_pxy_amount||0);
+    if(pxyAmount<=0)return json({status:"no_pxy_component",issuedPxy:0,aiCreditsAlreadySettled:Number(order.credited_ac)});
     const gate=await env.DB.prepare("SELECT issuance_enabled,reserve_verified,launch_approved,approval_reference FROM pxy_pack_reserve WHERE id=1").first();
     if(!gate?.issuance_enabled||!gate?.reserve_verified||!gate?.launch_approved||!gate?.approval_reference)return json({error:"PXY pack issuance is locked until the dedicated pack reserve and launch safeguards are approved."},423);
     const prior=await env.DB.prepare("SELECT id,status,pxy_amount,pack_id,user_id FROM pxy_pack_issuances WHERE payment_order_id=?").bind(orderId).first();
     if(prior?.status==="issued")return json({status:"issued",issuedPxy:Number(prior.pxy_amount),duplicate:true});
     if(prior&&prior.status!=="reserved")return json({error:"This pack allocation is under review and cannot be issued automatically."},409);
-    if(prior&&(prior.pack_id!==packId||prior.user_id!==user.id||Number(prior.pxy_amount)!==Number(pack.pxy_amount)))return json({error:"The existing pack reservation does not match this pack configuration."},409);
+    if(prior&&(prior.pack_id!==packId||prior.user_id!==user.id||Number(prior.pxy_amount)!==pxyAmount))return json({error:"The existing pack reservation does not match this pack configuration."},409);
     const issuanceId=prior?.id||crypto.randomUUID();
     if(!prior){
-      try{await env.DB.prepare("INSERT INTO pxy_pack_issuances(id,pack_id,user_id,payment_order_id,pxy_amount,status) VALUES (?,?,?,?,?,'reserved')").bind(issuanceId,packId,user.id,orderId,Number(pack.pxy_amount)).run();}
+      try{await env.DB.prepare("INSERT INTO pxy_pack_issuances(id,pack_id,user_id,payment_order_id,pxy_amount,status) VALUES (?,?,?,?,?,'reserved')").bind(issuanceId,packId,user.id,orderId,pxyAmount).run();}
       catch(error){const latest=await env.DB.prepare("SELECT id,status,pxy_amount FROM pxy_pack_issuances WHERE payment_order_id=?").bind(orderId).first();if(latest?.status==="issued")return json({status:"issued",issuedPxy:Number(latest.pxy_amount),duplicate:true});return json({error:String(error?.message||"PXY reserve cap or allocation conflict.").includes("PXY_PACK_RESERVE_CAP_EXCEEDED")?"The 50,000 PXY pack reserve is fully reserved.":"This pack allocation could not be reserved."},409);}
     }
     let ledger;
-    try{ledger=await postLedgerTransaction(env.DB,{id:crypto.randomUUID(),idempotencyKey:"pxy-pack:"+orderId,userId:user.id,eventType:"pxy.pack_issued",metadata:{packId,orderId,issuanceId,approvalReference:gate.approval_reference},postings:[{accountKey:"user:"+user.id+":PXY",currency:"PXY",amountAtoms:Number(pack.pxy_amount)},{accountKey:"system:issuance:PXY",currency:"PXY",amountAtoms:-Number(pack.pxy_amount)}]});}
+    try{ledger=await postLedgerTransaction(env.DB,{id:crypto.randomUUID(),idempotencyKey:"pxy-pack:"+orderId,userId:user.id,eventType:"pxy.pack_issued",metadata:{packId,orderId,issuanceId,approvalReference:gate.approval_reference},postings:[{accountKey:"user:"+user.id+":PXY",currency:"PXY",amountAtoms:pxyAmount},{accountKey:"system:issuance:PXY",currency:"PXY",amountAtoms:-Number(pack.pxy_amount)}]});}
     catch{return json({status:"reserved",issuedPxy:0,message:"The pack is safely reserved. PXY ledger settlement will retry without issuing twice."},202);}
     await env.DB.prepare("UPDATE pxy_pack_issuances SET status='issued',ledger_transaction_id=?,issued_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND status='reserved'").bind(ledger.transactionId,issuanceId).run();
-    await appendAudit(env,{actorUserId:user.id,eventType:"pxy.pack_issued",entityType:"pxy_pack_issuance",entityId:issuanceId,requestId,details:{packId,orderId,pxyAmount:Number(pack.pxy_amount),ledgerTransactionId:ledger.transactionId,duplicate:ledger.duplicate}});
-    return json({status:"issued",issuedPxy:Number(pack.pxy_amount),aiCreditsAlreadySettled:Number(order.credited_ac),duplicate:ledger.duplicate},201);
+    await appendAudit(env,{actorUserId:user.id,eventType:"pxy.pack_issued",entityType:"pxy_pack_issuance",entityId:issuanceId,requestId,details:{packId,orderId,pxyAmount,ledgerTransactionId:ledger.transactionId,duplicate:ledger.duplicate}});
+    return json({status:"issued",issuedPxy:pxyAmount,aiCreditsAlreadySettled:Number(order.credited_ac),duplicate:ledger.duplicate},201);
   }
 
   if (path === "/api/missions/activity" && request.method === "POST") {
@@ -1733,10 +1734,10 @@ async function handleApi(request, env) {
         `INSERT INTO payment_orders
           (id, user_id, idempotency_key, provider, network, asset, expected_amount_atoms,
            usd_equivalent_micros, status, reference_key, token_mint, package_id, credited_ac,
-           expires_at, recipient_address)
-         VALUES (?, ?, ?, 'toncenter-rpc', ?, 'GRAM', ?, ?, 'created', ?, NULL, ?, ?, ?, ?)`,
+           expires_at, recipient_address, pack_pxy_amount)
+         VALUES (?, ?, ?, 'toncenter-rpc', ?, 'GRAM', ?, ?, 'created', ?, NULL, ?, ?, ?, ?, ?)`,
       ).bind(orderId, user.id, idempotencyKey, TON_NETWORK, expectedNanoTon, pack.usdCents * 10_000,
-        reference, pack.id, pack.aiCredits, expiresAt, recipient).run();
+        reference, pack.id, pack.aiCredits, expiresAt, recipient, Number(catalogPack?.pxy_amount||0)).run();
       await appendAudit(env, {
         actorUserId: user.id, eventType: "payment.ton_order_created", entityType: "payment_order",
         entityId: orderId, requestId, details: { packageId: pack.id, asset: "GRAM", network: TON_NETWORK },
