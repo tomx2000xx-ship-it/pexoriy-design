@@ -308,11 +308,11 @@ async function getCompetitionEquity(env, userId, startingEquityTc, joinedAt, per
   if(!Number.isSafeInteger(starting)||starting<0||!joinedAt||!periodEnd)return 0;
   const [closed,open]=await Promise.all([
     env.DB.prepare("SELECT COALESCE(SUM(realized_pnl_tc),0) AS pnl FROM trading_positions WHERE user_id=? AND opened_at>=? AND opened_at<=? AND status IN ('closed','liquidated')").bind(userId,joinedAt,periodEnd).first(),
-    env.DB.prepare("SELECT side,entry_price_micros,mark_price_micros,open_fee_tc,status FROM trading_positions WHERE user_id=? AND opened_at>=? AND opened_at<=? AND status IN ('open','closing')").bind(userId,joinedAt,periodEnd).all(),
+    env.DB.prepare("SELECT side,entry_price_micros,mark_price_micros,open_fee_tc,reserved_tc,status FROM trading_positions WHERE user_id=? AND opened_at>=? AND opened_at<=? AND status IN ('open','closing')").bind(userId,joinedAt,periodEnd).all(),
   ]);
   let equity=starting+Number(closed?.pnl||0);
   for(const position of open.results||[]){
-    equity+=calculateUnrealizedPnlTc({side:position.side,entryPriceMicros:Number(position.entry_price_micros),markQuotePriceMicros:Number(position.mark_price_micros)})-Number(position.open_fee_tc||0);
+    equity+=calculateUnrealizedPnlTc({allocationTc:Number(position.reserved_tc),side:position.side,entryPriceMicros:Number(position.entry_price_micros),markQuotePriceMicros:Number(position.mark_price_micros)})-Number(position.open_fee_tc||0);
   }
   return Math.max(0,Math.floor(equity));
 }
