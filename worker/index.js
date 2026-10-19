@@ -1919,7 +1919,7 @@ async function handleApi(request, env) {
       });
     } catch (error) {
       const raced = await env.DB.prepare(
-        "SELECT id, status, reference_key, expected_amount_atoms, credited_ac, expires_at, recipient_address, package_id, created_at FROM payment_orders WHERE idempotency_key = ? AND user_id = ?",
+        "SELECT id, status, reference_key, expected_amount_atoms, credited_ac, expires_at, recipient_address, package_id, pack_pxy_amount, created_at FROM payment_orders WHERE idempotency_key = ? AND user_id = ?",
       ).bind(idempotencyKey, user.id).first();
       if (!raced) throw error;
       if(raced.package_id!==packageId)return json({error:"This idempotency key already belongs to a different pack."},409);
