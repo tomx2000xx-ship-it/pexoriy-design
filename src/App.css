@@ -1696,3 +1696,18 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .pxy-pack-reserve-form{display:grid;gap:12px;padding:16px 0;border-top:1px solid var(--border,#30352b)}
 .pxy-pack-reserve-form>button{justify-self:start}
 @media(max-width:620px){.pxy-pack-admin{padding:13px}.pxy-pack-admin-heading{flex-direction:column}.pxy-pack-admin-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.pxy-pack-admin-form{grid-template-columns:1fr}.pxy-pack-admin-form h3,.pxy-pack-admin-form .pxy-pack-active-toggle,.pxy-pack-admin-form>button{grid-column:1}.pxy-pack-admin-row{align-items:flex-start}}
+
+/* Live risk-aware competition leaderboard */
+.challenge-card-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.competition-leaderboard{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.competition-leaderboard-row{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border,#30352b);border-radius:12px;background:var(--surface-2,#171b15)}
+.competition-leaderboard-row.is-you{border-color:var(--accent,#b7f34a);background:color-mix(in srgb,var(--accent,#b7f34a) 7%,var(--surface-2,#171b15))}
+.competition-rank{display:grid;place-items:center;flex:0 0 28px;height:28px;border-radius:9px;background:var(--surface,#10130f);font-weight:800;font-size:12px}
+.competition-leaderboard-user{display:flex;flex:1;min-width:0;flex-direction:column;gap:4px}
+.competition-leaderboard-user strong{font-size:12px;overflow-wrap:anywhere}
+.competition-leaderboard-user small,.competition-leaderboard-score small{font-size:10px;color:var(--muted,#a4aa9b)}
+.competition-leaderboard-score{display:flex;flex-direction:column;align-items:flex-end;gap:4px;white-space:nowrap}
+.competition-leaderboard-score strong{font-size:13px;color:var(--accent,#b7f34a)}
+.competition-awards-list{display:flex;flex-direction:column;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border,#30352b)}
+.competition-awards-list>div{display:flex;justify-content:space-between;gap:10px;font-size:12px}
+.competition-awards-list>div strong{color:var(--muted,#a4aa9b);text-align:right}
