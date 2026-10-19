@@ -367,7 +367,11 @@ function Challenges({joined,setJoined,navigate,workspaceMode}) {
   useEffect(()=>{refresh()},[workspaceMode]);
   useEffect(()=>{if(expanded){const round=competitions.find(item=>item.slug===expanded);if(round)loadLeaderboard(round.id)}},[expanded,competitions]);
   const joinRound=async round=>{if(!signedIn){setNotice('Sign in to enter a shared competition.');return}if(!round)return;setJoining(round.id);try{const response=await fetch('/api/competitions/join',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({roundId:round.id})});const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body.error||'Could not join this competition.');setNotice(body.duplicate?'You are already entered in this round.':'Entry confirmed. Your starting equity is frozen and risk-adjusted scoring is active.');await refresh();setExpanded(round.slug);await loadLeaderboard(round.id);if(typeof setJoined==='function')setJoined(round.slug)}catch(error){setNotice(error.message||'Could not join this competition.')}finally{setJoining('')}};
-  const formats=[{slug:'daily-sprint',source:challenges[0],icon:0},{slug:'consistency-league',source:challenges[1],icon:1},{slug:'community-challenge',source:challenges[2],icon:2}];
+  const formats=[
+    {slug:'daily-sprint',source:{name:'24-Hour Sprint',type:'24-HOUR SPRINT',detail:'Make disciplined decisions over a short, focused round. Drawdown and verified activity matter alongside return.',length:'24 hours',prize:5000},icon:0},
+    {slug:'consistency-league',source:{name:'7-Day Consistency League',type:'CONSISTENCY LEAGUE',detail:'Build a steady record over a full week. Risk-adjusted performance outranks profit-only chasing.',length:'7 days',prize:12000},icon:1},
+    {slug:'community-challenge',source:{name:'14-Day Community Challenge',type:'COMMUNITY CHALLENGE',detail:'Sustain good trading habits across two weeks while learning and participating with the community.',length:'14 days',prize:25000},icon:2},
+  ];
   const joinedCount=competitions.filter(item=>item.joined).length;
   return <>
     <Heading eyebrow="COMMUNITY FIRST" title={<>Compete together.<br/><em>Grow together.</em></>} desc="Manual and AI-assisted traders share one leaderboard. Scores account for performance, drawdown, and verified activity."/>
