@@ -245,7 +245,8 @@ test('AI Credit Store shows real network logos and live SOL and GRAM token equiv
   await page.route('https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd', route => route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({'the-open-network':{usd:5}})}));
   await enterApp(page);
   await goTo(page, 'Overview');
-  await expect(page.locator('.stat-card').filter({hasText:'AI Credits · AC'})).toBeVisible();
+  await expect(page.locator('.balance-spotlight-foot')).toContainText(/\d+ AC/);
+  await expect(page.getByRole('button', { name: /Get AI Credits/ })).toBeVisible();
   await goTo(page, 'AI Trading');
   await page.getByRole('button', { name: /Buy more AI Credits/ }).click();
 
