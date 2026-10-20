@@ -1827,3 +1827,26 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .profile-large-avatar .pexoriy-avatar{width:48px;height:48px}
 .top-avatar:hover .pexoriy-avatar,.profile-row:hover .pexoriy-avatar{transform:rotate(-5deg) scale(1.04);border-color:rgba(183,243,74,.65)}
 @media(prefers-reduced-motion:reduce){.pexoriy-avatar{transition:none}.top-avatar:hover .pexoriy-avatar,.profile-row:hover .pexoriy-avatar{transform:none}}
+
+/* Avatar refinement: every mark reads as a person/profile, with Pexoriy acid-lime as the anchor. */
+.pexoriy-avatar{background:#b7f34a!important;color:#10120f!important;border:1.5px solid #d7ff91!important;box-shadow:inset 0 0 0 1px rgba(16,18,15,.08)}
+.pexoriy-avatar svg{width:78%;height:78%}
+.pexoriy-avatar .avatar-detail{stroke:#b7f34a}
+.mobile-brand{display:none;align-items:center;gap:8px;padding:0;border:0;background:transparent;color:#f2f4ed;font-family:Manrope,sans-serif;font-size:17px;font-weight:800;letter-spacing:-.6px;cursor:pointer}
+.mobile-brand img{display:block;width:31px;height:31px;object-fit:contain;border-radius:8px;flex:0 0 auto}
+@media(max-width:850px){
+  .topbar{padding-left:14px;padding-right:14px}
+  .topbar-left{gap:0;min-width:0}
+  .topbar-left>.menu-button{display:none!important}
+  .topbar-left>.breadcrumb{display:none!important}
+  .topbar-left>.mobile-brand{display:flex}
+  .topbar-right{gap:7px}
+  .sidebar,.sidebar-backdrop,.mobile-close{pointer-events:none}
+}
+@media(max-width:380px){
+  .mobile-brand{font-size:15px;gap:6px}
+  .mobile-brand img{width:28px;height:28px}
+  .topbar-right{gap:4px}
+  .notification-button{width:34px;height:34px}
+  .top-avatar{width:36px;height:36px}
+}
