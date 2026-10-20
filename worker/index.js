@@ -1320,7 +1320,7 @@ async function handleApi(request, env) {
     } catch {
       return json({error:"A live GRAM quote is unavailable. Pack prices cannot be confirmed right now.",packs:[]},503);
     }
-    return json({packs:(result.results||[]).map(p=>({...p,packId:p.pack_id,priceGramAtoms:calculateNanoGramFromUsdCents(Number(p.usd_equivalent_cents),gramUsd),usdEquivalentCents:Number(p.usd_equivalent_cents||0),aiCredits:Number(p.ai_credits),pxyAmount:Number(p.pxy_amount)})),gramUsd,quoteCurrency:"USD",reserve:{capPxy:Number(reserve?.cap_pxy||50000),reservedPxy:Number(totals?.reserved||0),remainingPxy:Math.max(0,Number(reserve?.cap_pxy||50000)-Number(totals?.reserved||0)),issuanceEnabled}});
+    return json({packs:(result.results||[]).map(p=>{const livePriceGramAtoms=calculateNanoGramFromUsdCents(Number(p.usd_equivalent_cents),gramUsd);return {...p,price_gram_atoms:livePriceGramAtoms,packId:p.pack_id,priceGramAtoms:livePriceGramAtoms,usdEquivalentCents:Number(p.usd_equivalent_cents||0),aiCredits:Number(p.ai_credits),pxyAmount:Number(p.pxy_amount)}}),gramUsd,quoteCurrency:"USD",reserve:{capPxy:Number(reserve?.cap_pxy||50000),reservedPxy:Number(totals?.reserved||0),remainingPxy:Math.max(0,Number(reserve?.cap_pxy||50000)-Number(totals?.reserved||0)),issuanceEnabled}});
   }
 
   if (path === "/api/admin/packs" && request.method === "GET") {
