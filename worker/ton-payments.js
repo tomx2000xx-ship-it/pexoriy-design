@@ -1,5 +1,20 @@
 export const TON_NETWORK = "ton-mainnet";
 export const NANO_TON = 1_000_000_000;
+
+export function calculateNanoGramFromUsdCents(usdEquivalentCents, gramUsd) {
+  if (!Number.isSafeInteger(usdEquivalentCents) || usdEquivalentCents < 1) {
+    throw new TypeError("Invalid USD pack price.");
+  }
+  if (!Number.isFinite(gramUsd) || gramUsd <= 0) {
+    throw new TypeError("Invalid GRAM/USD quote.");
+  }
+  const amount = Math.round((usdEquivalentCents / 100 / gramUsd) * 1_000_000_000);
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    throw new TypeError("Invalid GRAM payment amount.");
+  }
+  return amount;
+}
+
 export const TON_RECEIVE_ADDRESS = "UQDONKXS7co5fixO6FDnicHEcdCtBRF_arFw0dgvFyjgQqoW";
 
 function decodeBase64Url(value) {

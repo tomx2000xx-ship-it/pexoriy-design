@@ -1,8 +1,9 @@
 import { postLedgerTransaction, getLedgerBalance } from "./ledger.js";
-import { TON_NETWORK, TON_RECEIVE_ADDRESS, normalizeTonAddress, formatNanoTon, makeTonComment, validateTonIncomingTransaction } from "./ton-payments.js";
+import { TON_NETWORK, TON_RECEIVE_ADDRESS, normalizeTonAddress, formatNanoTon, makeTonComment, validateTonIncomingTransaction, calculateNanoGramFromUsdCents } from "./ton-payments.js";
 import { calculateRealizedSettlement, calculateUnrealizedPnlTc, isFreshValidatedQuote, calculateSimulatedFillPrice, calculateTakerFeeTc, SIMULATION_MODEL_VERSION, MAX_OPEN_POSITIONS, MAX_POSITION_EQUITY_BPS, MAX_TOTAL_EXPOSURE_EQUITY_BPS } from "./trading.js";
 import { calculateRiskAdjustedScore, calculateReturnBps, calculateMaxDrawdownBps } from "./competition-scoring.js";
 import { calculateMissionCurrentDay, MISSION_JOURNEY_LENGTH } from "./mission-journey.js";
+import { calculateReferralPoolAwards, getReferralPoolWindow } from "./referral-pool.js";
 import { normalizeMarketQuote } from "./market-feed.js";
 import {
   AI_CREDIT_PACKAGES,
@@ -279,8 +280,97 @@ async function publicUser(env, user) {
   };
 }
 
+async function ensureReferralPoolRound(env, now = new Date()) {
+  const policy = await env.DB.prepare(
+    "SELECT policy_version,cycle_days,pool_tc,max_award_per_user_tc,status FROM referral_pool_policy WHERE id=1",
+  ).first();
+  if (!policy) return null;
+  if (policy.status !== "active") return { round: null, policy };
+  if (Number(policy.cycle_days) !== 7 || Number(policy.pool_tc) !== 10000) {
+    throw new Error("REFERRAL_POOL_POLICY_SCHEMA_MISMATCH");
+  }
+  const { periodStart, periodEnd } = getReferralPoolWindow(now);
+  const roundId = "referral-pool:" + periodStart;
+  let round = await env.DB.prepare(
+    "SELECT id,period_start,period_end,pool_tc,status,total_activations FROM referral_pool_rounds WHERE period_start=?",
+  ).bind(periodStart).first();
+  if (!round) {
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO referral_pool_rounds (id,period_start,period_end,pool_tc,status) VALUES (?,?,?,?,'open')",
+    ).bind(roundId, periodStart, periodEnd, Number(policy.pool_tc)).run();
+    round = await env.DB.prepare(
+      "SELECT id,period_start,period_end,pool_tc,status,total_activations FROM referral_pool_rounds WHERE period_start=?",
+    ).bind(periodStart).first();
+  }
+  if (!round) throw new Error("REFERRAL_POOL_ROUND_CREATE_FAILED");
+  const fundingKey = "referral-pool-fund:" + round.id;
+  const funding = await env.DB.prepare(
+    "SELECT id,status FROM ledger_transactions WHERE idempotency_key=?",
+  ).bind(fundingKey).first();
+  if (funding?.status !== "posted") {
+    await postLedgerTransaction(env.DB, {
+      id: crypto.randomUUID(),
+      idempotencyKey: fundingKey,
+      userId: null,
+      eventType: "referral.pool.funding",
+      metadata: { roundId: round.id, policyVersion: Number(policy.policy_version), poolTC: Number(round.pool_tc) },
+      postings: [
+        { accountKey: "system:reserve:TC", currency: "TC", amountAtoms: Number(round.pool_tc) },
+        { accountKey: "system:issuance:TC", currency: "TC", amountAtoms: -Number(round.pool_tc) },
+      ],
+    });
+  }
+  return { round, policy };
+}
+
+async function runReferralPoolMaintenance(env) {
+  const policy = await env.DB.prepare(
+    "SELECT policy_version,cycle_days,pool_tc,max_award_per_user_tc FROM referral_pool_policy WHERE id=1 AND status='active'",
+  ).first();
+  if (!policy) return;
+  if (Number(policy.cycle_days) !== 7 || Number(policy.pool_tc) !== 10000) {
+    throw new Error("REFERRAL_POOL_POLICY_SCHEMA_MISMATCH");
+  }
+  const now = new Date().toISOString();
+  const due = await env.DB.prepare(
+    "SELECT id,period_start,period_end,pool_tc FROM referral_pool_rounds WHERE status='open' AND period_end<=? ORDER BY period_end LIMIT 20",
+  ).bind(now).all();
+  for (const round of due.results || []) {
+    await postLedgerTransaction(env.DB, {
+      id: crypto.randomUUID(),
+      idempotencyKey: "referral-pool-fund:" + round.id,
+      userId: null,
+      eventType: "referral.pool.funding",
+      metadata: { roundId: round.id, policyVersion: Number(policy.policy_version), poolTC: Number(round.pool_tc) },
+      postings: [
+        { accountKey: "system:reserve:TC", currency: "TC", amountAtoms: Number(round.pool_tc) },
+        { accountKey: "system:issuance:TC", currency: "TC", amountAtoms: -Number(round.pool_tc) },
+      ],
+    });
+    const counts = await env.DB.prepare(
+      "SELECT referrer_user_id AS user_id,COUNT(*) AS activations FROM referral_attributions WHERE status='activated' AND activated_at>=? AND activated_at<? GROUP BY referrer_user_id ORDER BY referrer_user_id",
+    ).bind(round.period_start, round.period_end).all();
+    const entries = (counts.results || []).map(row => ({ userId: row.user_id, activations: Number(row.activations || 0) }));
+    const allocation = calculateReferralPoolAwards(entries, Number(round.pool_tc), Number(policy.max_award_per_user_tc));
+    const statements = [];
+    for (const award of allocation.awards) {
+      statements.push(env.DB.prepare(
+        "INSERT OR IGNORE INTO referral_pool_awards (id,round_id,user_id,verified_activations,reward_tc,status) VALUES (?,?,?,?,?,'available')",
+      ).bind(crypto.randomUUID(), round.id, award.userId, award.activations, award.rewardTC));
+    }
+    statements.push(env.DB.prepare(
+      "UPDATE referral_pool_rounds SET status='finalized',total_activations=?,finalized_at=? WHERE id=? AND status='open'",
+    ).bind(allocation.totalActivations, now, round.id));
+    await env.DB.batch(statements);
+    try {
+      await appendAudit(env, { actorUserId: null, eventType: "referral.pool.finalized", entityType: "referral_pool_round", entityId: round.id, requestId: "scheduled", details: { poolTC: Number(round.pool_tc), totalActivations: allocation.totalActivations, awardCount: allocation.awards.length } });
+    } catch {}
+  }
+  await ensureReferralPoolRound(env, new Date(now));
+}
+
 async function activateReferralForUser(env, user, requestId) {
-  if (!user?.email_verified_at) return { status: "pending", message: "Verify your email before referral activation can be checked." };
+  if (env.REQUIRE_EMAIL_VERIFICATION === "1" && !user?.email_verified_at) return { status: "pending", message: "Verify your email before referral activation can be checked." };
   const qualifyingTrade = await env.DB.prepare("SELECT id FROM trading_positions WHERE user_id = ? LIMIT 1").bind(user.id).first();
   if (!qualifyingTrade) return { status: "pending", message: "Complete your first simulated trade to qualify." };
   const attribution = await env.DB.prepare("SELECT id, referrer_user_id, status FROM referral_attributions WHERE referred_user_id = ?").bind(user.id).first();
@@ -291,17 +381,25 @@ async function activateReferralForUser(env, user, requestId) {
   }
   const latest = await env.DB.prepare("SELECT status FROM referral_attributions WHERE id=?").bind(attribution.id).first();
   if (latest?.status !== "activated") return { status: latest?.status || "pending" };
-  const referrerId = attribution.referrer_user_id;
   try {
-    await postLedgerTransaction(env.DB, { id: crypto.randomUUID(), idempotencyKey: "referral:" + attribution.id + ":referrer", userId: referrerId, eventType: "referral.activation_reward", metadata: { attributionId: attribution.id, role: "referrer" }, postings: [{ accountKey: "user:" + referrerId + ":TC", currency: "TC", amountAtoms: 250 }, { accountKey: "system:issuance:TC", currency: "TC", amountAtoms: -250 }] });
-    await postLedgerTransaction(env.DB, { id: crypto.randomUUID(), idempotencyKey: "referral:" + attribution.id + ":referred", userId: user.id, eventType: "referral.activation_reward", metadata: { attributionId: attribution.id, role: "referred" }, postings: [{ accountKey: "user:" + user.id + ":TC", currency: "TC", amountAtoms: 100 }, { accountKey: "system:issuance:TC", currency: "TC", amountAtoms: -100 }] });
+    await postLedgerTransaction(env.DB, {
+      id: crypto.randomUUID(),
+      idempotencyKey: "referral:" + attribution.id + ":referred",
+      userId: user.id,
+      eventType: "referral.activation_reward",
+      metadata: { attributionId: attribution.id, role: "referred" },
+      postings: [
+        { accountKey: "user:" + user.id + ":TC", currency: "TC", amountAtoms: 100 },
+        { accountKey: "system:issuance:TC", currency: "TC", amountAtoms: -100 },
+      ],
+    });
   } catch {
-    return { status: "activated", rewardStatus: "retrying", message: "Your activation is recorded. Reward delivery will retry safely." };
+    return { status: "activated", rewardStatus: "retrying", referrerRewardStatus: "shared_pool_pending", message: "Your activation is recorded. New-member TC reward delivery will retry safely; inviter rewards are allocated from the weekly shared pool." };
   }
   try {
-    await appendAudit(env, { actorUserId: user.id, eventType: "referral.activated", entityType: "referral_attribution", entityId: attribution.id, requestId, details: { referrerRewardTC: 250, referredRewardTC: 100 } });
+    await appendAudit(env, { actorUserId: user.id, eventType: "referral.activated", entityType: "referral_attribution", entityId: attribution.id, requestId, details: { referredRewardTC: 100, referrerRewardModel: "shared_weekly_pool" } });
   } catch {}
-  return { status: "activated", rewardStatus: "paid", referrerRewardTC: 250, referredRewardTC: 100 };
+  return { status: "activated", rewardStatus: "paid", referrerRewardStatus: "shared_pool_pending", referredRewardTC: 100, message: "Your 100 TC new-member reward is recorded. The inviter's TC reward is allocated from the weekly shared referral pool after the cycle closes." };
 }
 
 async function getCompetitionEquity(env, userId, startingEquityTc, joinedAt, periodEnd) {
@@ -876,15 +974,21 @@ async function handleApi(request, env) {
       ownCode = await env.DB.prepare("SELECT code FROM referral_codes WHERE user_id = ?").bind(user.id).first();
     }
     const counts = await env.DB.prepare("SELECT COUNT(*) AS invited, SUM(CASE WHEN status='activated' THEN 1 ELSE 0 END) AS activated FROM referral_attributions WHERE referrer_user_id = ?").bind(user.id).first();
-    const [rows, quests, questClaims, community] = await Promise.all([
+    const poolContext = await ensureReferralPoolRound(env);
+    const [rows, quests, questClaims, community, poolAwards, poolActivity] = await Promise.all([
       env.DB.prepare("SELECT status, created_at, activated_at FROM referral_attributions WHERE referrer_user_id = ? ORDER BY created_at DESC LIMIT 50").bind(user.id).all(),
       env.DB.prepare("SELECT id,title,description,target_activations,reward_tc FROM referral_team_quests WHERE active=1 ORDER BY target_activations").all(),
       env.DB.prepare("SELECT quest_id,status,ledger_transaction_id,created_at FROM referral_team_quest_claims WHERE user_id=?").bind(user.id).all(),
-      env.DB.prepare("SELECT COUNT(*) AS activated FROM referral_attributions WHERE status='activated'").first()
+      env.DB.prepare("SELECT COUNT(*) AS activated FROM referral_attributions WHERE status='activated'").first(),
+      env.DB.prepare("SELECT id,round_id,verified_activations,reward_tc,status,claimed_at,created_at FROM referral_pool_awards WHERE user_id=? ORDER BY created_at DESC LIMIT 20").bind(user.id).all(),
+      poolContext?.round ? env.DB.prepare("SELECT COUNT(*) AS activations FROM referral_attributions WHERE status='activated' AND activated_at>=? AND activated_at<?").bind(poolContext.round.period_start,poolContext.round.period_end).first() : Promise.resolve({ activations: 0 })
     ]);
     const activated = Number(counts?.activated || 0);
     const claimByQuest = new Map((questClaims.results || []).map(row => [row.quest_id, row]));
-    return json({ code: ownCode?.code || null, invited: Number(counts?.invited || 0), activated, community: { verifiedActivations: Number(community?.activated || 0) }, milestones: [{ id: "first", target: 1, reached: activated >= 1 }, { id: "squad", target: 3, reached: activated >= 3 }, { id: "community", target: 5, reached: activated >= 5 }], quests: (quests.results || []).map(quest => ({ id: quest.id, title: quest.title, description: quest.description, target: Number(quest.target_activations), rewardTC: Number(quest.reward_tc), progress: activated, claim: claimByQuest.get(quest.id) || null })), referrals: rows.results || [], rewards: { referrerTC: 250, referredTC: 100, currency: "TC" } });
+    const poolTC = Number(poolContext?.policy?.pool_tc || 0);
+    const maxReferrerAwardTC = Number(poolContext?.policy?.max_award_per_user_tc || 0);
+    const pool = poolContext?.round ? { roundId: poolContext.round.id, periodStart: poolContext.round.period_start, periodEnd: poolContext.round.period_end, status: poolContext.round.status, poolTC: Number(poolContext.round.pool_tc), maxAwardPerUserTC: maxReferrerAwardTC, verifiedActivations: Number(poolActivity?.activations || 0), awards: poolAwards.results || [] } : { roundId: null, periodStart: null, periodEnd: null, status: poolContext?.policy?.status || "unavailable", poolTC, maxAwardPerUserTC: maxReferrerAwardTC, verifiedActivations: 0, awards: poolAwards.results || [] };
+    return json({ code: ownCode?.code || null, invited: Number(counts?.invited || 0), activated, community: { verifiedActivations: Number(community?.activated || 0) }, milestones: [{ id: "first", target: 1, reached: activated >= 1 }, { id: "squad", target: 3, reached: activated >= 3 }, { id: "community", target: 5, reached: activated >= 5 }], quests: (quests.results || []).map(quest => ({ id: quest.id, title: quest.title, description: quest.description, target: Number(quest.target_activations), rewardTC: Number(quest.reward_tc), progress: activated, claim: claimByQuest.get(quest.id) || null })), referrals: rows.results || [], pool, rewards: { referrerModel: "shared_weekly_pool", poolTC, maxReferrerAwardTC, referredTC: 100, currency: "TC" } });
   }
 
   if (path === "/api/referrals/quests/claim" && request.method === "POST") {
@@ -910,6 +1014,41 @@ async function handleApi(request, env) {
     }
     await appendAudit(env, { actorUserId: user.id, eventType: "referral.team_quest_reward_paid", entityType: "referral_team_quest_claim", entityId: existing?.id || quest.id, requestId, details: { questId: quest.id, rewardTC: Number(quest.reward_tc), duplicate: rewardResult.duplicate } });
     return json({ status: "paid", duplicate: Boolean(rewardResult.duplicate), rewardTC: Number(quest.reward_tc), questId: quest.id });
+  }
+
+  if (path === "/api/referrals/pool/claim" && request.method === "POST") {
+    const user = await currentUser(request, env);
+    if (!user) return json({ error: "Authentication required." }, 401);
+    if (!(await consumeAuthRateLimit(request, env, "referral-pool-claim", user.id, 10, 3600))) return json({ error: "Too many referral-pool claims. Try again later." }, 429);
+    const body = await readJson(request);
+    const roundId = typeof body?.roundId === "string" ? body.roundId.trim() : "";
+    if (!roundId || roundId.length > 100) return json({ error: "Choose a valid referral-pool round." }, 400);
+    const award = await env.DB.prepare(
+      "SELECT a.id,a.round_id,a.reward_tc,a.status,r.status AS round_status FROM referral_pool_awards a JOIN referral_pool_rounds r ON r.id=a.round_id WHERE a.round_id=? AND a.user_id=?",
+    ).bind(roundId,user.id).first();
+    if (!award) return json({ error: "No referral-pool award is available for this account." }, 404);
+    if (award.status === "paid") return json({ status: "paid", duplicate: true, rewardTC: Number(award.reward_tc), roundId: award.round_id });
+    if (award.status !== "available" || award.round_status !== "finalized" || Number(award.reward_tc) <= 0) return json({ error: "This referral-pool award is not ready to claim." }, 409);
+    const idempotencyKey = "referral-pool-claim:" + award.round_id + ":" + user.id;
+    let result;
+    try {
+      result = await postLedgerTransaction(env.DB, {
+        id: crypto.randomUUID(),
+        idempotencyKey,
+        userId: user.id,
+        eventType: "referral.pool.award",
+        metadata: { roundId: award.round_id, awardId: award.id, rewardTC: Number(award.reward_tc) },
+        postings: [
+          { accountKey: "user:" + user.id + ":TC", currency: "TC", amountAtoms: Number(award.reward_tc) },
+          { accountKey: "system:reserve:TC", currency: "TC", amountAtoms: -Number(award.reward_tc) },
+        ],
+      });
+      await env.DB.prepare("UPDATE referral_pool_awards SET status='paid',ledger_transaction_id=?,claimed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=? AND status='available'").bind(result.transactionId,award.id).run();
+    } catch {
+      return json({ status: "pending", rewardStatus: "retrying", message: "Your referral-pool claim is recorded and will retry safely." }, 202);
+    }
+    await appendAudit(env, { actorUserId: user.id, eventType: "referral.pool.award_paid", entityType: "referral_pool_award", entityId: award.id, requestId, details: { roundId: award.round_id, rewardTC: Number(award.reward_tc), duplicate: Boolean(result.duplicate) } }).catch(()=>{});
+    return json({ status: "paid", duplicate: Boolean(result.duplicate), rewardTC: Number(award.reward_tc), roundId: award.round_id });
   }
 
   if (path === "/api/referrals/activate" && request.method === "POST") {
@@ -1171,7 +1310,17 @@ async function handleApi(request, env) {
     ]);
     const issuanceEnabled=Boolean(reserve?.issuance_enabled&&reserve?.reserve_verified&&reserve?.launch_approved&&reserve?.approval_reference);
     const result=await env.DB.prepare("SELECT pack_id,title,price_gram_atoms,usd_equivalent_cents,ai_credits,pxy_amount FROM pxy_pack_catalog WHERE active=1 AND (pxy_amount=0 OR ?=1) ORDER BY price_gram_atoms").bind(Number(issuanceEnabled)).all();
-    return json({packs:(result.results||[]).map(p=>({...p,packId:p.pack_id,priceGramAtoms:Number(p.price_gram_atoms),usdEquivalentCents:Number(p.usd_equivalent_cents||0),aiCredits:Number(p.ai_credits),pxyAmount:Number(p.pxy_amount)})),reserve:{capPxy:Number(reserve?.cap_pxy||50000),reservedPxy:Number(totals?.reserved||0),remainingPxy:Math.max(0,Number(reserve?.cap_pxy||50000)-Number(totals?.reserved||0)),issuanceEnabled}});
+    let gramUsd;
+    try {
+      const quoteResponse=await fetch("https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd",{headers:{accept:"application/json"},signal:AbortSignal.timeout(4500)});
+      if(!quoteResponse.ok)throw new Error("GRAM_QUOTE_UNAVAILABLE");
+      const quote=await quoteResponse.json();
+      gramUsd=Number(quote?.["the-open-network"]?.usd);
+      if(!Number.isFinite(gramUsd)||gramUsd<=0)throw new Error("GRAM_QUOTE_INVALID");
+    } catch {
+      return json({error:"A live GRAM quote is unavailable. Pack prices cannot be confirmed right now.",packs:[]},503);
+    }
+    return json({packs:(result.results||[]).map(p=>{const livePriceGramAtoms=calculateNanoGramFromUsdCents(Number(p.usd_equivalent_cents),gramUsd);return {...p,price_gram_atoms:livePriceGramAtoms,packId:p.pack_id,priceGramAtoms:livePriceGramAtoms,usdEquivalentCents:Number(p.usd_equivalent_cents||0),aiCredits:Number(p.ai_credits),pxyAmount:Number(p.pxy_amount)}}),gramUsd,quoteCurrency:"USD",reserve:{capPxy:Number(reserve?.cap_pxy||50000),reservedPxy:Number(totals?.reserved||0),remainingPxy:Math.max(0,Number(reserve?.cap_pxy||50000)-Number(totals?.reserved||0)),issuanceEnabled}});
   }
 
   if (path === "/api/admin/packs" && request.method === "GET") {
@@ -1904,21 +2053,16 @@ async function handleApi(request, env) {
 
     let tonUsdPrice;
     let expectedNanoTon;
-    if(catalogPack){
-      expectedNanoTon=Number(catalogPack.price_gram_atoms);
-      tonUsdPrice=(Number(pack.usdCents)/100)/(expectedNanoTon/1_000_000_000);
-    }else{
-      try {
-        const quoteResponse = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd", { headers: { accept: "application/json" } });
-        if (!quoteResponse.ok) throw new Error("TON_PRICE_UNAVAILABLE");
-        const quote = await quoteResponse.json();
-        tonUsdPrice = Number(quote?.["the-open-network"]?.usd);
-        if (!Number.isFinite(tonUsdPrice) || tonUsdPrice <= 0) throw new Error("TON_PRICE_INVALID");
-        expectedNanoTon = Math.round((pack.usdCents / 100 / tonUsdPrice) * 1_000_000_000);
-        if (!Number.isSafeInteger(expectedNanoTon) || expectedNanoTon <= 0) throw new Error("TON_AMOUNT_INVALID");
-      } catch {
-        return json({ error: "A live GRAM (TON) quote is unavailable. Please retry shortly; no payment order was created." }, 503);
-      }
+    try {
+      const quoteResponse = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd", { headers: { accept: "application/json" }, signal: AbortSignal.timeout(4500) });
+      if (!quoteResponse.ok) throw new Error("GRAM_PRICE_UNAVAILABLE");
+      const quote = await quoteResponse.json();
+      tonUsdPrice = Number(quote?.["the-open-network"]?.usd);
+      if (!Number.isFinite(tonUsdPrice) || tonUsdPrice <= 0) throw new Error("GRAM_PRICE_INVALID");
+      expectedNanoTon = calculateNanoGramFromUsdCents(Number(pack.usdCents),tonUsdPrice);
+      if (!Number.isSafeInteger(expectedNanoTon) || expectedNanoTon <= 0) throw new Error("GRAM_AMOUNT_INVALID");
+    } catch {
+      return json({ error: "A live GRAM quote is unavailable. Please retry shortly; no payment order was created." }, 503);
     }
 
     const orderId = crypto.randomUUID();
@@ -2491,6 +2635,11 @@ export default {
       await runCompetitionMaintenance(env);
     } catch (error) {
       console.error(JSON.stringify({event:"competition.maintenance_failed",scheduledTime:controller?.scheduledTime||null,message:String(error?.message||"unknown")}));
+    }
+    try {
+      await runReferralPoolMaintenance(env);
+    } catch (error) {
+      console.error(JSON.stringify({event:"referral.pool_maintenance_failed",scheduledTime:controller?.scheduledTime||null,message:String(error?.message||"unknown")}));
     }
     try {
       await runPxyPackIssuanceMaintenance(env);
