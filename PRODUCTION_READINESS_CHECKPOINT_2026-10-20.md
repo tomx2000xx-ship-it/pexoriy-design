@@ -6,7 +6,7 @@
 - Correct write connection: GitHub `Remote` / `tomx2000xx-ship-it`
 - The branch contains incremental commits; none of this checkpoint's changes has been merged or deployed. Before release, consolidate the incremental branch commits into one reviewed release commit so unfinished work is not left scattered across `main`.
 - Production Worker deployment observed: version `a8e318b1-9a49-4c45-a485-47e184d1c724`, 100% traffic, deployment created 2026-10-19 23:45:53 UTC.
-- No CI status checks were returned for the checked commit. Full repository build and unit suite have not been run; this execution environment could not resolve GitHub for a clone/install. Do not describe this branch as build-verified or production-deployed.
+- Added `.github/workflows/validate.yml` to run unit tests and a production build on pushes to `main` and `scope/**`. The GitHub connector returned no legacy commit statuses and does not expose the push-run result here yet. Full repository build and unit suite have not been run in this execution environment because it could not resolve GitHub for a clone/install. Do not describe this branch as build-verified or production-deployed.
 
 ## Direct production D1 inspection (read-only)
 - Database: `pexoriy-core`, ID `3add741b-bda8-4f47-b857-538ff9a1dae8`.
@@ -19,7 +19,7 @@
 - Do not apply migration 0019 until the D1 operation limit is confirmed safe. No production database writes were made during this checkpoint.
 
 ## Changes prepared on the working branch
-- Referral rewards: removed the fixed 250 TC inviter payment; verified referred members retain the idempotent 100 TC new-member reward. Inviter TC rewards are now allocated proportionally from a funded 10,000 TC weekly reserve, capped at 1,000 TC per referrer, finalized on cycle close, and claimed through an idempotent ledger transaction.
+- Referral rewards: removed the fixed 250 TC inviter payment; verified referred members retain the idempotent 100 TC new-member reward. Email verification is currently optional for referral activation; set Worker variable `REQUIRE_EMAIL_VERIFICATION=1` when email verification is enabled for launch. Inviter TC rewards are now allocated proportionally from a funded 10,000 TC weekly reserve, capped at 1,000 TC per referrer, finalized on cycle close, and claimed through an idempotent ledger transaction.
 - Weekly pool uses Monday 00:00 UTC to next Monday. Scheduled maintenance finalizes closed rounds and opens/funds the current cycle. PXY issuance is not enabled by this work.
 - Referral UI now shows the weekly pool ceiling, per-user cap, verified activity, and explicit pending/claimable/settled states.
 - GRAM pricing: catalog display and checkout calculate nano-GRAM from the USD tier and a fresh GRAM/USD quote. A quote failure blocks pack-price confirmation rather than showing a stale value as current.
