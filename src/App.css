@@ -1841,7 +1841,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .topbar-left>.breadcrumb{display:none!important}
   .topbar-left>.mobile-brand{display:flex}
   .topbar-right{gap:7px}
-  .sidebar,.sidebar-backdrop,.mobile-close{pointer-events:none}
+  .sidebar,.sidebar-backdrop,.mobile-close{display:none!important;pointer-events:none}
 }
 @media(max-width:380px){
   .mobile-brand{font-size:15px;gap:6px}
