@@ -98,10 +98,11 @@ jobs:
       - name: Test rendered desktop and mobile product flows
         run: npx playwright test tests/e2e/product-flow.spec.js --reporter=line
       - name: Smoke-test release-candidate preview endpoints
-        if: github.ref == 'refs/heads/scope/production-readiness-reconcile-20261017'
+        if: startsWith(github.ref, 'refs/heads/scope/')
         run: |
           set -eu
-          base="https://scope-production-readiness-reconcile-20261017-pexoriy-design.mails4dikewills.workers.dev"
+          branch_slug="${GITHUB_REF_NAME//\//-}"
+          base="https://${branch_slug}-pexoriy-design.mails4dikewills.workers.dev"
           for attempt in $(seq 1 24); do
             code="$(curl -sS -o /tmp/pexoriy-preview-presale.json -w '%{http_code}' "$base/api/presale/status" || true)"
             if [ "$code" = "200" ]; then
