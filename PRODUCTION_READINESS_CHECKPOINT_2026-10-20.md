@@ -4,7 +4,7 @@
 - Repository: `tomx2000xx-ship-it/pexoriy-design`
 - Working branch: `scope/finish-production-20261020`
 - Correct write connection: GitHub `Remote` / `tomx2000xx-ship-it`
-- Branch is 20 commits ahead of `main`; none of this checkpoint's changes has been merged or deployed.
+- Branch is 21 commits ahead of `main`; none of this checkpoint's changes has been merged or deployed. Before release, consolidate the incremental branch commits into one reviewed release commit so unfinished work is not left scattered across `main`.
 - Production Worker deployment observed: version `a8e318b1-9a49-4c45-a485-47e184d1c724`, 100% traffic, deployment created 2026-10-19 23:45:53 UTC.
 - No CI status checks were returned for the checked commit. Full repository build and unit suite have not been run; this execution environment could not resolve GitHub for a clone/install. Do not describe this branch as build-verified or production-deployed.
 
