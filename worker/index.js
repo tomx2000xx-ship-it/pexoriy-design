@@ -3,6 +3,7 @@ import { TON_NETWORK, TON_RECEIVE_ADDRESS, normalizeTonAddress, formatNanoTon, m
 import { calculateRealizedSettlement, calculateUnrealizedPnlTc, isFreshValidatedQuote, calculateSimulatedFillPrice, calculateTakerFeeTc, SIMULATION_MODEL_VERSION, MAX_OPEN_POSITIONS, MAX_POSITION_EQUITY_BPS, MAX_TOTAL_EXPOSURE_EQUITY_BPS } from "./trading.js";
 import { calculateRiskAdjustedScore, calculateReturnBps, calculateMaxDrawdownBps } from "./competition-scoring.js";
 import { calculateMissionCurrentDay, MISSION_JOURNEY_LENGTH } from "./mission-journey.js";
+import { calculateReferralPoolAwards, getReferralPoolWindow } from "./referral-pool.js";
 import { normalizeMarketQuote } from "./market-feed.js";
 import {
   AI_CREDIT_PACKAGES,
@@ -287,12 +288,7 @@ async function ensureReferralPoolRound(env, now = new Date()) {
   if (Number(policy.cycle_days) !== 7 || Number(policy.pool_tc) !== 10000) {
     throw new Error("REFERRAL_POOL_POLICY_SCHEMA_MISMATCH");
   }
-  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7));
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 7);
-  const periodStart = start.toISOString();
-  const periodEnd = end.toISOString();
+  const { periodStart, periodEnd } = getReferralPoolWindow(now);
   const roundId = "referral-pool:" + periodStart;
   await env.DB.prepare(
     "INSERT OR IGNORE INTO referral_pool_rounds (id,period_start,period_end,pool_tc,status) VALUES (?,?,?,?,'open')",
@@ -343,24 +339,19 @@ async function runReferralPoolMaintenance(env) {
       "SELECT referrer_user_id AS user_id,COUNT(*) AS activations FROM referral_attributions WHERE status='activated' AND activated_at>=? AND activated_at<? GROUP BY referrer_user_id ORDER BY referrer_user_id",
     ).bind(round.period_start, round.period_end).all();
     const entries = (counts.results || []).map(row => ({ userId: row.user_id, activations: Number(row.activations || 0) }));
-    const totalActivations = entries.reduce((sum, row) => sum + row.activations, 0);
+    const allocation = calculateReferralPoolAwards(entries, Number(round.pool_tc), Number(policy.max_award_per_user_tc));
     const statements = [];
-    for (const entry of entries) {
-      const rewardTC = totalActivations > 0
-        ? Math.min(Number(policy.max_award_per_user_tc), Math.floor(Number(round.pool_tc) * entry.activations / totalActivations))
-        : 0;
-      if (rewardTC > 0) {
-        statements.push(env.DB.prepare(
-          "INSERT OR IGNORE INTO referral_pool_awards (id,round_id,user_id,verified_activations,reward_tc,status) VALUES (?,?,?,?,?,'available')",
-        ).bind(crypto.randomUUID(), round.id, entry.userId, entry.activations, rewardTC));
-      }
+    for (const award of allocation.awards) {
+      statements.push(env.DB.prepare(
+        "INSERT OR IGNORE INTO referral_pool_awards (id,round_id,user_id,verified_activations,reward_tc,status) VALUES (?,?,?,?,?,'available')",
+      ).bind(crypto.randomUUID(), round.id, award.userId, award.activations, award.rewardTC));
     }
     statements.push(env.DB.prepare(
       "UPDATE referral_pool_rounds SET status='finalized',total_activations=?,finalized_at=? WHERE id=? AND status='open'",
-    ).bind(totalActivations, now, round.id));
+    ).bind(allocation.totalActivations, now, round.id));
     await env.DB.batch(statements);
     try {
-      await appendAudit(env, { actorUserId: null, eventType: "referral.pool.finalized", entityType: "referral_pool_round", entityId: round.id, requestId: "scheduled", details: { poolTC: Number(round.pool_tc), totalActivations, awardCount: entries.filter(entry => totalActivations > 0 && Math.min(Number(policy.max_award_per_user_tc), Math.floor(Number(round.pool_tc) * entry.activations / totalActivations)) > 0).length } });
+      await appendAudit(env, { actorUserId: null, eventType: "referral.pool.finalized", entityType: "referral_pool_round", entityId: round.id, requestId: "scheduled", details: { poolTC: Number(round.pool_tc), totalActivations: allocation.totalActivations, awardCount: allocation.awards.length } });
     } catch {}
   }
   await ensureReferralPoolRound(env, new Date(now));
