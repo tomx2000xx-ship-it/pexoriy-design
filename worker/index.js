@@ -1171,7 +1171,17 @@ async function handleApi(request, env) {
     ]);
     const issuanceEnabled=Boolean(reserve?.issuance_enabled&&reserve?.reserve_verified&&reserve?.launch_approved&&reserve?.approval_reference);
     const result=await env.DB.prepare("SELECT pack_id,title,price_gram_atoms,usd_equivalent_cents,ai_credits,pxy_amount FROM pxy_pack_catalog WHERE active=1 AND (pxy_amount=0 OR ?=1) ORDER BY price_gram_atoms").bind(Number(issuanceEnabled)).all();
-    return json({packs:(result.results||[]).map(p=>({...p,packId:p.pack_id,priceGramAtoms:Number(p.price_gram_atoms),usdEquivalentCents:Number(p.usd_equivalent_cents||0),aiCredits:Number(p.ai_credits),pxyAmount:Number(p.pxy_amount)})),reserve:{capPxy:Number(reserve?.cap_pxy||50000),reservedPxy:Number(totals?.reserved||0),remainingPxy:Math.max(0,Number(reserve?.cap_pxy||50000)-Number(totals?.reserved||0)),issuanceEnabled}});
+    let gramUsd;
+    try {
+      const quoteResponse=await fetch("https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd",{headers:{accept:"application/json"},signal:AbortSignal.timeout(4500)});
+      if(!quoteResponse.ok)throw new Error("GRAM_QUOTE_UNAVAILABLE");
+      const quote=await quoteResponse.json();
+      gramUsd=Number(quote?.["the-open-network"]?.usd);
+      if(!Number.isFinite(gramUsd)||gramUsd<=0)throw new Error("GRAM_QUOTE_INVALID");
+    } catch {
+      return json({error:"A live GRAM quote is unavailable. Pack prices cannot be confirmed right now.",packs:[]},503);
+    }
+    return json({packs:(result.results||[]).map(p=>({...p,packId:p.pack_id,priceGramAtoms:Math.round((Number(p.usd_equivalent_cents)/100/gramUsd)*1000000000),usdEquivalentCents:Number(p.usd_equivalent_cents||0),aiCredits:Number(p.ai_credits),pxyAmount:Number(p.pxy_amount)})),gramUsd,quoteCurrency:"USD",reserve:{capPxy:Number(reserve?.cap_pxy||50000),reservedPxy:Number(totals?.reserved||0),remainingPxy:Math.max(0,Number(reserve?.cap_pxy||50000)-Number(totals?.reserved||0)),issuanceEnabled}});
   }
 
   if (path === "/api/admin/packs" && request.method === "GET") {
@@ -1904,21 +1914,16 @@ async function handleApi(request, env) {
 
     let tonUsdPrice;
     let expectedNanoTon;
-    if(catalogPack){
-      expectedNanoTon=Number(catalogPack.price_gram_atoms);
-      tonUsdPrice=(Number(pack.usdCents)/100)/(expectedNanoTon/1_000_000_000);
-    }else{
-      try {
-        const quoteResponse = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd", { headers: { accept: "application/json" } });
-        if (!quoteResponse.ok) throw new Error("TON_PRICE_UNAVAILABLE");
-        const quote = await quoteResponse.json();
-        tonUsdPrice = Number(quote?.["the-open-network"]?.usd);
-        if (!Number.isFinite(tonUsdPrice) || tonUsdPrice <= 0) throw new Error("TON_PRICE_INVALID");
-        expectedNanoTon = Math.round((pack.usdCents / 100 / tonUsdPrice) * 1_000_000_000);
-        if (!Number.isSafeInteger(expectedNanoTon) || expectedNanoTon <= 0) throw new Error("TON_AMOUNT_INVALID");
-      } catch {
-        return json({ error: "A live GRAM (TON) quote is unavailable. Please retry shortly; no payment order was created." }, 503);
-      }
+    try {
+      const quoteResponse = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd", { headers: { accept: "application/json" }, signal: AbortSignal.timeout(4500) });
+      if (!quoteResponse.ok) throw new Error("GRAM_PRICE_UNAVAILABLE");
+      const quote = await quoteResponse.json();
+      tonUsdPrice = Number(quote?.["the-open-network"]?.usd);
+      if (!Number.isFinite(tonUsdPrice) || tonUsdPrice <= 0) throw new Error("GRAM_PRICE_INVALID");
+      expectedNanoTon = Math.round((Number(pack.usdCents) / 100 / tonUsdPrice) * 1_000_000_000);
+      if (!Number.isSafeInteger(expectedNanoTon) || expectedNanoTon <= 0) throw new Error("GRAM_AMOUNT_INVALID");
+    } catch {
+      return json({ error: "A live GRAM quote is unavailable. Please retry shortly; no payment order was created." }, 503);
     }
 
     const orderId = crypto.randomUUID();
