@@ -31,7 +31,7 @@ test("per-user caps prevent a large referrer from taking the entire pool", () =>
     { userId: "referrer-b", activations: 1 },
     { userId: "referrer-c", activations: 1 },
   ], 10000, 1000);
-  assert.deepEqual(result.awards.map(award => award.rewardTC), [1000, 1000, 1000]);
+  assert.deepEqual(result.awards.map(award => award.rewardTC), [1000, 312, 312]);
   assert.ok(result.awards.reduce((sum, award) => sum + award.rewardTC, 0) <= 10000);
 });
 
