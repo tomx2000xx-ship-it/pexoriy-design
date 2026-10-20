@@ -28,6 +28,7 @@
 - Added focused unit tests for referral pool calculation and GRAM amount conversion.
 
 ## Validation performed
+- A push-triggered GitHub Actions workflow is now configured on this branch; the latest checkpoint update is being used to trigger its first run.
 - Re-read changed source files from the working branch and checked expected imports, route names, pool ledger debit, UI claim wiring, migration seed and test files.
 - Ran 9 focused helper-logic checks in an isolated Node harness: 9 passed. This is not a substitute for running `npm run build` and `npm run test:unit` against the complete repository.
 - No migration was applied, no PXY issuance gate was opened, no production Worker was updated, and no live payment was claimed as verified.
