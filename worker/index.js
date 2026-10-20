@@ -282,9 +282,10 @@ async function publicUser(env, user) {
 
 async function ensureReferralPoolRound(env, now = new Date()) {
   const policy = await env.DB.prepare(
-    "SELECT policy_version,cycle_days,pool_tc,max_award_per_user_tc FROM referral_pool_policy WHERE id=1 AND status='active'",
+    "SELECT policy_version,cycle_days,pool_tc,max_award_per_user_tc,status FROM referral_pool_policy WHERE id=1",
   ).first();
   if (!policy) return null;
+  if (policy.status !== "active") return { round: null, policy };
   if (Number(policy.cycle_days) !== 7 || Number(policy.pool_tc) !== 10000) {
     throw new Error("REFERRAL_POOL_POLICY_SCHEMA_MISMATCH");
   }
@@ -969,11 +970,14 @@ async function handleApi(request, env) {
       env.DB.prepare("SELECT quest_id,status,ledger_transaction_id,created_at FROM referral_team_quest_claims WHERE user_id=?").bind(user.id).all(),
       env.DB.prepare("SELECT COUNT(*) AS activated FROM referral_attributions WHERE status='activated'").first(),
       env.DB.prepare("SELECT id,round_id,verified_activations,reward_tc,status,claimed_at,created_at FROM referral_pool_awards WHERE user_id=? ORDER BY created_at DESC LIMIT 20").bind(user.id).all(),
-      env.DB.prepare("SELECT COUNT(*) AS activations FROM referral_attributions WHERE status='activated' AND activated_at>=? AND activated_at<?").bind(poolContext.round.period_start,poolContext.round.period_end).first()
+      poolContext?.round ? env.DB.prepare("SELECT COUNT(*) AS activations FROM referral_attributions WHERE status='activated' AND activated_at>=? AND activated_at<?").bind(poolContext.round.period_start,poolContext.round.period_end).first() : Promise.resolve({ activations: 0 })
     ]);
     const activated = Number(counts?.activated || 0);
     const claimByQuest = new Map((questClaims.results || []).map(row => [row.quest_id, row]));
-    return json({ code: ownCode?.code || null, invited: Number(counts?.invited || 0), activated, community: { verifiedActivations: Number(community?.activated || 0) }, milestones: [{ id: "first", target: 1, reached: activated >= 1 }, { id: "squad", target: 3, reached: activated >= 3 }, { id: "community", target: 5, reached: activated >= 5 }], quests: (quests.results || []).map(quest => ({ id: quest.id, title: quest.title, description: quest.description, target: Number(quest.target_activations), rewardTC: Number(quest.reward_tc), progress: activated, claim: claimByQuest.get(quest.id) || null })), referrals: rows.results || [], pool: { roundId: poolContext.round.id, periodStart: poolContext.round.period_start, periodEnd: poolContext.round.period_end, status: poolContext.round.status, poolTC: Number(poolContext.round.pool_tc), maxAwardPerUserTC: Number(poolContext.policy.max_award_per_user_tc), verifiedActivations: Number(poolActivity?.activations || 0), awards: poolAwards.results || [] }, rewards: { referrerModel: "shared_weekly_pool", poolTC: Number(poolContext.round.pool_tc), maxReferrerAwardTC: Number(poolContext.policy.max_award_per_user_tc), referredTC: 100, currency: "TC" } });
+    const poolTC = Number(poolContext?.policy?.pool_tc || 0);
+    const maxReferrerAwardTC = Number(poolContext?.policy?.max_award_per_user_tc || 0);
+    const pool = poolContext?.round ? { roundId: poolContext.round.id, periodStart: poolContext.round.period_start, periodEnd: poolContext.round.period_end, status: poolContext.round.status, poolTC: Number(poolContext.round.pool_tc), maxAwardPerUserTC: maxReferrerAwardTC, verifiedActivations: Number(poolActivity?.activations || 0), awards: poolAwards.results || [] } : { roundId: null, periodStart: null, periodEnd: null, status: poolContext?.policy?.status || "unavailable", poolTC, maxAwardPerUserTC: maxReferrerAwardTC, verifiedActivations: 0, awards: poolAwards.results || [] };
+    return json({ code: ownCode?.code || null, invited: Number(counts?.invited || 0), activated, community: { verifiedActivations: Number(community?.activated || 0) }, milestones: [{ id: "first", target: 1, reached: activated >= 1 }, { id: "squad", target: 3, reached: activated >= 3 }, { id: "community", target: 5, reached: activated >= 5 }], quests: (quests.results || []).map(quest => ({ id: quest.id, title: quest.title, description: quest.description, target: Number(quest.target_activations), rewardTC: Number(quest.reward_tc), progress: activated, claim: claimByQuest.get(quest.id) || null })), referrals: rows.results || [], pool, rewards: { referrerModel: "shared_weekly_pool", poolTC, maxReferrerAwardTC, referredTC: 100, currency: "TC" } });
   }
 
   if (path === "/api/referrals/quests/claim" && request.method === "POST") {
