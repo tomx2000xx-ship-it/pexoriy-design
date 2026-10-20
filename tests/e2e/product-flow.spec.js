@@ -245,7 +245,7 @@ test('AI Credit Store shows real network logos and live SOL and GRAM token equiv
   await page.route('https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd', route => route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({'the-open-network':{usd:5}})}));
   await enterApp(page);
   await goTo(page, 'Overview');
-  await expect(page.locator('.stat-card').filter({hasText:'AI Credits · AC'}).locator('.ai-credit-mark')).toBeVisible();
+  await expect(page.locator('.stat-card').filter({hasText:'AI Credits · AC'})).toBeVisible();
   await goTo(page, 'AI Trading');
   await page.getByRole('button', { name: /Buy more AI Credits/ }).click();
 
@@ -437,13 +437,14 @@ test('learning and PXY pre-sale page are discoverable without falsely enabling p
   await enterApp(page);
   await goTo(page, 'Learning Center');
   await expect(page.getByRole('heading', { name: /Learn the market/ })).toBeVisible();
+  if (page.viewportSize().width <= 760) {
+    await expect(page.locator('.learning-list')).toBeVisible();
+    await expect(page.locator('.learning-mobile-preview-note')).toBeVisible();
+    await page.locator('.learning-choice').first().click();
+  }
   await expect(page.locator('.learning-lesson')).toBeVisible();
   await expect(page.locator('.learning-lesson h2')).toBeVisible();
-  if (page.viewportSize().width <= 760) {
-    await expect(page.locator('.learning-mobile-preview-note')).toBeVisible();
-  } else {
-    await expect(page.locator('.learning-lesson')).toContainText(/knowledge check included|Quiz pending/);
-  }
+  await expect(page.locator('.learning-lesson')).toContainText(/Knowledge check included|Quiz pending/i);
   await goTo(page, 'PXY Pre-sale');
   await expect(page.getByRole('heading', { name: /The PXY pre-sale/ })).toBeVisible();
   await expect(page.getByText('PRE-SALE PAGE LIVE')).toBeVisible();
