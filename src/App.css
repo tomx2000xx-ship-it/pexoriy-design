@@ -1796,3 +1796,34 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .profile-popover-link>svg{color:#737b68}
 @media(max-width:850px){.topbar{padding-left:14px;padding-right:14px}.topbar-right{gap:7px}.header-popover{position:fixed;top:63px;right:10px;width:min(370px,calc(100vw - 20px));max-height:calc(100dvh - 86px)}.notification-list{max-height:calc(100dvh - 230px)}.profile-popover{width:min(290px,calc(100vw - 20px))}}
 @media(prefers-reduced-motion:reduce){.notification-count,.header-popover{animation:none}.notification-button,.top-avatar{transition:none}}
+
+/* Pexoriy's generated avatar collection: crisp at small sizes, no external image assets. */
+.pexoriy-avatar{display:grid;place-items:center;flex:0 0 auto;overflow:hidden;border:1px solid rgba(255,255,255,.12);border-radius:50%;box-sizing:border-box;transition:transform .22s ease,border-color .22s ease,filter .22s ease}
+.pexoriy-avatar svg{display:block;width:74%;height:74%;color:inherit}
+.avatar-0{background:#22291a;color:#c8f879;border-color:#718c43}
+.avatar-1{background:#252a22;color:#d9f6a1;border-color:#607849}
+.avatar-2{background:#202c2b;color:#86e4c4;border-color:#477c70}
+.avatar-3{background:#30291c;color:#f3d18a;border-color:#8c7040}
+.avatar-4{background:#262733;color:#b8bafc;border-color:#686b9e}
+.avatar-5{background:#1f2b31;color:#8fdcf0;border-color:#477a8a}
+.avatar-6{background:#2b3020;color:#b9ed67;border-color:#71883d}
+.avatar-7{background:#302328;color:#f0a9b8;border-color:#875766}
+.avatar-8{background:#29251f;color:#e6c39b;border-color:#8a6c49}
+.avatar-9{background:#23282f;color:#c0d8ff;border-color:#637d9d}
+.avatar-10{background:#222d27;color:#9de1ad;border-color:#4e8060}
+.avatar-11{background:#2b2531;color:#d3b5fa;border-color:#80639b}
+.avatar-12{background:#292d30;color:#cbd5d8;border-color:#6e7c82}
+.avatar-13{background:#302a20;color:#e9d38a;border-color:#897a45}
+.avatar-14{background:#202c2a;color:#8ce4d8;border-color:#477f78}
+.avatar-15{background:#2c2424;color:#f2b29b;border-color:#8e6154}
+.avatar-16{background:#242a33;color:#a6c9fa;border-color:#607b9f}
+.avatar-17{background:#2c3021;color:#d3f48b;border-color:#7b8d48}
+.avatar-18{background:#2d2632;color:#d9b8f2;border-color:#806493}
+.avatar-19{background:#222c25;color:#b8e8a7;border-color:#5d8560}
+.top-avatar .pexoriy-avatar{width:34px;height:34px}
+.profile-avatar .pexoriy-avatar{width:31px;height:31px}
+.profile-brand-avatar .pexoriy-avatar{width:38px;height:38px}
+.profile-large-avatar{width:50px!important;height:50px!important;padding:1px;background:transparent!important}
+.profile-large-avatar .pexoriy-avatar{width:48px;height:48px}
+.top-avatar:hover .pexoriy-avatar,.profile-row:hover .pexoriy-avatar{transform:rotate(-5deg) scale(1.04);border-color:rgba(183,243,74,.65)}
+@media(prefers-reduced-motion:reduce){.pexoriy-avatar{transition:none}.top-avatar:hover .pexoriy-avatar,.profile-row:hover .pexoriy-avatar{transform:none}}
