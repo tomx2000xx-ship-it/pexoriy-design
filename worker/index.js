@@ -291,24 +291,35 @@ async function ensureReferralPoolRound(env, now = new Date()) {
   }
   const { periodStart, periodEnd } = getReferralPoolWindow(now);
   const roundId = "referral-pool:" + periodStart;
-  await env.DB.prepare(
-    "INSERT OR IGNORE INTO referral_pool_rounds (id,period_start,period_end,pool_tc,status) VALUES (?,?,?,?,'open')",
-  ).bind(roundId, periodStart, periodEnd, Number(policy.pool_tc)).run();
-  const round = await env.DB.prepare(
+  let round = await env.DB.prepare(
     "SELECT id,period_start,period_end,pool_tc,status,total_activations FROM referral_pool_rounds WHERE period_start=?",
   ).bind(periodStart).first();
+  if (!round) {
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO referral_pool_rounds (id,period_start,period_end,pool_tc,status) VALUES (?,?,?,?,'open')",
+    ).bind(roundId, periodStart, periodEnd, Number(policy.pool_tc)).run();
+    round = await env.DB.prepare(
+      "SELECT id,period_start,period_end,pool_tc,status,total_activations FROM referral_pool_rounds WHERE period_start=?",
+    ).bind(periodStart).first();
+  }
   if (!round) throw new Error("REFERRAL_POOL_ROUND_CREATE_FAILED");
-  await postLedgerTransaction(env.DB, {
-    id: crypto.randomUUID(),
-    idempotencyKey: "referral-pool-fund:" + round.id,
-    userId: null,
-    eventType: "referral.pool.funding",
-    metadata: { roundId: round.id, policyVersion: Number(policy.policy_version), poolTC: Number(round.pool_tc) },
-    postings: [
-      { accountKey: "system:reserve:TC", currency: "TC", amountAtoms: Number(round.pool_tc) },
-      { accountKey: "system:issuance:TC", currency: "TC", amountAtoms: -Number(round.pool_tc) },
-    ],
-  });
+  const fundingKey = "referral-pool-fund:" + round.id;
+  const funding = await env.DB.prepare(
+    "SELECT id,status FROM ledger_transactions WHERE idempotency_key=?",
+  ).bind(fundingKey).first();
+  if (funding?.status !== "posted") {
+    await postLedgerTransaction(env.DB, {
+      id: crypto.randomUUID(),
+      idempotencyKey: fundingKey,
+      userId: null,
+      eventType: "referral.pool.funding",
+      metadata: { roundId: round.id, policyVersion: Number(policy.policy_version), poolTC: Number(round.pool_tc) },
+      postings: [
+        { accountKey: "system:reserve:TC", currency: "TC", amountAtoms: Number(round.pool_tc) },
+        { accountKey: "system:issuance:TC", currency: "TC", amountAtoms: -Number(round.pool_tc) },
+      ],
+    });
+  }
   return { round, policy };
 }
 
