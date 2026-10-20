@@ -370,7 +370,6 @@ async function runReferralPoolMaintenance(env) {
 }
 
 async function activateReferralForUser(env, user, requestId) {
-  if (!user?.email_verified_at) return { status: "pending", message: "Verify your email before referral activation can be checked." };
   const qualifyingTrade = await env.DB.prepare("SELECT id FROM trading_positions WHERE user_id = ? LIMIT 1").bind(user.id).first();
   if (!qualifyingTrade) return { status: "pending", message: "Complete your first simulated trade to qualify." };
   const attribution = await env.DB.prepare("SELECT id, referrer_user_id, status FROM referral_attributions WHERE referred_user_id = ?").bind(user.id).first();
