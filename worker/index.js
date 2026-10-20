@@ -1,5 +1,5 @@
 import { postLedgerTransaction, getLedgerBalance } from "./ledger.js";
-import { TON_NETWORK, TON_RECEIVE_ADDRESS, normalizeTonAddress, formatNanoTon, makeTonComment, validateTonIncomingTransaction } from "./ton-payments.js";
+import { TON_NETWORK, TON_RECEIVE_ADDRESS, normalizeTonAddress, formatNanoTon, makeTonComment, validateTonIncomingTransaction, calculateNanoGramFromUsdCents } from "./ton-payments.js";
 import { calculateRealizedSettlement, calculateUnrealizedPnlTc, isFreshValidatedQuote, calculateSimulatedFillPrice, calculateTakerFeeTc, SIMULATION_MODEL_VERSION, MAX_OPEN_POSITIONS, MAX_POSITION_EQUITY_BPS, MAX_TOTAL_EXPOSURE_EQUITY_BPS } from "./trading.js";
 import { calculateRiskAdjustedScore, calculateReturnBps, calculateMaxDrawdownBps } from "./competition-scoring.js";
 import { calculateMissionCurrentDay, MISSION_JOURNEY_LENGTH } from "./mission-journey.js";
@@ -1181,7 +1181,7 @@ async function handleApi(request, env) {
     } catch {
       return json({error:"A live GRAM quote is unavailable. Pack prices cannot be confirmed right now.",packs:[]},503);
     }
-    return json({packs:(result.results||[]).map(p=>({...p,packId:p.pack_id,priceGramAtoms:Math.round((Number(p.usd_equivalent_cents)/100/gramUsd)*1000000000),usdEquivalentCents:Number(p.usd_equivalent_cents||0),aiCredits:Number(p.ai_credits),pxyAmount:Number(p.pxy_amount)})),gramUsd,quoteCurrency:"USD",reserve:{capPxy:Number(reserve?.cap_pxy||50000),reservedPxy:Number(totals?.reserved||0),remainingPxy:Math.max(0,Number(reserve?.cap_pxy||50000)-Number(totals?.reserved||0)),issuanceEnabled}});
+    return json({packs:(result.results||[]).map(p=>({...p,packId:p.pack_id,priceGramAtoms:calculateNanoGramFromUsdCents(Number(p.usd_equivalent_cents),gramUsd),usdEquivalentCents:Number(p.usd_equivalent_cents||0),aiCredits:Number(p.ai_credits),pxyAmount:Number(p.pxy_amount)})),gramUsd,quoteCurrency:"USD",reserve:{capPxy:Number(reserve?.cap_pxy||50000),reservedPxy:Number(totals?.reserved||0),remainingPxy:Math.max(0,Number(reserve?.cap_pxy||50000)-Number(totals?.reserved||0)),issuanceEnabled}});
   }
 
   if (path === "/api/admin/packs" && request.method === "GET") {
@@ -1920,7 +1920,7 @@ async function handleApi(request, env) {
       const quote = await quoteResponse.json();
       tonUsdPrice = Number(quote?.["the-open-network"]?.usd);
       if (!Number.isFinite(tonUsdPrice) || tonUsdPrice <= 0) throw new Error("GRAM_PRICE_INVALID");
-      expectedNanoTon = Math.round((Number(pack.usdCents) / 100 / tonUsdPrice) * 1_000_000_000);
+      expectedNanoTon = calculateNanoGramFromUsdCents(Number(pack.usdCents),tonUsdPrice);
       if (!Number.isSafeInteger(expectedNanoTon) || expectedNanoTon <= 0) throw new Error("GRAM_AMOUNT_INVALID");
     } catch {
       return json({ error: "A live GRAM quote is unavailable. Please retry shortly; no payment order was created." }, 503);
