@@ -98,10 +98,11 @@ jobs:
       - name: Test rendered desktop and mobile product flows
         run: npx playwright test tests/e2e/product-flow.spec.js --reporter=line
       - name: Smoke-test release-candidate preview endpoints
-        if: startsWith(github.ref, 'refs/heads/scope/')
+        if: startsWith(github.ref, 'refs/heads/scope/') || startsWith(github.head_ref, 'scope/')
         run: |
           set -eu
-          branch_slug="${GITHUB_REF_NAME//\//-}"
+          branch_name="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          branch_slug="${branch_name//\//-}"
           base="https://${branch_slug}-pexoriy-design.mails4dikewills.workers.dev"
           for attempt in $(seq 1 24); do
             code="$(curl -sS -o /tmp/pexoriy-preview-presale.json -w '%{http_code}' "$base/api/presale/status" || true)"
