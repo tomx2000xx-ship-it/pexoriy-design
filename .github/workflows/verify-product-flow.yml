@@ -76,7 +76,7 @@ jobs:
           if [ "$ready" -ne 1 ]; then cat /tmp/pexoriy-local-worker.log; exit 1; fi
           node tests/integration/trading-api.mjs
       - name: Smoke-test deployed API health and market feed
-        if: contains(github.event.head_commit.message, '[db-validation]')
+        if: github.ref == 'refs/heads/main'
         env:
           PEXORIY_API_BASE: https://pexoriy-design.mails4dikewills.workers.dev
         run: |
