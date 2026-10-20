@@ -26,16 +26,20 @@ async function goTo(page, label) {
     await page.locator('.topbar').getByRole('button', { name: 'Activity', exact: true }).click();
     return;
   }
-  const mobileLabels = { 'Practice Trading': 'Practice', 'AI Trading': 'AI Centre', 'Community Challenges': 'Challenges', 'Invite & Grow': 'Invite', 'Referrals': 'Invite' };
+  const mobileLabels = { 'Practice Trading': 'Practice', 'Community Challenges': 'Challenges', 'Invite & Grow': 'Invite', 'Referrals': 'Invite' };
+  if (label === 'AI Trading') {
+    const nav = mobile ? page.locator('.mobile-bottom-nav') : page.locator('.sidebar');
+    await nav.getByRole('button', { name: mobile ? 'Practice' : 'Practice Trading', exact: true }).click();
+    await page.locator('.practice-mode-switch').getByRole('button', { name: /AI-assisted mode/ }).click();
+    return;
+  }
   if (mobile && ['Learning Center', 'PXY Pre-sale', 'PXY Presale Preview'].includes(label)) {
     await page.locator('.menu-button').click();
     await page.locator('.sidebar').getByRole('button', { name: label, exact: true }).click();
     return;
   }
   const visibleLabel = mobile ? (mobileLabels[label] || label) : label;
-  const nav = mobile
-    ? page.locator('.mobile-bottom-nav')
-    : page.locator('.sidebar');
+  const nav = mobile ? page.locator('.mobile-bottom-nav') : page.locator('.sidebar');
   await nav.getByRole('button', { name: visibleLabel, exact: true }).click();
 }
 
@@ -116,14 +120,14 @@ test('Practice visibly connects to AI Trading and blocks over-balance orders', a
   await enterApp(page);
   await goTo(page, 'Practice Trading');
   await expect(page.getByRole('heading', { name: 'Practice Trading' })).toBeVisible();
-  const bridge = page.getByRole('region', { name: 'Switch to AI Trading' });
+  const bridge = page.locator('.practice-mode-switch');
   await expect(bridge).toBeVisible();
-  await expect(bridge.getByRole('button', { name: /Explore AI Trading/ })).toBeVisible();
+  await expect(bridge.getByRole('button', { name: /AI-assisted mode/ })).toBeVisible();
 
   const amount = page.getByLabel('Trade Credit allocation');
   await amount.fill('99999999');
   await expect(page.getByRole('button', { name: /Review Buy \/ Long order/ })).toBeDisabled();
-  await bridge.getByRole('button', { name: /Explore AI Trading/ }).click();
+  await bridge.getByRole('button', { name: /AI-assisted mode/ }).click();
   await expect(page.getByRole('heading', { name: /Market opportunities/ })).toBeVisible();
 });
 
@@ -423,19 +427,22 @@ test('community challenge preview does not pretend to save entries or pay prizes
   await enterApp(page, '/', 'demo', 'demo');
   await goTo(page, 'Community Challenges');
   await expect(page.getByRole('heading', { name: /Compete together/ })).toBeVisible();
-  await expect(page.getByText(/Entries, ranking, and PXY settlement remain disabled/)).toBeVisible();
-  await expect(page.getByText('Entry opens after scoring, reserve, and launch checks are complete.').first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /Review eligibility/ }).first()).toBeVisible();
+  await expect(page.getByText(/Competition scoring and end-of-round settlement are server-managed/)).toBeVisible();
+  await expect(page.locator('.challenge-prize-status').filter({ hasText: 'GATED' }).first()).toBeVisible();
+  await expect(page.locator('.challenge-card').first()).toContainText('PXY · gated');
+  await expect(page.getByRole('button', { name: /Enter competition|Join round|Review eligibility/i })).toHaveCount(0);
 });
 
 test('learning and PXY pre-sale page are discoverable without falsely enabling payment', async ({ page }) => {
   await enterApp(page);
   await goTo(page, 'Learning Center');
   await expect(page.getByRole('heading', { name: /Learn the market/ })).toBeVisible();
+  await expect(page.locator('.learning-lesson')).toBeVisible();
+  await expect(page.locator('.learning-lesson h2')).toBeVisible();
   if (page.viewportSize().width <= 760) {
     await expect(page.locator('.learning-mobile-preview-note')).toBeVisible();
   } else {
-    await expect(page.locator('.learning-lesson').getByText(/Preview mode: sign in to take scored quizzes/)).toBeVisible();
+    await expect(page.locator('.learning-lesson')).toContainText(/knowledge check included|Quiz pending/);
   }
   await goTo(page, 'PXY Pre-sale');
   await expect(page.getByRole('heading', { name: /The PXY pre-sale/ })).toBeVisible();
@@ -461,22 +468,23 @@ test('public landing exposes the PXY pre-sale page without requiring sign-in', a
 });
 
 
-test('Invite & Grow section navigation switches content immediately and campaign CTAs stay in the right destinations', async ({ page }) => {
+test('Invite & Grow tabs and campaign CTAs follow the current product flow', async ({ page }) => {
   await enterApp(page);
   await goTo(page, 'Invite & Grow');
   const sections = page.locator('.invite-grow-nav');
   await sections.getByRole('button', { name: 'Community feed', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Share something useful.' })).toBeVisible();
+  await expect(page.locator('.community-comms-panel')).toBeVisible();
   await sections.getByRole('button', { name: 'Group chats', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Help your own community move forward.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /chat$/i })).toBeVisible();
+  await expect(page.locator('.community-chat-notice')).toBeVisible();
+  await sections.getByRole('button', { name: 'Tasks & quests', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Every task should move the community forward.' })).toBeVisible();
+  await expect(page.locator('.community-quest-pending').first()).toContainText('Progress pending server verification');
   await sections.getByRole('button', { name: 'Growth campaigns', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Build trust before you grow numbers.' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Practice together. Grow together.' })).toBeVisible();
-  await page.getByRole('button', { name: /Coordinate in group chat/i }).click();
-  await expect(page.getByRole('heading', { name: 'Help your own community move forward.' })).toBeVisible();
-  await sections.getByRole('button', { name: 'Growth campaigns', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Build trust before you grow numbers.' })).toBeVisible();
-  await page.getByRole('button', { name: /Open referrals/i }).click();
+  await page.getByRole('button', { name: 'Open referrals', exact: true }).first().click();
   await expect(page.getByRole('heading', { name: /Invite friends\. Grow together\./ })).toBeVisible();
   await sections.getByRole('button', { name: 'Weekly report', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Progress worth sharing.' })).toBeVisible();
@@ -486,44 +494,20 @@ test('referral progress is not fabricated in demo mode', async ({ page }) => {
   await enterApp(page);
   await goTo(page, 'Invite & Grow');
   await expect(page.getByRole('heading', { name: /Invite friends. Grow together./ })).toBeVisible();
-  await expect(page.getByText('Sign in to track your squad and claim team quest rewards.')).toBeVisible();
+  await expect(page.getByText('Create an account or sign in to get a tracked personal invite link.')).toBeVisible();
   await expect(page.getByText('Verified referral progress is account-backed')).toBeVisible();
 });
 
 
-test('team quest rewards are shown only after the server confirms the claim', async ({ page }) => {
-  await page.addInitScript(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => {} } }));
-  let questPaid = false;
-  await page.route('**/api/me', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { id: 'account-user', email: 'account@example.test', displayName: 'Account User', balances: { TC: 1000, AC: 10, PXY: 0 } } }) }));
-  await page.route('**/api/trading/positions', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ positions: [] }) }));
-  await page.route('**/api/trading/history', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ history: [] }) }));
-  await page.route('**/api/missions', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ missions: [
-    { id: 'first-practice-trade', title: 'Make a practice trade', rewardCurrency: 'TC', rewardAmount: 250, rules: { prerequisite: 'practice_trade' }, claim: null },
-    { id: 'review-ai-setup', title: 'Review an AI trading setup', rewardCurrency: 'TC', rewardAmount: 150, rules: { prerequisite: 'ai_setup' }, claim: null }
-  ] }) }));
-  await page.route('**/api/learning', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ lessons: [], completed: 0 }) }));
-  await page.route('**/api/referrals/activate', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'not_referred' }) }));
-  await page.route('**/api/referrals', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
-    code: 'AB12CD34EF56', invited: 3, activated: 3,
-    milestones: [{ id: 'first', target: 1, reached: true }, { id: 'squad', target: 3, reached: true }],
-    rewards: { referrerTC: 250, referredTC: 100, currency: 'TC' },
-    quests: [{ id: 'squad-three', title: 'Build your squad', description: 'Activate three referred members through verified email and a first simulated trade.', target: 3, rewardTC: 300, progress: 3, claim: questPaid ? { status: 'paid', ledger_transaction_id: 'tx-team-1' } : null }]
-  }) }));
-  await page.route('**/api/referrals/quests/claim', async route => {
-    questPaid = true;
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'paid', duplicate: false, rewardTC: 300, questId: 'squad-three' }) });
-  });
-  await enterApp(page, '/', 'live', 'account');
-  await goTo(page, 'Referrals');
-  await expect(page.getByRole('button', { name: 'Copy link' })).toBeVisible();
-  await page.getByRole('button', { name: 'Copy link' }).click();
-  await expect(page.getByText('Your personal invite link has been copied.')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Team quests' })).toBeVisible();
-  await page.getByRole('button', { name: 'Claim reward' }).click();
-  await expect(page.getByText('Team quest completed: +300 TC recorded.')).toBeVisible();
-  await expect(page.getByText('REWARD CLAIMED')).toBeVisible();
+test('team quest rewards remain pending until the verified community backend is ready', async ({ page }) => {
+  await enterApp(page);
+  await goTo(page, 'Invite & Grow');
+  await page.locator('.invite-grow-nav').getByRole('button', { name: 'Tasks & quests', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Every task should move the community forward.' })).toBeVisible();
+  await expect(page.locator('.community-quest-pending').first()).toContainText('Progress pending server verification');
+  await expect(page.getByRole('button', { name: /Claim reward/i })).toHaveCount(0);
+  await expect(page.getByText(/This card does not estimate progress/).first()).toBeVisible();
 });
-
 
 test('PXY pre-sale page is live while unverified purchase settlement remains unavailable', async ({ page }) => {
   await page.route('**/api/presale/status', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ previewEnabled: false, saleEnabled: true, launchState: 'active', purchaseFlowReady: false }) }));
@@ -531,6 +515,6 @@ test('PXY pre-sale page is live while unverified purchase settlement remains una
   await goTo(page, 'PXY Pre-sale');
   await expect(page.getByText('PRE-SALE PAGE LIVE')).toBeVisible();
   await expect(page.getByText(/page is live, but the token-purchase flow still needs/i)).toBeVisible();
-  await expect(page.getByText('Not connected')).toBeVisible();
+  await expect(page.getByText('Not connected', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: /Buy PXY|Purchase tokens|Connect wallet/i })).toHaveCount(0);
 });
